@@ -3,7 +3,11 @@ import { Button } from '@/components/ui/button';
 import { LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-export default function DashboardHeader() {
+interface DashboardHeaderProps {
+  hideInSidebar?: boolean;
+}
+
+export default function DashboardHeader({ hideInSidebar = false }: DashboardHeaderProps) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -11,6 +15,20 @@ export default function DashboardHeader() {
     logout();
     navigate('/login');
   };
+
+  if (hideInSidebar) {
+    return (
+      <div className="flex items-center justify-between w-full">
+        <div>
+          <h2 className="text-lg font-semibold">Micro Finance</h2>
+        </div>
+        <Button variant="outline" size="sm" onClick={handleLogout}>
+          <LogOut className="mr-2 h-4 w-4" />
+          Logout
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <header className="border-b bg-card">

@@ -10,9 +10,12 @@ import LoanOfficerManagement from './admin/LoanOfficerManagement';
 import GroupManagement from './admin/GroupManagement';
 import BorrowerManagement from './admin/BorrowerManagement';
 import LoanManagement from './admin/LoanManagement';
-import DashboardHeader from './DashboardHeader';
 
-export default function AdminDashboard() {
+interface AdminDashboardProps {
+  defaultTab?: string;
+}
+
+export default function AdminDashboard({ defaultTab = 'overview' }: AdminDashboardProps) {
   const [regions, setRegions] = useState<Region[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loanOfficers, setLoanOfficers] = useState<LoanOfficer[]>([]);
@@ -37,9 +40,7 @@ export default function AdminDashboard() {
   const totalOutstanding = activeLoans.reduce((sum, loan) => sum + loan.outstanding, 0);
 
   return (
-    <div className="min-h-screen bg-muted/30">
-      <DashboardHeader />
-      
+    <div className="bg-muted/30 min-h-full">
       <div className="container mx-auto p-6 space-y-6">
         <div>
           <h1 className="text-3xl font-bold">Admin Dashboard</h1>
@@ -99,8 +100,9 @@ export default function AdminDashboard() {
           </Card>
         </div>
 
-        <Tabs defaultValue="regions" className="space-y-4">
+        <Tabs value={defaultTab} className="space-y-4">
           <TabsList>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="regions">Regions</TabsTrigger>
             <TabsTrigger value="branches">Branches</TabsTrigger>
             <TabsTrigger value="officers">Loan Officers</TabsTrigger>
@@ -108,6 +110,19 @@ export default function AdminDashboard() {
             <TabsTrigger value="borrowers">Borrowers</TabsTrigger>
             <TabsTrigger value="loans">Loans</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="overview">
+            <Card>
+              <CardHeader>
+                <CardTitle>Welcome to Admin Dashboard</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  Use the sidebar to navigate to different management sections.
+                </p>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           <TabsContent value="regions">
             <RegionManagement regions={regions} onUpdate={loadData} />
