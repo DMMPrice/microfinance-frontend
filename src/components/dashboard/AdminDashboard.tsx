@@ -9,6 +9,7 @@ import BranchManagement from './admin/BranchManagement';
 import LoanOfficerManagement from './admin/LoanOfficerManagement';
 import GroupManagement from './admin/GroupManagement';
 import BorrowerManagement from './admin/BorrowerManagement';
+import LoanManagement from './admin/LoanManagement';
 import DashboardHeader from './DashboardHeader';
 
 export default function AdminDashboard() {
@@ -105,6 +106,7 @@ export default function AdminDashboard() {
             <TabsTrigger value="officers">Loan Officers</TabsTrigger>
             <TabsTrigger value="groups">Groups</TabsTrigger>
             <TabsTrigger value="borrowers">Borrowers</TabsTrigger>
+            <TabsTrigger value="loans">Loans</TabsTrigger>
           </TabsList>
 
           <TabsContent value="regions">
@@ -125,6 +127,18 @@ export default function AdminDashboard() {
 
           <TabsContent value="borrowers">
             <BorrowerManagement borrowers={borrowers} groups={groups} branches={branches} officers={loanOfficers} regions={regions} onUpdate={loadData} />
+          </TabsContent>
+
+          <TabsContent value="loans">
+            <LoanManagement 
+              loans={loans}
+              borrowers={borrowers}
+              groups={groups}
+              branches={branches}
+              regions={regions}
+              officers={loanOfficers}
+              onUpdate={loadData}
+            />
           </TabsContent>
         </Tabs>
       </div>
