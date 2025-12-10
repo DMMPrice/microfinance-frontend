@@ -1,21 +1,25 @@
+// src/App.jsx
 import {Toaster} from "@/components/ui/toaster";
 import {Toaster as Sonner} from "@/components/ui/sonner";
 import {TooltipProvider} from "@/components/ui/tooltip";
 import {QueryClient, QueryClientProvider} from "@tanstack/react-query";
 import {BrowserRouter, Routes, Route, Navigate} from "react-router-dom";
+
 import {AuthProvider, useAuth} from "@/contexts/AuthContext";
 import {initializeStorage} from "@/lib/storage";
-import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard";
-import Index from "./pages";
-import NotFound from "./pages/NotFound";
+
+import Login from "./Component/Login.jsx";
+import Dashboard from "./Component/Dashboard.jsx";
+import Index from "@/Component/Index.jsx";
+import NotFound from "./Component/NotFound.jsx";
 
 const queryClient = new QueryClient();
 
+// Initialize any localStorage defaults, etc.
 initializeStorage();
 
 function ProtectedRoute({children}) {
-    const {user, isLoading} = useAuth();
+    const {isAuthenticated, isLoading} = useAuth();
 
     if (isLoading) {
         return (
@@ -25,7 +29,7 @@ function ProtectedRoute({children}) {
         );
     }
 
-    if (!user) {
+    if (!isAuthenticated) {
         return <Navigate to="/login" replace/>;
     }
 

@@ -1,5 +1,5 @@
 import { MapPin, Building2, UserCircle, Users, UsersRound, Wallet, LayoutDashboard } from 'lucide-react';
-import { NavLink } from '@/components/NavLink';
+import { NavLink } from '@/Component/NavLink.jsx';
 import {
   Sidebar,
   SidebarContent,
@@ -11,7 +11,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthContext.jsx';
 
 const navigationItems = [
   { title: 'Overview', url: '/dashboard', icon: LayoutDashboard },

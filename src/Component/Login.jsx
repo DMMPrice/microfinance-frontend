@@ -1,6 +1,7 @@
+// src/Component/Login.jsx
 import {useState} from "react";
 import {useNavigate} from "react-router-dom";
-import {useAuth} from "@/contexts/AuthContext";
+import {useAuth} from "@/contexts/AuthContext.jsx";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {Label} from "@/components/ui/label";
@@ -8,7 +9,7 @@ import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/compo
 import {useToast} from "@/hooks/use-toast";
 
 export default function Login() {
-    const [email, setEmail] = useState("");
+    const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const {login} = useAuth();
     const navigate = useNavigate();
@@ -16,7 +17,8 @@ export default function Login() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        const success = await login(email, password);
+        // We now pass `username` instead of `email`
+        const success = await login(username, password);
 
         if (success) {
             toast({title: "Login successful"});
@@ -24,7 +26,7 @@ export default function Login() {
         } else {
             toast({
                 title: "Login failed",
-                description: "Invalid credentials",
+                description: "Invalid username or password",
                 variant: "destructive",
             });
         }
@@ -32,21 +34,25 @@ export default function Login() {
 
     return (
         <div className="flex min-h-screen items-center justify-center bg-muted/30">
-            <Card className="w-full max-w-md">
+            <Card className="w-full max-w-md shadow-lg">
                 <CardHeader className="space-y-1">
-                    <CardTitle className="text-2xl font-bold">Micro Finance System</CardTitle>
-                    <CardDescription>Login to access your dashboard</CardDescription>
+                    <CardTitle className="text-2xl font-bold text-center">
+                        Micro Finance System
+                    </CardTitle>
+                    <CardDescription className="text-center">
+                        Login to access your dashboard
+                    </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div className="space-y-2">
-                            <Label htmlFor="email">Email</Label>
+                            <Label htmlFor="username">Username</Label>
                             <Input
-                                id="email"
-                                type="email"
+                                id="username"
+                                type="text"
                                 placeholder="admin@mf.com"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
                                 required
                             />
                         </div>
@@ -68,8 +74,14 @@ export default function Login() {
                         </Button>
                     </form>
 
-                    <div className="mt-4 text-sm text-muted-foreground">
-                        <p>Demo: admin@mf.com (any password)</p>
+                    <div className="mt-4 text-sm text-muted-foreground space-y-1">
+                        <p className="font-medium">Demo credentials:</p>
+                        <p className="font-mono text-xs">
+                            Username: <span className="font-semibold">admin@mf.com</span>
+                        </p>
+                        <p className="font-mono text-xs">
+                            Password: <span className="font-semibold">admin123</span>
+                        </p>
                     </div>
                 </CardContent>
             </Card>

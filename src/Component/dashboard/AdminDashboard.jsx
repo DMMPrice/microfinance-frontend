@@ -1,7 +1,5 @@
 import {useState, useEffect} from "react";
-import {storage} from "@/lib/storage";
-// Types import removed – not needed in JS:
-// import { Region, Branch, LoanOfficer, Group, Borrower, Loan } from '@/types';
+import {storage} from "@/lib/storage.js";
 import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
 import {
     Tabs,
@@ -16,12 +14,11 @@ import {
     UserCircle,
     Wallet,
 } from "lucide-react";
-import RegionManagement from "./admin/RegionManagement.jsx";
-import BranchManagement from "./admin/BranchManagement.jsx";
-import LoanOfficerManagement from "./admin/LoanOfficerManagement.jsx";
-import GroupManagement from "./admin/GroupManagement.jsx";
-import BorrowerManagement from "./admin/BorrowerManagement.jsx";
-import LoanManagement from "./admin/LoanManagement.jsx";
+import RegionManagement from "@/Component/dashboard/admin/RegionManagement.jsx";
+import BranchManagement from "@/Component/dashboard/admin/BranchManagement.jsx";
+import LoanOfficerManagement from "@/Component/dashboard/admin/LoanOfficerManagement.jsx";
+import GroupManagement from "@/Component/dashboard/admin/GroupManagement.jsx";
+import BorrowerManagement from "@/Component/dashboard/admin/BorrowerManagement.jsx";
 
 export default function AdminDashboard({defaultTab = "overview"}) {
     const [regions, setRegions] = useState([]);
@@ -125,7 +122,8 @@ export default function AdminDashboard({defaultTab = "overview"}) {
                     </Card>
                 </div>
 
-                <Tabs value={defaultTab} className="space-y-4">
+                {/* 👇 change here: use defaultValue instead of value */}
+                <Tabs defaultValue={defaultTab} className="space-y-4">
                     <TabsList>
                         <TabsTrigger value="overview">Overview</TabsTrigger>
                         <TabsTrigger value="regions">Regions</TabsTrigger>
@@ -133,7 +131,6 @@ export default function AdminDashboard({defaultTab = "overview"}) {
                         <TabsTrigger value="officers">Loan Officers</TabsTrigger>
                         <TabsTrigger value="groups">Groups</TabsTrigger>
                         <TabsTrigger value="borrowers">Borrowers</TabsTrigger>
-                        <TabsTrigger value="loans">Loans</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="overview">
@@ -188,18 +185,6 @@ export default function AdminDashboard({defaultTab = "overview"}) {
                             branches={branches}
                             officers={loanOfficers}
                             regions={regions}
-                            onUpdate={loadData}
-                        />
-                    </TabsContent>
-
-                    <TabsContent value="loans">
-                        <LoanManagement
-                            loans={loans}
-                            borrowers={borrowers}
-                            groups={groups}
-                            branches={branches}
-                            regions={regions}
-                            officers={loanOfficers}
                             onUpdate={loadData}
                         />
                     </TabsContent>
