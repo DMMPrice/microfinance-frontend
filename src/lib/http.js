@@ -2,28 +2,29 @@
 import axios from "axios";
 import {API_URL} from "@/config.js";
 
-// -------------------------------------------------------------------
-// 🔹 BASE URL — change only this if your backend URL changes
-// -------------------------------------------------------------------
-// -------------------------------------------------------------------
-// 🔹 AXIOS INSTANCE
-// -------------------------------------------------------------------
+// ------------------------------------------------------------
+// AXIOS INSTANCE
+// ------------------------------------------------------------
 export const api = axios.create({
     baseURL: API_URL,
-    withCredentials: true, // allows cookies (JWT refresh if needed)
+    withCredentials: true,
 });
 
-// -------------------------------------------------------------------
-// 🔹 REQUEST INTERCEPTOR
-// Automatically attach token from localStorage
-// -------------------------------------------------------------------
+// ------------------------------------------------------------
+// REQUEST INTERCEPTOR — attach token dynamically
+// ------------------------------------------------------------
 api.interceptors.request.use(
     (config) => {
         try {
-            const raw = localStorage.getItem("userData");
+            const raw =
+                localStorage.getItem("authData") ||
+                sessionStorage.getItem("authData");
+
             if (raw) {
                 const parsed = JSON.parse(raw);
-                const token = parsed?.access_token;
+
+                // 🔥 Your actual token key is "token"
+                const token = parsed?.token;
 
                 if (token) {
                     config.headers.Authorization = `Bearer ${token}`;
@@ -38,19 +39,18 @@ api.interceptors.request.use(
     (error) => Promise.reject(error)
 );
 
-// -------------------------------------------------------------------
-// 🔹 RESPONSE INTERCEPTOR
-// Handles 401, auto-logout, etc.
-// -------------------------------------------------------------------
+// ------------------------------------------------------------
+// RESPONSE INTERCEPTOR — handle 401
+// ------------------------------------------------------------
 api.interceptors.response.use(
     (response) => response,
     async (error) => {
         if (error.response?.status === 401) {
             console.warn("Unauthorized → clearing session...");
-            localStorage.removeItem("userData");
-            sessionStorage.removeItem("userData");
 
-            // Optionally redirect to login page
+            localStorage.removeItem("authData");
+            sessionStorage.removeItem("authData");
+
             window.location.href = "/#/login";
         }
 
@@ -58,21 +58,25 @@ api.interceptors.response.use(
     }
 );
 
-// -------------------------------------------------------------------
-// 🔹 Helper to get normalized user context
-// -------------------------------------------------------------------
+// ------------------------------------------------------------
+// getUserCtx — normalize object for frontend
+// ------------------------------------------------------------
 export function getUserCtx() {
     try {
-        const raw = localStorage.getItem("userData") || sessionStorage.getItem("userData");
+        const raw =
+            localStorage.getItem("authData") ||
+            sessionStorage.getItem("authData");
+
         if (!raw) return null;
 
         const parsed = JSON.parse(raw);
 
         return {
-            username: parsed.username,
-            role: parsed.role,
-            accessToken: parsed.access_token,
-            raw: parsed,
+            username: parsed.username,  // (exists)
+            role: parsed.role,          // "super_admin"
+            accessToken: parsed.token,  // 🔥 FIXED
+            userId: parsed.userId,      // also available
+            raw: parsed,                // original object
         };
     } catch {
         return null;

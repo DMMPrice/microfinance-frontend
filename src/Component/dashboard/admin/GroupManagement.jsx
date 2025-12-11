@@ -1,5 +1,5 @@
 // src/Component/dashboard/admin/GroupManagement.jsx
-import {useState} from "react";
+import {useState, useMemo} from "react";
 import {Button} from "@/components/ui/button";
 import {
     Card,
@@ -31,13 +31,21 @@ import {useToast} from "@/hooks/use-toast";
 import {useGroups} from "@/hooks/useGroups.js";
 import {useBranches} from "@/hooks/useBranches.js";
 import {useRegions} from "@/hooks/useRegions.js";
-import {useLoanOfficers} from "@/hooks/useLoanOfficers.js"; // assume similar to useBranches/useRegions
+import {useLoanOfficers} from "@/hooks/useLoanOfficers.js";
+
+// 🔹 auth helper – to know current role + userId
+import {getUserCtx} from "@/lib/http.js";
 
 export default function GroupManagement() {
-    const [open, setOpen] = useState(false);
+    const [open, setOpen] = useState(false); // create dialog
+    const [editOpen, setEditOpen] = useState(false); // edit dialog
     const [groupName, setGroupName] = useState("");
     const [meetingDay, setMeetingDay] = useState("");
     const [loanOfficerId, setLoanOfficerId] = useState("");
+
+    // edit state
+    const [editGroup, setEditGroup] = useState(null);
+    const [editLoanOfficerId, setEditLoanOfficerId] = useState("");
 
     const {toast} = useToast();
 
@@ -47,11 +55,29 @@ export default function GroupManagement() {
         isError,
         createGroupMutation,
         deleteGroupMutation,
+        assignLoanOfficerMutation,
     } = useGroups();
 
     const {branches = []} = useBranches();
     const {regions = []} = useRegions();
     const {loanOfficers = []} = useLoanOfficers();
+
+    // 🔹 Current user context (role, userId, etc.)
+    const userCtx = useMemo(() => getUserCtx(), []);
+    const currentRole = (userCtx?.role || "").toLowerCase();
+    const currentUserId = userCtx?.userId;
+    const isLoanOfficerRole = currentRole === "loan_officer";
+
+    // 🔹 For Loan Officer role, find *their* own LO record
+    const currentLoanOfficer = useMemo(() => {
+        if (!isLoanOfficerRole || !currentUserId) return null;
+        return (
+            loanOfficers.find((o) => {
+                const idValue = o.lo_id ?? o.id;
+                return Number(idValue) === Number(currentUserId);
+            }) || null
+        );
+    }, [isLoanOfficerRole, currentUserId, loanOfficers]);
 
     const resetForm = () => {
         setGroupName("");
@@ -59,15 +85,28 @@ export default function GroupManagement() {
         setLoanOfficerId("");
     };
 
+    // ------------------------------------------------
+    // CREATE GROUP
+    // ------------------------------------------------
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        const officer = loanOfficers.find((o) => {
-            const idValue = o.lo_id ?? o.id;
-            return String(idValue) === loanOfficerId;
-        });
+        let selectedOfficer = null;
+        let loIdNumber;
 
-        if (!officer) {
+        if (isLoanOfficerRole) {
+            loIdNumber = Number(currentUserId);
+            selectedOfficer = currentLoanOfficer;
+        } else {
+            const officer = loanOfficers.find((o) => {
+                const idValue = o.lo_id ?? o.id;
+                return String(idValue) === loanOfficerId;
+            });
+            selectedOfficer = officer || null;
+            loIdNumber = Number(loanOfficerId);
+        }
+
+        if (!selectedOfficer || !loIdNumber) {
             toast({
                 title: "Loan officer not found",
                 description: "Please select a valid loan officer.",
@@ -76,8 +115,8 @@ export default function GroupManagement() {
             return;
         }
 
-        const branchId = officer.branch_id ?? officer.branchId;
-        const regionId = officer.region_id ?? officer.regionId;
+        const branchId = selectedOfficer.branch_id ?? selectedOfficer.branchId;
+        const regionId = selectedOfficer.region_id ?? selectedOfficer.regionId;
 
         if (!branchId || !regionId) {
             toast({
@@ -92,7 +131,7 @@ export default function GroupManagement() {
         try {
             await createGroupMutation.mutateAsync({
                 group_name: groupName,
-                lo_id: Number(loanOfficerId),
+                lo_id: loIdNumber,
                 branch_id: branchId,
                 region_id: regionId,
                 meeting_day: meetingDay || null,
@@ -113,10 +152,12 @@ export default function GroupManagement() {
         }
     };
 
+    // ------------------------------------------------
+    // DELETE GROUP
+    // ------------------------------------------------
     const handleDelete = async (group) => {
         const id = group.group_id ?? group.id;
 
-        // simple confirm; if you have confirmDelete util, you can use that instead
         const ok = window.confirm(
             `Are you sure you want to delete group "${group.group_name || group.name}"?`,
         );
@@ -137,6 +178,53 @@ export default function GroupManagement() {
         }
     };
 
+    // ------------------------------------------------
+    // EDIT GROUP → reassign Loan Officer
+    // ------------------------------------------------
+    const openEditDialog = (group) => {
+        setEditGroup(group);
+        const currentLoId = group.lo_id ?? group.loanOfficerId ?? "";
+        setEditLoanOfficerId(currentLoId ? String(currentLoId) : "");
+        setEditOpen(true);
+    };
+
+    const handleEditSubmit = async (e) => {
+        e.preventDefault();
+        if (!editGroup) return;
+
+        const groupId = editGroup.group_id ?? editGroup.id;
+        const newLoId = Number(editLoanOfficerId);
+
+        if (!newLoId) {
+            toast({
+                title: "Loan officer not selected",
+                description: "Please choose a loan officer.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        try {
+            await assignLoanOfficerMutation.mutateAsync({
+                lo_id: newLoId,
+                group_ids: [groupId],
+            });
+
+            toast({title: "Group updated successfully"});
+            setEditOpen(false);
+            setEditGroup(null);
+        } catch (err) {
+            toast({
+                title: "Failed to update group",
+                description:
+                    err?.response?.data?.detail ||
+                    err.message ||
+                    "Unexpected error",
+                variant: "destructive",
+            });
+        }
+    };
+
     const getGroupInfo = (group) => {
         const loId = group.lo_id ?? group.loanOfficerId;
         const branchId = group.branch_id ?? group.branchId;
@@ -144,27 +232,24 @@ export default function GroupManagement() {
 
         const officer = loanOfficers.find((o) => {
             const idValue = o.lo_id ?? o.id;
-            return idValue === loId;
+            return Number(idValue) === Number(loId);
         });
 
         const branch = branches.find(
-            (b) =>
-                b.branch_id === branchId ||
-                b.id === branchId,
+            (b) => b.branch_id === branchId || b.id === branchId,
         );
 
         const region = regions.find(
-            (r) =>
-                r.region_id === regionId ||
-                r.id === regionId,
+            (r) => r.region_id === regionId || r.id === regionId,
         );
 
-        // name fallbacks
         const officerName =
             officer?.name ||
             officer?.full_name ||
             (officer
-                ? `${officer.first_name || ""} ${officer.last_name || ""}`.trim()
+                ? `${officer.first_name || ""} ${
+                    officer.last_name || ""
+                }`.trim()
                 : null);
 
         return {
@@ -173,6 +258,25 @@ export default function GroupManagement() {
             region: region?.region_name || region?.name || "Unknown",
         };
     };
+
+    // 🔹 Helper: computed display name for current LO (for LO role)
+    const currentLoanOfficerLabel = useMemo(() => {
+        if (!currentLoanOfficer) return "";
+        const officer = currentLoanOfficer;
+        const branchId = officer.branch_id ?? officer.branchId;
+        const branch = branches.find(
+            (b) => b.branch_id === branchId || b.id === branchId,
+        );
+        const officerName =
+            officer.name ||
+            officer.full_name ||
+            `${officer.first_name || ""} ${
+                officer.last_name || ""
+            }`.trim();
+        return `${officerName} (${
+            branch?.branch_name || branch?.name || "Unknown"
+        })`;
+    }, [currentLoanOfficer, branches]);
 
     return (
         <div className="space-y-4">
@@ -187,7 +291,10 @@ export default function GroupManagement() {
                     <DialogTrigger asChild>
                         <Button
                             size="lg"
-                            disabled={loanOfficers.length === 0}
+                            disabled={
+                                loanOfficers.length === 0 ||
+                                createGroupMutation.isPending
+                            }
                         >
                             <Plus className="mr-2 h-5 w-5"/>
                             Add Group
@@ -203,49 +310,61 @@ export default function GroupManagement() {
                                 <Label htmlFor="officer">
                                     Assign to Loan Officer
                                 </Label>
-                                <Select
-                                    value={loanOfficerId}
-                                    onValueChange={setLoanOfficerId}
-                                    required
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select loan officer"/>
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {loanOfficers.map((officer) => {
-                                            const idValue =
-                                                officer.lo_id ?? officer.id;
-                                            const branchId =
-                                                officer.branch_id ??
-                                                officer.branchId;
-                                            const branch = branches.find(
-                                                (b) =>
-                                                    b.branch_id === branchId ||
-                                                    b.id === branchId,
-                                            );
 
-                                            const officerName =
-                                                officer.name ||
-                                                officer.full_name ||
-                                                `${officer.first_name || ""} ${
-                                                    officer.last_name || ""
-                                                }`.trim();
+                                {isLoanOfficerRole ? (
+                                    <div className="rounded-md border px-3 py-2 text-sm bg-muted">
+                                        {currentLoanOfficerLabel ||
+                                            "Your loan officer profile"}
+                                    </div>
+                                ) : (
+                                    <Select
+                                        value={loanOfficerId}
+                                        onValueChange={setLoanOfficerId}
+                                        required
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select loan officer"/>
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {loanOfficers.map((officer) => {
+                                                const idValue =
+                                                    officer.lo_id ??
+                                                    officer.id;
+                                                const branchId =
+                                                    officer.branch_id ??
+                                                    officer.branchId;
+                                                const branch = branches.find(
+                                                    (b) =>
+                                                        b.branch_id ===
+                                                        branchId ||
+                                                        b.id === branchId,
+                                                );
 
-                                            return (
-                                                <SelectItem
-                                                    key={idValue}
-                                                    value={String(idValue)}
-                                                >
-                                                    {officerName} (
-                                                    {branch?.branch_name ||
-                                                        branch?.name ||
-                                                        "Unknown"}
-                                                    )
-                                                </SelectItem>
-                                            );
-                                        })}
-                                    </SelectContent>
-                                </Select>
+                                                const officerName =
+                                                    officer.name ||
+                                                    officer.full_name ||
+                                                    `${officer.first_name ||
+                                                    ""} ${
+                                                        officer.last_name ||
+                                                        ""
+                                                    }`.trim();
+
+                                                return (
+                                                    <SelectItem
+                                                        key={idValue}
+                                                        value={String(idValue)}
+                                                    >
+                                                        {officerName} (
+                                                        {branch?.branch_name ||
+                                                            branch?.name ||
+                                                            "Unknown"}
+                                                        )
+                                                    </SelectItem>
+                                                );
+                                            })}
+                                        </SelectContent>
+                                    </Select>
+                                )}
                             </div>
 
                             {/* Group Name */}
@@ -262,7 +381,7 @@ export default function GroupManagement() {
                                 />
                             </div>
 
-                            {/* Meeting Day (optional free text or you can convert to Select with fixed days) */}
+                            {/* Meeting Day (optional) */}
                             <div className="space-y-2">
                                 <Label htmlFor="meetingDay">Meeting Day</Label>
                                 <Input
@@ -288,6 +407,77 @@ export default function GroupManagement() {
                     </DialogContent>
                 </Dialog>
             </div>
+
+            {/* EDIT dialog – reassign LO */}
+            <Dialog open={editOpen} onOpenChange={setEditOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>
+                            Edit Group –{" "}
+                            {editGroup?.group_name || editGroup?.name}
+                        </DialogTitle>
+                    </DialogHeader>
+                    <form onSubmit={handleEditSubmit} className="space-y-4">
+                        <div className="space-y-2">
+                            <Label>Loan Officer</Label>
+                            <Select
+                                value={editLoanOfficerId}
+                                onValueChange={setEditLoanOfficerId}
+                                required
+                                disabled={isLoanOfficerRole} // LO can't reassign
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select loan officer"/>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {loanOfficers.map((officer) => {
+                                        const idValue =
+                                            officer.lo_id ?? officer.id;
+                                        const branchId =
+                                            officer.branch_id ??
+                                            officer.branchId;
+                                        const branch = branches.find(
+                                            (b) =>
+                                                b.branch_id === branchId ||
+                                                b.id === branchId,
+                                        );
+
+                                        const officerName =
+                                            officer.name ||
+                                            officer.full_name ||
+                                            `${officer.first_name || ""} ${
+                                                officer.last_name || ""
+                                            }`.trim();
+
+                                        return (
+                                            <SelectItem
+                                                key={idValue}
+                                                value={String(idValue)}
+                                            >
+                                                {officerName} (
+                                                {branch?.branch_name ||
+                                                    branch?.name ||
+                                                    "Unknown"}
+                                                )
+                                            </SelectItem>
+                                        );
+                                    })}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <Button
+                            type="submit"
+                            className="w-full"
+                            disabled={assignLoanOfficerMutation.isPending}
+                        >
+                            {assignLoanOfficerMutation.isPending
+                                ? "Saving..."
+                                : "Save Changes"}
+                        </Button>
+                    </form>
+                </DialogContent>
+            </Dialog>
 
             {/* Groups list */}
             {isLoading && (
@@ -327,7 +517,21 @@ export default function GroupManagement() {
                                         {info.region}
                                     </CardDescription>
                                 </CardHeader>
-                                <CardContent>
+                                <CardContent className="flex gap-2">
+                                    {/* 🔹 Edit button – hidden for Loan Officer role */}
+                                    {!isLoanOfficerRole && (
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => openEditDialog(group)}
+                                            disabled={
+                                                assignLoanOfficerMutation.isPending
+                                            }
+                                        >
+                                            Edit
+                                        </Button>
+                                    )}
+
                                     <Button
                                         variant="destructive"
                                         size="sm"
