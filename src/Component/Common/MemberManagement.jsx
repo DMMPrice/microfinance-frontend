@@ -1,4 +1,4 @@
-// src/Component/dashboard/admin/MemberManagement.jsx
+// src/Component/dashboard/Common/MemberManagement.jsx
 import React, {useMemo, useState} from "react";
 import {Button} from "@/components/ui/button";
 import {
@@ -30,7 +30,7 @@ import {ScrollArea} from "@/components/ui/scroll-area";
 import {Plus, Trash2, Loader2, Pencil, Image as ImageIcon, X} from "lucide-react";
 import {useToast} from "@/hooks/use-toast";
 
-import {useMembers} from "@/hooks/useMembers";
+import {useMembers} from "@/hooks/useMembers.js";
 
 export default function MemberManagement({
                                              groups = [],

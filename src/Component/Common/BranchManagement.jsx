@@ -1,4 +1,4 @@
-// src/Component/dashboard/admin/BranchManagement.jsx
+// src/Component/dashboard/Common/BranchManagement.jsx
 import {useState} from "react";
 import {Button} from "@/components/ui/button";
 import {

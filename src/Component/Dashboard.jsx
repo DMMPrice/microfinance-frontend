@@ -3,7 +3,7 @@ import {useAuth} from "@/contexts/AuthContext.jsx";
 import {Routes, Route} from "react-router-dom";
 import {SidebarProvider, SidebarTrigger} from "@/components/ui/sidebar";
 import {AppSidebar} from "@/Component/AppSidebar.jsx";
-import AdminDashboard from "@/Component/dashboard/AdminDashboard.jsx";
+import Page from "@/Component/dashboard/Page.jsx";
 import DashboardHeader from "@/Component/dashboard/DashboardHeader.jsx";
 
 export default function Dashboard() {
@@ -38,42 +38,42 @@ export default function Dashboard() {
                     <main className="flex-1">
                         <Routes>
                             {/* /dashboard */}
-                            <Route index element={<AdminDashboard/>}/>
+                            <Route index element={<Page/>}/>
 
                             {/* /dashboard/regions */}
                             <Route
                                 path="regions"
-                                element={<AdminDashboard defaultTab="regions"/>}
+                                element={<Page defaultTab="regions"/>}
                             />
 
                             {/* /dashboard/branches */}
                             <Route
                                 path="branches"
-                                element={<AdminDashboard defaultTab="branches"/>}
+                                element={<Page defaultTab="branches"/>}
                             />
 
                             {/* /dashboard/officers */}
                             <Route
                                 path="officers"
-                                element={<AdminDashboard defaultTab="officers"/>}
+                                element={<Page defaultTab="officers"/>}
                             />
 
                             {/* /dashboard/groups */}
                             <Route
                                 path="groups"
-                                element={<AdminDashboard defaultTab="groups"/>}
+                                element={<Page defaultTab="groups"/>}
                             />
 
                             {/* /dashboard/borrowers */}
                             <Route
                                 path="borrowers"
-                                element={<AdminDashboard defaultTab="borrowers"/>}
+                                element={<Page defaultTab="borrowers"/>}
                             />
 
                             {/* /dashboard/loans */}
                             <Route
                                 path="loans"
-                                element={<AdminDashboard defaultTab="loans"/>}
+                                element={<Page defaultTab="loans"/>}
                             />
                         </Routes>
                     </main>

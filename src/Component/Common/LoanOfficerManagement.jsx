@@ -1,4 +1,4 @@
-// src/Component/dashboard/admin/LoanOfficerManagement.jsx
+// src/Component/dashboard/Common/LoanOfficerManagement.jsx
 import {useState} from "react";
 import {Button} from "@/components/ui/button";
 import {
@@ -19,10 +19,10 @@ import {Input} from "@/components/ui/input";
 import {Label} from "@/components/ui/label";
 import {Plus, Trash2} from "lucide-react";
 import {useToast} from "@/hooks/use-toast";
-import {useLoanOfficers} from "@/hooks/useLoanOfficers";
-import {useBranches} from "@/hooks/useBranches";
-import {useRegions} from "@/hooks/useRegions";
-import {useGroups} from "@/hooks/useGroups";
+import {useLoanOfficers} from "@/hooks/useLoanOfficers.js";
+import {useBranches} from "@/hooks/useBranches.js";
+import {useRegions} from "@/hooks/useRegions.js";
+import {useGroups} from "@/hooks/useGroups.js";
 import OfficerDetailsDialog from "./OfficerDetailsDialog.jsx";
 
 /**

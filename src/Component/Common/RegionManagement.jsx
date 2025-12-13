@@ -1,18 +1,11 @@
-// src/Component/dashboard/admin/RegionManagement.jsx
+// src/Component/dashboard/Common/RegionManagement.jsx
 import {useState} from "react";
 import {Button} from "@/components/ui/button";
 import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
+    Card, CardContent, CardHeader, CardTitle,
 } from "@/components/ui/card";
 import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
+    Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
 import {Input} from "@/components/ui/input";
 import {Label} from "@/components/ui/label";
@@ -34,15 +27,7 @@ export default function RegionManagement() {
     const {toast} = useToast();
 
     const {
-        regions,
-        isLoading,
-        isError,
-        createRegion,
-        deleteRegion,
-        updateRegion,
-        isCreating,
-        isDeleting,
-        isUpdating,
+        regions, isLoading, isError, createRegion, deleteRegion, updateRegion, isCreating, isDeleting, isUpdating,
     } = useRegions();
 
     // CREATE
@@ -55,9 +40,7 @@ export default function RegionManagement() {
             setOpen(false);
         } catch (err) {
             toast({
-                title: "Error creating region",
-                description: err?.response?.data?.detail,
-                variant: "destructive",
+                title: "Error creating region", description: err?.response?.data?.detail, variant: "destructive",
             });
         }
     };
@@ -70,9 +53,7 @@ export default function RegionManagement() {
             toast({title: "Region deleted"});
         } catch (err) {
             toast({
-                title: "Error deleting region",
-                description: err?.response?.data?.detail,
-                variant: "destructive",
+                title: "Error deleting region", description: err?.response?.data?.detail, variant: "destructive",
             });
         } finally {
             setConfirmOpen(false);
@@ -85,16 +66,13 @@ export default function RegionManagement() {
         e.preventDefault();
         try {
             await updateRegion({
-                region_id: editingRegionId,
-                region_name: editName.trim(),
+                region_id: editingRegionId, region_name: editName.trim(),
             });
             toast({title: "Region updated successfully"});
             setEditOpen(false);
         } catch (err) {
             toast({
-                title: "Error updating region",
-                description: err?.response?.data?.detail,
-                variant: "destructive",
+                title: "Error updating region", description: err?.response?.data?.detail, variant: "destructive",
             });
         }
     };
@@ -110,8 +88,7 @@ export default function RegionManagement() {
         setConfirmOpen(true);
     };
 
-    return (
-        <div className="space-y-6">
+    return (<div className="space-y-6">
             {/* Header + Add button */}
             <div className="flex justify-between items-center">
                 <div>
@@ -150,10 +127,8 @@ export default function RegionManagement() {
             </div>
 
             {/* Cards */}
-            {!isLoading && !isError && regions.length > 0 && (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {regions.map((region) => (
-                        <Card key={region.region_id} className="shadow-sm">
+            {!isLoading && !isError && regions.length > 0 && (<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {regions.map((region) => (<Card key={region.region_id} className="shadow-sm">
                             <CardHeader>
                                 <CardTitle>{region.region_name}</CardTitle>
                             </CardHeader>
@@ -175,10 +150,8 @@ export default function RegionManagement() {
                                     Delete
                                 </Button>
                             </CardContent>
-                        </Card>
-                    ))}
-                </div>
-            )}
+                        </Card>))}
+                </div>)}
 
             {/* Edit modal (unchanged except for using handleEdit) */}
             <Dialog open={editOpen} onOpenChange={setEditOpen}>
@@ -215,6 +188,5 @@ export default function RegionManagement() {
                 onConfirm={handleDelete}
                 isLoading={isDeleting}
             />
-        </div>
-    );
+        </div>);
 }

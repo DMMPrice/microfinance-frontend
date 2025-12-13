@@ -1,4 +1,4 @@
-// src/Component/dashboard/admin/OfficerDetailsDialog.jsx
+// src/Component/dashboard/Common/OfficerDetailsDialog.jsx
 import {useEffect, useState} from "react";
 import {
     Dialog,

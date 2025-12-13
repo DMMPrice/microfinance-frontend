@@ -1,15 +1,15 @@
-// src/Component/dashboard/admin/AdminDashboard.jsx
+// src/Component/dashboard/Common/Page.jsx
 import {useState, useEffect} from "react";
 import {storage} from "@/lib/storage.js";
 import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
 import {Tabs, TabsContent, TabsList, TabsTrigger} from "@/components/ui/tabs";
 import {Building2, MapPin, Users, UserCircle, Wallet} from "lucide-react";
 
-import RegionManagement from "@/Component/dashboard/admin/RegionManagement.jsx";
-import BranchManagement from "@/Component/dashboard/admin/BranchManagement.jsx";
-import LoanOfficerManagement from "@/Component/dashboard/admin/LoanOfficerManagement.jsx";
-import GroupManagement from "@/Component/dashboard/admin/GroupManagement.jsx";
-import MemberManagement from "@/Component/dashboard/admin/MemberManagement.jsx";
+import RegionManagement from "@/Component/Common/RegionManagement.jsx";
+import BranchManagement from "@/Component/Common/BranchManagement.jsx";
+import LoanOfficerManagement from "@/Component/Common/LoanOfficerManagement.jsx";
+import GroupManagement from "@/Component/Common/GroupManagement.jsx";
+import MemberManagement from "@/Component/Common/MemberManagement.jsx";
 
 // 🔹 hooks for live backend data
 import {useRegions} from "@/hooks/useRegions.js";
@@ -53,7 +53,7 @@ function StatCard({title, value, subtitle, Icon}) {
     );
 }
 
-export default function AdminDashboard({defaultTab = "overview"}) {
+export default function Page({defaultTab = "overview"}) {
     // 🔹 Live data from backend via React Query hooks
     const {regions = []} = useRegions();
     const {branches = []} = useBranches();
