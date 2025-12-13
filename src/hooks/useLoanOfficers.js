@@ -10,11 +10,31 @@ const LOAN_OFFICER_SUMMARY_KEY = (loId) => [
 ];
 
 /**
- * Basic Loan Officer CRUD + list hook
+ * Loan Officer CRUD + list hook
  * Uses:
  *  - GET    /loan-officers
  *  - POST   /loan-officers
  *  - DELETE /loan-officers/{lo_id}
+ *
+ * GET /loan-officers returns List[LoanOfficerWithEmployeeOut]:
+ * {
+ *   lo_id,
+ *   employee_id,
+ *   employee: {
+ *     employee_id,
+ *     full_name,
+ *     phone,
+ *     role_id,
+ *     region_id,
+ *     branch_id,
+ *     user: {
+ *       user_id,
+ *       username,
+ *       email,
+ *       is_active
+ *     }
+ *   }
+ * }
  */
 export function useLoanOfficers() {
     const queryClient = useQueryClient();
@@ -30,13 +50,12 @@ export function useLoanOfficers() {
         queryKey: LOAN_OFFICERS_KEY,
         queryFn: async () => {
             const res = await api.get("/loan-officers");
-            // expects List[LoanOfficerOut]
             return res.data;
         },
     });
 
     // 🔹 POST /loan-officers
-    // payload should match LoanOfficerCreate → { employee_id: string }
+    // payload should match LoanOfficerCreate → { employee_id: number }
     const createLoanOfficerMutation = useMutation({
         mutationFn: async (payload) => {
             const res = await api.post("/loan-officers", payload);
@@ -65,6 +84,8 @@ export function useLoanOfficers() {
         refetch,
         createLoanOfficerMutation,
         deleteLoanOfficerMutation,
+        isCreating: createLoanOfficerMutation.isPending,
+        isDeleting: deleteLoanOfficerMutation.isPending,
     };
 }
 
@@ -87,7 +108,6 @@ export function useLoanOfficerGroupSummary(loId = null, options = {}) {
             const res = await api.get("/loan-officers/groups/summary", {
                 params: loId != null ? {lo_id: loId} : {},
             });
-            // expects List[LoanOfficerGroupSummaryOut]
             return res.data;
         },
     });
