@@ -11,7 +11,6 @@ import LoanOfficerManagement from "@/Component/Common/LoanOfficerManagement.jsx"
 import GroupManagement from "@/Component/Common/GroupManagement.jsx";
 import MemberManagement from "@/Component/Common/MemberManagement.jsx";
 
-// 🔹 hooks for live backend data
 import {useRegions} from "@/hooks/useRegions.js";
 import {useBranches} from "@/hooks/useBranches.js";
 import {useLoanOfficers} from "@/hooks/useLoanOfficers.js";

@@ -65,7 +65,7 @@ export function AuthProvider({children}) {
     return (
         <AuthContext.Provider
             value={{
-                user,            // 👈 used by Dashboard
+                user,            // 👈 used by Home
                 isAuthenticated, // 👈 used by ProtectedRoute
                 isLoading,
                 login,

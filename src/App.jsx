@@ -9,7 +9,7 @@ import {AuthProvider, useAuth} from "@/contexts/AuthContext";
 import {initializeStorage} from "@/lib/storage";
 
 import Login from "./Component/Login.jsx";
-import Dashboard from "./Component/Dashboard.jsx";
+import Home from "./Component/Home.jsx";
 import Index from "@/Component/Index.jsx";
 import NotFound from "./Component/NotFound.jsx";
 
@@ -50,7 +50,7 @@ const App = () => (
                             path="/dashboard/*"
                             element={
                                 <ProtectedRoute>
-                                    <Dashboard/>
+                                    <Home/>
                                 </ProtectedRoute>
                             }
                         />

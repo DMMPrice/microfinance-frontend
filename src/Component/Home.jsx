@@ -1,12 +1,13 @@
-// src/Component/Dashboard.jsx
+// src/Component/Home.jsx
 import {useAuth} from "@/contexts/AuthContext.jsx";
 import {Routes, Route} from "react-router-dom";
 import {SidebarProvider, SidebarTrigger} from "@/components/ui/sidebar";
 import {AppSidebar} from "@/Component/AppSidebar.jsx";
 import Page from "@/Component/dashboard/Page.jsx";
 import DashboardHeader from "@/Component/dashboard/DashboardHeader.jsx";
+import UsersManagement from "@/Component/Common/UsersManagement.jsx";
 
-export default function Dashboard() {
+export default function Home() {
     const {user} = useAuth();
 
     if (!user) {
@@ -75,6 +76,8 @@ export default function Dashboard() {
                                 path="loans"
                                 element={<Page defaultTab="loans"/>}
                             />
+
+                            <Route path="users" element={<UsersManagement />} />
                         </Routes>
                     </main>
                 </div>
