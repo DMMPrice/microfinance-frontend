@@ -23,9 +23,9 @@ export function initializeStorage() {
     if (!localStorage.getItem(STORAGE_KEYS.USERS)) {
         const adminUser = {
             id: "1",
-            email: "Common@mf.com",
+            email: "Main Components@mf.com",
             name: "Admin User",
-            role: "Common",
+            role: "Main Components",
         };
         saveToStorage(STORAGE_KEYS.USERS, [adminUser]);
     }

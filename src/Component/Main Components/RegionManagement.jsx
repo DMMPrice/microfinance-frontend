@@ -1,4 +1,4 @@
-// src/Component/dashboard/Common/RegionManagement.jsx
+// src/Component/Home/Main Components/RegionManagement.jsx
 import {useState} from "react";
 import {Button} from "@/components/ui/button";
 import {

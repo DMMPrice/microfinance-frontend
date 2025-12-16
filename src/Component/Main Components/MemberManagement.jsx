@@ -1,4 +1,4 @@
-// src/Component/dashboard/Common/MemberManagement.jsx
+// src/Component/Home/Main Components/MemberManagement.jsx
 import React, {useMemo, useState} from "react";
 import {Button} from "@/components/ui/button";
 import {

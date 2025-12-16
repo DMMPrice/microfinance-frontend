@@ -1,15 +1,15 @@
-// src/Component/dashboard/Common/Page.jsx
+// src/Component/Home/Main Components/Page.jsx
 import {useState, useEffect} from "react";
 import {storage} from "@/lib/storage.js";
 import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
 import {Tabs, TabsContent, TabsList, TabsTrigger} from "@/components/ui/tabs";
 import {Building2, MapPin, Users, UserCircle, Wallet} from "lucide-react";
 
-import RegionManagement from "@/Component/Common/RegionManagement.jsx";
-import BranchManagement from "@/Component/Common/BranchManagement.jsx";
-import LoanOfficerManagement from "@/Component/Common/LoanOfficerManagement.jsx";
-import GroupManagement from "@/Component/Common/GroupManagement.jsx";
-import MemberManagement from "@/Component/Common/MemberManagement.jsx";
+import RegionManagement from "@/Component/Main Components/RegionManagement.jsx";
+import BranchManagement from "@/Component/Main Components/BranchManagement.jsx";
+import LoanOfficerManagement from "@/Component/Main Components/LoanOfficerManagement.jsx";
+import GroupManagement from "@/Component/Main Components/GroupManagement.jsx";
+import MemberManagement from "@/Component/Main Components/MemberManagement.jsx";
 
 import {useRegions} from "@/hooks/useRegions.js";
 import {useBranches} from "@/hooks/useBranches.js";

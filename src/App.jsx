@@ -11,7 +11,7 @@ import {initializeStorage} from "@/lib/storage";
 import Login from "./Component/Login.jsx";
 import Home from "./Component/Home.jsx";
 import Index from "@/Component/Index.jsx";
-import NotFound from "./Component/NotFound.jsx";
+import NotFound from "./Utils/NotFound.jsx";
 
 const queryClient = new QueryClient();
 

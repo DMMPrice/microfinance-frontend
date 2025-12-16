@@ -1,4 +1,4 @@
-// src/Component/dashboard/Common/LoanOfficerManagement.jsx
+// src/Component/Home/Main Components/LoanOfficerManagement.jsx
 import React, {useMemo, useState} from "react";
 import {Button} from "@/components/ui/button";
 import {

@@ -1,4 +1,4 @@
-// src/Component/dashboard/Common/GroupManagement.jsx
+// src/Component/Home/Main Components/GroupManagement.jsx
 import {useState} from "react";
 import {Button} from "@/components/ui/button";
 import {

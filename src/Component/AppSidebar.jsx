@@ -1,4 +1,14 @@
-import {MapPin, Building2, UserCircle, Users, UsersRound, Wallet, LayoutDashboard} from 'lucide-react';
+import {
+    Map,
+    Building2,
+    BadgeCheck,
+    UserCheck,
+    UsersRound,
+    CreditCard,
+    UserCog,
+    LayoutDashboard,
+    Layers
+} from 'lucide-react';
 import {NavLink} from '@/Component/NavLink.jsx';
 import {
     Sidebar,
@@ -15,13 +25,20 @@ import {useAuth} from '@/contexts/AuthContext.jsx';
 
 const navigationItems = [
     {title: 'Overview', url: '/dashboard', icon: LayoutDashboard},
-    {title: 'Regions', url: '/dashboard/regions', icon: MapPin},
+
+    {title: 'Regions', url: '/dashboard/regions', icon: Map},
+
     {title: 'Branches', url: '/dashboard/branches', icon: Building2},
-    {title: 'Loan Officers', url: '/dashboard/officers', icon: UserCircle},
-    {title: 'Groups', url: '/dashboard/groups', icon: UsersRound},
-    {title: 'Borrowers', url: '/dashboard/borrowers', icon: Users},
-    {title: 'Loans', url: '/dashboard/loans', icon: Wallet},
-    {title: 'Users Management', url: '/dashboard/users', icon: Users},
+
+    {title: 'Loan Officers', url: '/dashboard/officers', icon: BadgeCheck},
+
+    {title: 'Groups', url: '/dashboard/groups', icon: Layers},
+
+    {title: 'Borrowers', url: '/dashboard/borrowers', icon: UserCheck},
+
+    {title: 'Loans', url: '/dashboard/loans', icon: CreditCard},
+
+    {title: 'Users Management', url: '/dashboard/users', icon: UserCog},
 ];
 
 export function AppSidebar() {
@@ -43,7 +60,7 @@ export function AppSidebar() {
                                     <SidebarMenuButton asChild tooltip={item.title}>
                                         <NavLink
                                             to={item.url}
-                                            end={item.url === '/dashboard'}
+                                            end={item.url === '/Home'}
                                             className="hover:bg-accent"
                                             activeClassName="bg-accent text-accent-foreground font-medium"
                                         >

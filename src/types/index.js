@@ -1,5 +1,5 @@
 /**
- * @typedef {'Common' | 'region' | 'branch' | 'loan_officer' | 'borrower'} AppRole
+ * @typedef {'Main Components' | 'region' | 'branch' | 'loan_officer' | 'borrower'} AppRole
  */
 
 /**
