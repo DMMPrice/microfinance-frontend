@@ -17,7 +17,7 @@ export function useRegions() {
     } = useQuery({
         queryKey: REGIONS_KEY,
         queryFn: async () => {
-            const res = await api.get("/regions");
+            const res = await api.get("/regions/");
             return res.data;
         },
     });

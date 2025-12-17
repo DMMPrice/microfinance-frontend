@@ -17,7 +17,7 @@ export function useBranches(regionId = null) {
         queryKey: regionId ? [...BRANCHES_KEY, {regionId}] : BRANCHES_KEY,
         queryFn: async () => {
             const params = regionId ? {region_id: regionId} : {};
-            const res = await api.get("/branches", {params});
+            const res = await api.get("/branches/", {params});
             return res.data; // list[BranchOut]
         },
     });

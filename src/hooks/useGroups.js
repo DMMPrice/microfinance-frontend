@@ -20,7 +20,7 @@ export function useGroups() {
     } = useQuery({
         queryKey: GROUPS_KEY,
         queryFn: async () => {
-            const res = await api.get("/groups");
+            const res = await api.get("/groups/");
             return res.data; // list[GroupOut]
         },
     });
@@ -82,7 +82,7 @@ export function useGroup(groupId, {enabled = true} = {}) {
         queryKey: [...GROUPS_KEY, groupId],
         enabled: enabled && !!groupId,
         queryFn: async () => {
-            const res = await api.get(`/groups/${groupId}`);
+            const res = await api.get(`/groups/${groupId}/`);
             return res.data; // GroupOut
         },
     });

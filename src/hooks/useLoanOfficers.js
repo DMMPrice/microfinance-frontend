@@ -49,7 +49,7 @@ export function useLoanOfficers() {
     } = useQuery({
         queryKey: LOAN_OFFICERS_KEY,
         queryFn: async () => {
-            const res = await api.get("/loan-officers");
+            const res = await api.get("/loan-officers/");
             return res.data;
         },
     });
@@ -105,7 +105,7 @@ export function useLoanOfficerGroupSummary(loId = null, options = {}) {
         queryKey: LOAN_OFFICER_SUMMARY_KEY(loId),
         enabled,
         queryFn: async () => {
-            const res = await api.get("/loan-officers/groups/summary", {
+            const res = await api.get("/loan-officers/groups/summary/", {
                 params: loId != null ? {lo_id: loId} : {},
             });
             return res.data;

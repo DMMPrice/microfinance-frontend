@@ -27,7 +27,7 @@ export function useMembers() {
     } = useQuery({
         queryKey: MEMBERS_KEY,
         queryFn: async () => {
-            const res = await api.get("/members", {headers: authHeader()});
+            const res = await api.get("/members/", {headers: authHeader()});
             return res.data;
         },
     });
