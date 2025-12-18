@@ -1,22 +1,25 @@
-import {NavLink as RouterNavLink} from "react-router-dom";
-import {forwardRef} from "react";
-import {cn} from "@/lib/utils.js";
+// src/Component/NavLink.jsx
+import {NavLink as RRNavLink} from "react-router-dom";
 
-const NavLink = forwardRef(
-    ({className, activeClassName, pendingClassName, to, ...props}, ref) => {
-        return (
-            <RouterNavLink
-                ref={ref}
-                to={to}
-                className={({isActive, isPending}) =>
-                    cn(className, isActive && activeClassName, isPending && pendingClassName)
-                }
-                {...props}
-            />
-        );
-    }
-);
+export function NavLink({
+                            activeClassName = "",
+                            className = "",
+                            ...props
+                        }) {
+    return (
+        <RRNavLink
+            {...props}
+            className={({isActive}) => {
+                const base =
+                    typeof className === "function" ? className({isActive}) : className;
 
-NavLink.displayName = "NavLink";
-
-export {NavLink};
+                return [
+                    base,
+                    isActive ? activeClassName : "",
+                ]
+                    .filter(Boolean)
+                    .join(" ");
+            }}
+        />
+    );
+}

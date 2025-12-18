@@ -60,7 +60,7 @@ export function AppSidebar() {
                                     <SidebarMenuButton asChild tooltip={item.title}>
                                         <NavLink
                                             to={item.url}
-                                            end={item.url === '/Home'}
+                                            end={item.url === "/dashboard"}
                                             className="hover:bg-accent"
                                             activeClassName="bg-accent text-accent-foreground font-medium"
                                         >
