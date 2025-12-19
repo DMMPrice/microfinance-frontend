@@ -2,13 +2,12 @@
 import axios from "axios";
 import {API_URL} from "@/config";
 
-// Create a single axios instance
-const apiClient = axios.create({
+// ✅ Export the instance so other files can import it directly
+export const apiClient = axios.create({
     baseURL: API_URL,
-    // withCredentials: true, // enable if you use cookies later
+    // withCredentials: true,
 });
 
-// Automatically attach Authorization header if token exists
 apiClient.interceptors.request.use((config) => {
     const stored = localStorage.getItem("authData");
     if (stored) {
@@ -16,7 +15,8 @@ apiClient.interceptors.request.use((config) => {
             const {token, tokenType} = JSON.parse(stored);
             if (token) {
                 config.headers = config.headers || {};
-                config.headers.Authorization = `${tokenType || "bearer"} ${token}`;
+                // ✅ usually backend expects "Bearer", not "bearer"
+                config.headers.Authorization = `${(tokenType || "Bearer")} ${token}`;
             }
         } catch (e) {
             console.error("Failed to parse authData from localStorage", e);
