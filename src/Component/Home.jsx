@@ -1,18 +1,20 @@
 // src/Component/Home.jsx
 import {useAuth} from "@/contexts/AuthContext.jsx";
-import {Routes, Route} from "react-router-dom";
+import {Routes, Route, Navigate} from "react-router-dom";
 import {SidebarProvider, SidebarTrigger} from "@/components/ui/sidebar";
 import {AppSidebar} from "@/Component/AppSidebar.jsx";
 import DashboardHeader from "@/Component/Home/DashboardHeader.jsx";
 
-// ✅ NEW PAGES
+// Pages
 import OverviewPage from "@/pages/OverviewPage.jsx";
 import RegionsPage from "@/pages/RegionsPage.jsx";
-import UsersPage from "@/Pages/UsersPage.jsx";
 import BranchesPage from "@/pages/BranchesPage.jsx";
 import LoanOfficersPage from "@/pages/LoanOfficersPage.jsx";
 import GroupsPage from "@/pages/GroupsPage.jsx";
 import BorrowersPage from "@/pages/BorrowersPage.jsx";
+import UsersPage from "@/Pages/UsersPage.jsx";
+
+// ✅ Loans entry page (single page)
 import LoansPage from "@/pages/LoansPage.jsx";
 
 export default function Home() {
@@ -21,9 +23,7 @@ export default function Home() {
     if (!user) {
         return (
             <div className="flex items-center justify-center min-h-screen">
-                <p className="text-muted-foreground">
-                    Session not found. Please log in again.
-                </p>
+                <p className="text-muted-foreground">Session not found. Please log in again.</p>
             </div>
         );
     }
@@ -44,17 +44,23 @@ export default function Home() {
                         </div>
                     </div>
 
-                    {/* ✅ Main content changes per route */}
                     <main className="flex-1 p-4">
                         <Routes>
                             <Route index element={<OverviewPage/>}/>
+
                             <Route path="regions" element={<RegionsPage/>}/>
                             <Route path="branches" element={<BranchesPage/>}/>
                             <Route path="officers" element={<LoanOfficersPage/>}/>
                             <Route path="groups" element={<GroupsPage/>}/>
                             <Route path="borrowers" element={<BorrowersPage/>}/>
+
+                            {/* ✅ Single Loans route only */}
                             <Route path="loans" element={<LoansPage/>}/>
+
                             <Route path="users" element={<UsersPage/>}/>
+
+                            {/* fallback inside dashboard */}
+                            <Route path="*" element={<Navigate to="/dashboard" replace/>}/>
                         </Routes>
                     </main>
                 </div>

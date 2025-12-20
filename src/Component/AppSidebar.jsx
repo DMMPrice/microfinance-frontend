@@ -1,15 +1,16 @@
+import React from "react";
 import {
     Map,
     Building2,
     BadgeCheck,
     UserCheck,
-    UsersRound,
     CreditCard,
     UserCog,
     LayoutDashboard,
-    Layers
-} from 'lucide-react';
-import {NavLink} from '@/Component/NavLink.jsx';
+    Layers,
+} from "lucide-react";
+
+import {NavLink} from "@/Component/NavLink.jsx";
 import {
     Sidebar,
     SidebarContent,
@@ -20,39 +21,40 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
     useSidebar,
-} from '@/components/ui/sidebar';
-import {useAuth} from '@/contexts/AuthContext.jsx';
+} from "@/components/ui/sidebar";
+
+import {cn} from "@/lib/utils";
+import {useAuth} from "@/contexts/AuthContext.jsx";
 
 const navigationItems = [
-    {title: 'Overview', url: '/dashboard', icon: LayoutDashboard},
+    {title: "Overview", url: "/dashboard", icon: LayoutDashboard},
+    {title: "Regions", url: "/dashboard/regions", icon: Map},
+    {title: "Branches", url: "/dashboard/branches", icon: Building2},
+    {title: "Loan Officers", url: "/dashboard/officers", icon: BadgeCheck},
+    {title: "Groups", url: "/dashboard/groups", icon: Layers},
+    {title: "Borrowers", url: "/dashboard/borrowers", icon: UserCheck},
 
-    {title: 'Regions', url: '/dashboard/regions', icon: Map},
+    // ✅ Single submenu item (no children)
+    {
+        title: "Loan Dashboard",
+        url: "/dashboard/loans?tab=due", // ✅ change to tab=all if you want
+        icon: CreditCard,
+    },
 
-    {title: 'Branches', url: '/dashboard/branches', icon: Building2},
-
-    {title: 'Loan Officers', url: '/dashboard/officers', icon: BadgeCheck},
-
-    {title: 'Groups', url: '/dashboard/groups', icon: Layers},
-
-    {title: 'Borrowers', url: '/dashboard/borrowers', icon: UserCheck},
-
-    {title: 'Loans', url: '/dashboard/loans', icon: CreditCard},
-
-    {title: 'Users Management', url: '/dashboard/users', icon: UserCog},
+    {title: "Users Management", url: "/dashboard/users", icon: UserCog},
 ];
 
 export function AppSidebar() {
     const {state} = useSidebar();
     const {user} = useAuth();
-    const collapsed = state === 'collapsed';
+    const collapsed = state === "collapsed";
 
     return (
         <Sidebar collapsible="icon">
             <SidebarContent>
                 <SidebarGroup>
-                    <SidebarGroupLabel>
-                        {!collapsed && 'Management'}
-                    </SidebarGroupLabel>
+                    <SidebarGroupLabel>{!collapsed && "Management"}</SidebarGroupLabel>
+
                     <SidebarGroupContent>
                         <SidebarMenu>
                             {navigationItems.map((item) => (
@@ -61,7 +63,7 @@ export function AppSidebar() {
                                         <NavLink
                                             to={item.url}
                                             end={item.url === "/dashboard"}
-                                            className="hover:bg-accent"
+                                            className={cn("hover:bg-accent")}
                                             activeClassName="bg-accent text-accent-foreground font-medium"
                                         >
                                             <item.icon className="h-4 w-4"/>
