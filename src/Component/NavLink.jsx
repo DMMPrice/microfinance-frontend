@@ -13,12 +13,7 @@ export function NavLink({
                 const base =
                     typeof className === "function" ? className({isActive}) : className;
 
-                return [
-                    base,
-                    isActive ? activeClassName : "",
-                ]
-                    .filter(Boolean)
-                    .join(" ");
+                return [base, isActive ? activeClassName : ""].filter(Boolean).join(" ");
             }}
         />
     );

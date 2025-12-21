@@ -7,7 +7,7 @@ import {Badge} from "@/components/ui/badge";
 import {RefreshCw, Eye} from "lucide-react";
 
 import {useCollectionsByLO} from "@/hooks/useLoans.js";
-import {DataTable, EmptyHint, ErrBox, SkRows, fmtMoney, todayISO} from "@/Component/Loan/Components/loans.ui.jsx";
+import {DataTable, EmptyHint, ErrBox, SkRows, fmtMoney, todayISO} from "@/Component/Loan/loans.ui.jsx";
 
 export default function LoanCollectionsSection({onView}) {
     const [asOn, setAsOn] = useState(todayISO());

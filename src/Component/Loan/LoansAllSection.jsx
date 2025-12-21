@@ -1,6 +1,12 @@
 // src/pages/loans/LoansAllSection.jsx
 import React, {useMemo, useState} from "react";
-import {Card, CardContent, CardHeader, CardTitle, CardDescription} from "@/components/ui/card";
+import {
+    Card,
+    CardContent,
+    CardHeader,
+    CardTitle,
+    CardDescription,
+} from "@/components/ui/card";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {Skeleton} from "@/components/ui/skeleton";
@@ -12,10 +18,10 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 
-import {RefreshCw, Search as SearchIcon, Plus, Eye} from "lucide-react";
+import {RefreshCw, Search as SearchIcon, Eye} from "lucide-react";
 
-import {useLoanMaster} from "@/hooks/useLoans";
-import {useLoanOfficers} from "@/hooks/useLoanOfficers";
+import {useLoanMaster} from "@/hooks/useLoans.js";
+import {useLoanOfficers} from "@/hooks/useLoanOfficers.js";
 
 const TH = "px-3 py-3 text-center align-middle whitespace-nowrap";
 const TD = "px-3 py-3 align-middle whitespace-nowrap";
@@ -23,7 +29,7 @@ const TD_LEFT = "px-3 py-3 align-middle whitespace-normal";
 
 const STATUS_OPTIONS = ["ALL", "DISBURSED", "ACTIVE", "CLOSED", "CANCELLED"];
 
-export default function LoansAllSection({onCreate, onOpenSummary}) {
+export default function LoansAllSection({onOpenSummary}) {
     // ----------------------------
     // LO data (from your hook)
     // ----------------------------
@@ -39,7 +45,7 @@ export default function LoansAllSection({onCreate, onOpenSummary}) {
         }));
     }, [loQ.loanOfficers]);
 
-    // ✅ NEW: build a fast lookup map: lo_id -> full_name
+    // ✅ build a fast lookup map: lo_id -> full_name
     const loNameMap = useMemo(() => {
         const map = {};
         (loQ.loanOfficers || []).forEach((x) => {
@@ -77,7 +83,7 @@ export default function LoansAllSection({onCreate, onOpenSummary}) {
             status: applied.status || undefined,
             disburse_from: applied.disburse_from || undefined,
             disburse_to: applied.disburse_to || undefined,
-            lo_id: applied.lo_id || undefined, // ✅ hook will send this to /loans/master
+            lo_id: applied.lo_id || undefined,
             limit,
             offset,
         }),
@@ -120,7 +126,7 @@ export default function LoansAllSection({onCreate, onOpenSummary}) {
             status: statusDraft === "ALL" ? "" : statusDraft,
             disburse_from: fromDraft || "",
             disburse_to: toDraft || "",
-            lo_id: loDraft === "ALL" ? "" : loDraft, // ✅ string value
+            lo_id: loDraft === "ALL" ? "" : loDraft,
         });
     };
 
@@ -151,14 +157,11 @@ export default function LoansAllSection({onCreate, onOpenSummary}) {
                         </CardDescription>
                     </div>
 
+                    {/* ✅ Only Refresh button */}
                     <div className="flex items-center gap-2">
                         <Button variant="outline" onClick={() => q.refetch()}>
                             <RefreshCw className="h-4 w-4 mr-2"/>
                             Refresh
-                        </Button>
-                        <Button onClick={onCreate}>
-                            <Plus className="h-4 w-4 mr-2"/>
-                            Create Loan
                         </Button>
                     </div>
                 </div>
@@ -190,7 +193,7 @@ export default function LoansAllSection({onCreate, onOpenSummary}) {
                         </SelectContent>
                     </Select>
 
-                    {/* ✅ Loan Officer (from useLoanOfficers + /loan-officers/) */}
+                    {/* Loan Officer */}
                     <Select value={loDraft} onValueChange={setLoDraft}>
                         <SelectTrigger>
                             <SelectValue
@@ -282,20 +285,16 @@ export default function LoansAllSection({onCreate, onOpenSummary}) {
                             </tr>
                         ) : (
                             rows.map((r) => {
-                                // Adapt to likely backend keys safely
                                 const loanId = r.loan_id ?? r.id ?? r.loan_no ?? "-";
                                 const status = r.status ?? "-";
                                 const member = r.member_name ?? r.member ?? r.member_full_name ?? "-";
                                 const group = r.group_name ?? r.group ?? "-";
 
-                                const disb = r.disburse_date ?? r.disbursed_on ?? r.disbursed_date ?? "-";
-                                const principal = r.principal_amount ?? r.principal ?? r.amount ?? "-";
+                                const disb =
+                                    r.disburse_date ?? r.disbursed_on ?? r.disbursed_date ?? "-";
+                                const principal =
+                                    r.principal_amount ?? r.principal ?? r.amount ?? "-";
 
-                                // ✅ NEW LOGIC: show Loan Officer full name
-                                // Priority:
-                                // 1) backend already sent name (lo_name / loan_officer_name)
-                                // 2) otherwise map by lo_id from /loan-officers
-                                // 3) fallback LO-{id}
                                 const loIdValue = r.lo_id ?? r.loan_officer_id ?? r.loId ?? null;
 
                                 const loName =
@@ -312,9 +311,9 @@ export default function LoansAllSection({onCreate, onOpenSummary}) {
                                             <div className="font-medium">{loanId}</div>
                                         </td>
                                         <td className={TD}>
-                        <span className="text-xs px-2 py-1 rounded-md border">
-                          {String(status)}
-                        </span>
+                                                <span className="text-xs px-2 py-1 rounded-md border">
+                                                    {String(status)}
+                                                </span>
                                         </td>
                                         <td className={TD_LEFT}>{member}</td>
                                         <td className={TD_LEFT}>{group}</td>

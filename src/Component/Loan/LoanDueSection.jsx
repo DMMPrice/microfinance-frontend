@@ -15,8 +15,8 @@ import {
 
 import {RefreshCw, Calendar as CalendarIcon, Eye} from "lucide-react";
 
-import {useDueInstallments} from "@/hooks/useLoans";
-import {useLoanOfficers} from "@/hooks/useLoanOfficers";
+import {useDueInstallments} from "@/hooks/useLoans.js";
+import {useLoanOfficers} from "@/hooks/useLoanOfficers.js";
 
 const TH = "px-3 py-3 text-center align-middle whitespace-nowrap";
 const TD = "px-3 py-3 align-middle whitespace-nowrap";

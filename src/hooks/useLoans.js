@@ -260,3 +260,48 @@ export function useApplyLoanAdvance() {
         },
     });
 }
+
+/* -------------------- COLLECTIONS BY LO (MANUAL LOAD) -------------------- */
+/**
+ * Same as useCollectionsByLO, but you control `enabled` from UI (button click).
+ */
+export function useCollectionsByLOManual(lo_id, as_on, enabled = false) {
+    const loId = normalizeId(lo_id);
+    const asOn = normalizeDate(as_on);
+
+    return useQuery({
+        queryKey: ["loans", "collectionsByLO", "manual", loId, asOn],
+        enabled: !!enabled && !!loId && !!asOn,
+        queryFn: async () =>
+            (
+                await apiClient.get(`/loans/collections/by-lo/${loId}`, {
+                    params: {as_on: asOn},
+                })
+            ).data,
+        keepPreviousData: true,
+        refetchOnWindowFocus: false,
+    });
+}
+
+/* -------------------- LOAN PAYMENTS (from STATEMENT) -------------------- */
+/**
+ * Returns only PAYMENT ledger rows from /loans/{loan_id}/statement
+ * API uses txn_date, txn_type, credit, balance_outstanding, narration.
+ */
+export function useLoanPayments(loan_id, enabled = false) {
+    const loanId = normalizeId(loan_id);
+
+    return useQuery({
+        queryKey: ["loans", "paymentsOnly", loanId],
+        enabled: !!enabled && !!loanId,
+        queryFn: async () => (await apiClient.get(`/loans/${loanId}/statement`)).data,
+        select: (list) => {
+            const rows = Array.isArray(list) ? list : [];
+            const onlyPayments = rows.filter((x) => x.txn_type === "PAYMENT");
+            onlyPayments.sort((a, b) => (b.ledger_id || 0) - (a.ledger_id || 0));
+            return onlyPayments;
+        },
+        refetchOnWindowFocus: false,
+    });
+}
+

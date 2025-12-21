@@ -14,8 +14,14 @@ import GroupsPage from "@/pages/GroupsPage.jsx";
 import BorrowersPage from "@/pages/BorrowersPage.jsx";
 import UsersPage from "@/Pages/UsersPage.jsx";
 
-// ✅ Loans entry page (single page)
+// ✅ Loans pages
 import LoansPage from "@/pages/LoansPage.jsx";
+import CollectionEntryPage from "@/pages/CollectionEntryPage.jsx";
+import StatementDownloadPage from "@/pages/StatementDownloadPage.jsx";
+import LoanViewPage from "@/Pages/LoanViewPage.jsx";
+
+// ✅ NEW: Loan view landing page
+import LoanViewLandingPage from "@/Pages/LoanViewLandingPage.jsx";
 
 export default function Home() {
     const {user} = useAuth();
@@ -34,7 +40,6 @@ export default function Home() {
                 <AppSidebar/>
 
                 <div className="flex-1 flex flex-col">
-                    {/* Sticky header */}
                     <div className="border-b bg-background sticky top-0 z-10">
                         <div className="flex items-center gap-2 p-4">
                             <SidebarTrigger/>
@@ -54,12 +59,17 @@ export default function Home() {
                             <Route path="groups" element={<GroupsPage/>}/>
                             <Route path="borrowers" element={<BorrowersPage/>}/>
 
-                            {/* ✅ Single Loans route only */}
+                            {/* ✅ Loans */}
                             <Route path="loans" element={<LoansPage/>}/>
+                            <Route path="loans/collection-entry" element={<CollectionEntryPage/>}/>
+                            <Route path="loans/statement-download" element={<StatementDownloadPage/>}/>
+
+                            {/* ✅ FIX: add landing + dynamic view */}
+                            <Route path="loans/view" element={<LoanViewLandingPage/>}/>
+                            <Route path="loans/view/:loan_id" element={<LoanViewPage/>}/>
 
                             <Route path="users" element={<UsersPage/>}/>
 
-                            {/* fallback inside dashboard */}
                             <Route path="*" element={<Navigate to="/dashboard" replace/>}/>
                         </Routes>
                     </main>

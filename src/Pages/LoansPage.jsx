@@ -14,9 +14,9 @@ import LoanSummaryDrawer from "@/Component/Loan/LoanSummaryDrawer.jsx";
 import {useLoanStats} from "@/hooks/useLoans";
 
 // ✅ sections
-import LoansAllSection from "@/Component/Loan/Components/LoansAllSection.jsx";
-import LoanDueSection from "@/Component/Loan/Components/LoanDueSection.jsx";
-import LoanCollectionsSection from "@/Component/Loan/Components/LoanCollectionsSection.jsx";
+import LoansAllSection from "@/Component/Loan/LoansAllSection.jsx";
+import LoanDueSection from "@/Component/Loan/LoanDueSection.jsx";
+import LoanCollectionsSection from "@/Component/Loan/LoanCollectionsSection.jsx";
 
 const TAB_DEFAULT = "due";
 const TAB_KEYS = ["all", "due", "collections"];
