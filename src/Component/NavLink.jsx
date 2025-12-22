@@ -1,20 +1,29 @@
 // src/Component/NavLink.jsx
+import React from "react";
 import {NavLink as RRNavLink} from "react-router-dom";
+import {cn} from "@/lib/utils";
 
 export function NavLink({
-                            activeClassName = "",
+                            to,
+                            end = false,
                             className = "",
-                            ...props
+                            activeClassName = "",
+                            children,
+                            ...rest
                         }) {
     return (
         <RRNavLink
-            {...props}
-            className={({isActive}) => {
-                const base =
-                    typeof className === "function" ? className({isActive}) : className;
-
-                return [base, isActive ? activeClassName : ""].filter(Boolean).join(" ");
-            }}
-        />
+            to={to}
+            end={end}
+            className={({isActive}) =>
+                cn(
+                    className,
+                    isActive && activeClassName
+                )
+            }
+            {...rest}
+        >
+            {children}
+        </RRNavLink>
     );
 }

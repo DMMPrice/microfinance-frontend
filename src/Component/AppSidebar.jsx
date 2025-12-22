@@ -27,7 +27,11 @@ import {
 
 import {cn} from "@/lib/utils";
 import {useAuth} from "@/contexts/AuthContext.jsx";
-import {Collapsible, CollapsibleContent, CollapsibleTrigger} from "@/components/ui/collapsible";
+import {
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {useLocation} from "react-router-dom";
 
 const navigationItems = [
@@ -76,6 +80,30 @@ export function AppSidebar() {
     return (
         <Sidebar collapsible="icon">
             <SidebarContent>
+                {/* =================== LOGO HEADER =================== */}
+                <div
+                    className={cn(
+                        "flex items-center gap-3 px-4 py-4 border-b",
+                        collapsed && "justify-center px-2"
+                    )}
+                >
+                    <img
+                        src="/logo.svg"
+                        alt="Akota Society Logo"
+                        className={cn("h-8 w-8 object-contain", collapsed && "h-7 w-7")}
+                    />
+
+                    {!collapsed && (
+                        <div className="leading-tight">
+                            <p className="text-sm font-semibold">Akota Society</p>
+                            <p className="text-xs text-muted-foreground">
+                                Microfinance System
+                            </p>
+                        </div>
+                    )}
+                </div>
+                {/* =================================================== */}
+
                 <SidebarGroup>
                     <SidebarGroupLabel>{!collapsed && "Management"}</SidebarGroupLabel>
 
@@ -108,7 +136,8 @@ export function AppSidebar() {
                                                     tooltip={item.title}
                                                     className={cn(
                                                         "justify-between",
-                                                        isOnLoansRoute && "bg-accent text-accent-foreground font-medium"
+                                                        isOnLoansRoute &&
+                                                        "bg-accent text-accent-foreground font-medium"
                                                     )}
                                                 >
                                                     <div className="flex items-center gap-2">
@@ -169,7 +198,9 @@ export function AppSidebar() {
                     <div className="mt-auto p-4 border-t">
                         <div className="text-sm">
                             <p className="font-medium">{user.name}</p>
-                            <p className="text-xs text-muted-foreground capitalize">{user.role}</p>
+                            <p className="text-xs text-muted-foreground capitalize">
+                                {user.role}
+                            </p>
                         </div>
                     </div>
                 )}

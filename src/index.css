@@ -4,89 +4,140 @@
 
 /* Design system tokens: all theme colors in HSL */
 @layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 220 13% 13%;
-    --card: 0 0% 100%;
-    --card-foreground: 220 13% 13%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 220 13% 13%;
-    --primary: 220 13% 13%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 220 13% 95%;
-    --secondary-foreground: 220 13% 13%;
-    --muted: 220 13% 95%;
-    --muted-foreground: 220 9% 46%;
-    --accent: 220 13% 95%;
-    --accent-foreground: 220 13% 13%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 98%;
-    --success: 142 76% 36%;
-    --success-foreground: 0 0% 98%;
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 98%;
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 220 13% 13%;
-    --radius: 0.5rem;
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 220 13% 13%;
-    --sidebar-primary: 220 13% 13%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 220 13% 95%;
-    --sidebar-accent-foreground: 220 13% 13%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 220 13% 13%;
-  }
+    :root {
+        /* Core */
+        --background: 0 0% 100%;
+        --foreground: 220 13% 13%;
 
-  .dark {
-    --background: 220 13% 13%;
-    --foreground: 0 0% 98%;
-    --card: 220 13% 13%;
-    --card-foreground: 0 0% 98%;
-    --popover: 220 13% 13%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 220 13% 13%;
-    --secondary: 220 13% 20%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 220 13% 20%;
-    --muted-foreground: 220 9% 60%;
-    --accent: 220 13% 20%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62% 31%;
-    --destructive-foreground: 0 0% 98%;
-    --success: 142 76% 36%;
-    --success-foreground: 0 0% 98%;
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 98%;
-    --border: 220 13% 20%;
-    --input: 220 13% 20%;
-    --ring: 0 0% 83%;
-    --sidebar-background: 220 13% 13%;
-    --sidebar-foreground: 0 0% 98%;
-    --sidebar-primary: 0 0% 98%;
-    --sidebar-primary-foreground: 220 13% 13%;
-    --sidebar-accent: 220 13% 20%;
-    --sidebar-accent-foreground: 0 0% 98%;
-    --sidebar-border: 220 13% 20%;
-    --sidebar-ring: 0 0% 83%;
-  }
+        --card: 0 0% 100%;
+        --card-foreground: 220 13% 13%;
+
+        --popover: 0 0% 100%;
+        --popover-foreground: 220 13% 13%;
+
+        /* ✅ Brand (from logo) */
+        --primary: 216 25% 30%; /* #394960 */
+        --primary-foreground: 0 0% 98%;
+
+        /* Neutral system */
+        --secondary: 216 20% 96%; /* #f3f4f7 */
+        --secondary-foreground: 216 25% 18%;
+
+        --muted: 216 20% 96%; /* #f3f4f7 */
+        --muted-foreground: 220 9% 46%;
+
+        --accent: 216 22% 92%; /* #e6eaef */
+        --accent-foreground: 216 25% 18%;
+
+        --destructive: 0 84% 60%;
+        --destructive-foreground: 0 0% 98%;
+
+        --success: 142 76% 36%;
+        --success-foreground: 0 0% 98%;
+
+        --warning: 38 92% 50%;
+        --warning-foreground: 0 0% 98%;
+
+        --border: 220 13% 91%;
+        --input: 220 13% 91%;
+
+        /* Brand ring */
+        --ring: 216 25% 30%;
+
+        --radius: 0.5rem;
+
+        /* Sidebar (brand-aligned) */
+        --sidebar-background: 0 0% 98%;
+        --sidebar-foreground: 216 25% 18%;
+        --sidebar-primary: 216 25% 30%;
+        --sidebar-primary-foreground: 0 0% 98%;
+        --sidebar-accent: 216 20% 96%;
+        --sidebar-accent-foreground: 216 25% 18%;
+        --sidebar-border: 220 13% 91%;
+        --sidebar-ring: 216 25% 30%;
+
+        /* Charts (brand-friendly) */
+        --chart-1: 216 25% 30%; /* #394960 */
+        --chart-2: 216 35% 45%; /* #4b6b9b */
+        --chart-3: 200 55% 42%; /* #307fa6 */
+        --chart-4: 38 92% 50%; /* #f59f0a */
+        --chart-5: 142 76% 36%; /* #16a249 */
+    }
+
+    .dark {
+        /* Core */
+        --background: 216 25% 12%; /* #171d26 */
+        --foreground: 0 0% 98%;
+
+        --card: 216 25% 14%; /* #1b222d */
+        --card-foreground: 0 0% 98%;
+
+        --popover: 216 25% 14%;
+        --popover-foreground: 0 0% 98%;
+
+        /* ✅ Brand in dark mode (lighter tint of logo color) */
+        --primary: 216 25% 85%; /* #cfd7e2 */
+        --primary-foreground: 216 25% 16%;
+
+        --secondary: 216 22% 18%;
+        --secondary-foreground: 0 0% 98%;
+
+        --muted: 216 18% 20%; /* #2a313c */
+        --muted-foreground: 220 9% 70%;
+
+        --accent: 216 18% 20%;
+        --accent-foreground: 0 0% 98%;
+
+        --destructive: 0 62% 31%;
+        --destructive-foreground: 0 0% 98%;
+
+        --success: 142 60% 55%;
+        --success-foreground: 0 0% 98%;
+
+        --warning: 38 92% 60%;
+        --warning-foreground: 0 0% 98%;
+
+        --border: 216 18% 24%; /* #323b48 */
+        --input: 216 18% 24%;
+
+        --ring: 216 25% 85%;
+
+        /* Sidebar */
+        --sidebar-background: 216 25% 12%;
+        --sidebar-foreground: 0 0% 98%;
+        --sidebar-primary: 216 25% 85%;
+        --sidebar-primary-foreground: 216 25% 16%;
+        --sidebar-accent: 216 18% 20%;
+        --sidebar-accent-foreground: 0 0% 98%;
+        --sidebar-border: 216 18% 24%;
+        --sidebar-ring: 216 25% 85%;
+
+        /* Charts (brighter for dark backgrounds) */
+        --chart-1: 216 25% 70%; /* #9fafc6 */
+        --chart-2: 216 45% 70%; /* #90acd5 */
+        --chart-3: 200 60% 65%; /* #70b8db */
+        --chart-4: 38 92% 60%; /* #f7b23b */
+        --chart-5: 142 60% 55%; /* #47d17a */
+    }
 }
 
 @layer base {
-  * {
-    @apply border-border;
-  }
+    * {
+        @apply border-border;
+    }
 
-  body {
-    @apply bg-background text-foreground;
-  }
+    body {
+        @apply bg-background text-foreground font-sans;
+        text-rendering: optimizeLegibility;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }
 
-  /* Optional: make the app fill the viewport nicely */
-  #root {
-    min-height: 100vh;
-  }
+
+    /* Optional: make the app fill the viewport nicely */
+    #root {
+        min-height: 100vh;
+    }
 }
 
 /* 🔥 Removed old Vite `.logo`, `.card`, `.read-the-docs` styles */

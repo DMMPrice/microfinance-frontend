@@ -2,16 +2,16 @@
 import {useMemo, useState} from "react";
 import {useSearchParams} from "react-router-dom";
 
-import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
-import {Button} from "@/components/ui/button";
-import {Tabs, TabsList, TabsTrigger} from "@/components/ui/tabs";
-import {Skeleton} from "@/components/ui/skeleton";
+import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card.tsx";
+import {Button} from "@/components/ui/button.tsx";
+import {Tabs, TabsList, TabsTrigger} from "@/components/ui/tabs.tsx";
+import {Skeleton} from "@/components/ui/skeleton.tsx";
 import {Plus, RefreshCw} from "lucide-react";
 
 import CreateLoanDialog from "@/Component/Loan/CreateLoanDialog.jsx";
 import LoanSummaryDrawer from "@/Component/Loan/LoanSummaryDrawer.jsx";
 
-import {useLoanStats} from "@/hooks/useLoans";
+import {useLoanStats} from "@/hooks/useLoans.js";
 
 // ✅ sections
 import LoansAllSection from "@/Component/Loan/LoansAllSection.jsx";

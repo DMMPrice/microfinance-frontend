@@ -2,10 +2,10 @@
 import React, {useMemo} from "react";
 import {useParams} from "react-router-dom";
 
-import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
-import {Skeleton} from "@/components/ui/skeleton";
-import {Badge} from "@/components/ui/badge";
-import {Tabs, TabsContent, TabsList, TabsTrigger} from "@/components/ui/tabs";
+import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card.tsx";
+import {Skeleton} from "@/components/ui/skeleton.tsx";
+import {Badge} from "@/components/ui/badge.tsx";
+import {Tabs, TabsContent, TabsList, TabsTrigger} from "@/components/ui/tabs.tsx";
 
 import {useLoanSummary, useLoanSchedule, useLoanStatement} from "@/hooks/useLoans.js";
 

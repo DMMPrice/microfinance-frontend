@@ -1,30 +1,30 @@
 import React, {useEffect, useMemo, useState} from "react";
-import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
-import {Button} from "@/components/ui/button";
-import {Input} from "@/components/ui/input";
-import {Label} from "@/components/ui/label";
+import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card.tsx";
+import {Button} from "@/components/ui/button.tsx";
+import {Input} from "@/components/ui/input.tsx";
+import {Label} from "@/components/ui/label.tsx";
 import {
     Select,
     SelectContent,
     SelectItem,
     SelectTrigger,
     SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/select.tsx";
 import {
     Accordion,
     AccordionContent,
     AccordionItem,
     AccordionTrigger,
-} from "@/components/ui/accordion";
-import {Skeleton} from "@/components/ui/skeleton";
-import {CheckCircle2, Eye, Loader2, RotateCw} from "lucide-react";
+} from "@/components/ui/accordion.tsx";
+import {Skeleton} from "@/components/ui/skeleton.tsx";
+import {CheckCircle2, Eye, Loader2, RotateCw, Download} from "lucide-react";
 
 import {
     Dialog,
     DialogContent,
     DialogHeader,
     DialogTitle,
-} from "@/components/ui/dialog";
+} from "@/components/ui/dialog.tsx";
 
 import {useBranches} from "@/hooks/useBranches.js";
 import {useGroups} from "@/hooks/useGroups.js";
@@ -45,6 +45,30 @@ function todayYYYYMMDD() {
 }
 
 const MODE_OPTIONS = ["CASH", "UPI", "BANK", "CARD", "OTHER"];
+
+/** ✅ CSV helpers */
+function csvEscape(v) {
+    if (v === null || v === undefined) return "";
+    const s = String(v);
+    // wrap with quotes if needed
+    if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+    return s;
+}
+
+function downloadCSV(filename, rows) {
+    const csv = rows.map((r) => r.map(csvEscape).join(",")).join("\n");
+    const blob = new Blob([csv], {type: "text/csv;charset=utf-8;"});
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    URL.revokeObjectURL(url);
+}
 
 export default function CollectionEntryPage() {
     const [asOn, setAsOn] = useState(todayYYYYMMDD());
@@ -208,6 +232,23 @@ export default function CollectionEntryPage() {
         } finally {
             setPosting((p) => ({...p, [key]: false}));
         }
+    }
+
+    /** ✅ Download statement from the payments modal */
+    function downloadStatementCSV() {
+        if (!selectedLoanId) return;
+
+        const header = ["Loan ID", "Txn Date", "Paid Amount (Credit)", "Outstanding After", "Narration"];
+        const data = (paymentRows || []).map((x) => ([
+            selectedLoanId,
+            x.txn_date ? new Date(x.txn_date).toLocaleString() : "-",
+            Number(x.credit || 0).toFixed(2),
+            Number(x.balance_outstanding || 0).toFixed(2),
+            x.narration || "-",
+        ]));
+
+        const filename = `loan_${selectedLoanId}_statement_${todayYYYYMMDD()}.csv`;
+        downloadCSV(filename, [header, ...data]);
     }
 
     return (
@@ -476,13 +517,25 @@ export default function CollectionEntryPage() {
                 </CardContent>
             </Card>
 
-            {/* ✅ View Payments Dialog (uses txn_date) */}
+            {/* ✅ View Payments Dialog + Download Statement */}
             <Dialog open={openPayments} onOpenChange={setOpenPayments}>
                 <DialogContent className="max-w-4xl">
                     <DialogHeader>
-                        <DialogTitle>
-                            Previous Payments {selectedLoanId ? `(Loan #${selectedLoanId})` : ""}
-                        </DialogTitle>
+                        <div className="flex items-center justify-between gap-3">
+                            <DialogTitle>
+                                Previous Payments {selectedLoanId ? `(Loan #${selectedLoanId})` : ""}
+                            </DialogTitle>
+
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={downloadStatementCSV}
+                                disabled={paymentsLoading || !selectedLoanId || paymentRows.length === 0}
+                            >
+                                <Download className="h-4 w-4 mr-2"/>
+                                Download Statement
+                            </Button>
+                        </div>
                     </DialogHeader>
 
                     {paymentsLoading ? (
