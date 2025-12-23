@@ -89,7 +89,7 @@ export function useGroup(groupId, {enabled = true} = {}) {
 }
 
 /**
- * 🔹 Get group summary (group + members + counts)
+ * 🔹 Get group summary (group + Members + counts)
  *    GET /groups/{group_id}/summary
  */
 export function useGroupSummary(groupId, {enabled = true} = {}) {

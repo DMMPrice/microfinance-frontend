@@ -1,12 +1,10 @@
 // src/Component/Home/DashboardPage.jsx
-import {useEffect, useState} from "react";
-import {storage} from "@/lib/storage.js";
-
 import {useRegions} from "@/hooks/useRegions.js";
 import {useBranches} from "@/hooks/useBranches.js";
 import {useLoanOfficers} from "@/hooks/useLoanOfficers.js";
 import {useGroups} from "@/hooks/useGroups.js";
 import {useMembers} from "@/hooks/useMembers.js";
+import {useLoanMaster} from "@/hooks/useLoans.js";
 
 import DashboardHeader from "./DashboardHeader";
 import DashboardStats from "./DashboardStats";
@@ -19,17 +17,24 @@ export default function DashboardPage({defaultTab = "regions"}) {
     const {groups = []} = useGroups();
     const {members = [], isLoading: membersLoading} = useMembers();
 
-    const [loans, setLoans] = useState([]);
+    // ✅ Fetch ACTIVE loans from backend
+    const {
+        data: activeLoansData,
+        isLoading: loansLoading,
+    } = useLoanMaster({status: "ACTIVE", limit: 500, offset: 0});
 
-    useEffect(() => {
-        setLoans(storage.loans.getAll());
-    }, []);
+    // API might return {items, total} or a plain array depending on your backend
+    const activeLoans = Array.isArray(activeLoansData)
+        ? activeLoansData
+        : Array.isArray(activeLoansData?.items)
+            ? activeLoansData.items
+            : [];
 
-    const activeLoans = loans.filter((l) => l.status === "active");
-    const totalOutstanding = activeLoans.reduce(
-        (sum, loan) => sum + loan.outstanding,
-        0
-    );
+    // ✅ Total outstanding (safe)
+    const totalOutstanding = activeLoans.reduce((sum, loan) => {
+        const v = Number(loan?.outstanding ?? loan?.outstanding_amount ?? 0);
+        return sum + (Number.isFinite(v) ? v : 0);
+    }, 0);
 
     return (
         <div className="bg-muted/30 min-h-full">
@@ -42,7 +47,7 @@ export default function DashboardPage({defaultTab = "regions"}) {
                     loanOfficers={loanOfficers}
                     members={members}
                     membersLoading={membersLoading}
-                    activeLoans={activeLoans}
+                    activeLoans={loansLoading ? [] : activeLoans}
                     totalOutstanding={totalOutstanding}
                 />
 

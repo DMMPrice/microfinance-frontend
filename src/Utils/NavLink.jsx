@@ -1,7 +1,7 @@
 // src/Component/NavLink.jsx
 import React from "react";
 import {NavLink as RRNavLink} from "react-router-dom";
-import {cn} from "@/lib/utils";
+import {cn} from "@/lib/utils.js";
 
 export function NavLink({
                             to,

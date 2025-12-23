@@ -7,7 +7,7 @@ const ROUTES = [
     {pattern: "/dashboard/branches", title: "Branches", subtitle: "Create and manage branches"},
     {pattern: "/dashboard/officers", title: "Loan Officers", subtitle: "Create and manage loan officers"},
     {pattern: "/dashboard/groups", title: "Groups", subtitle: "Create and manage groups"},
-    {pattern: "/dashboard/borrowers", title: "Members", subtitle: "Create and manage members"},
+    {pattern: "/dashboard/borrowers", title: "Members", subtitle: "Create and manage Members"},
     {pattern: "/dashboard/users", title: "Users Management", subtitle: "Manage system users"},
 
     // Loans

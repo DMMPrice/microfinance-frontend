@@ -5,8 +5,8 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
-} from "@/components/ui/dialog";
-import {Button} from "@/components/ui/button";
+} from "@/components/ui/dialog.tsx";
+import {Button} from "@/components/ui/button.tsx";
 import {Trash2} from "lucide-react";
 
 export default function OfficerDetailsDialog({

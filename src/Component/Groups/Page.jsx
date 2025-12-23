@@ -1,6 +1,6 @@
-import GroupManagement from "@/Component/Main Components/GroupManagement.jsx";
+import GroupManagement from "@/Component/Groups/GroupManagement.jsx";
 
-export default function GroupsPage() {
+export default function Page() {
     return (
         <div className="space-y-4">
             <div>

@@ -1,10 +1,10 @@
-import MemberManagement from "@/Component/Main Components/MemberManagement.jsx";
+import MemberManagement from "@/Component/Members/MemberManagement.jsx";
 import {useGroups} from "@/hooks/useGroups.js";
 import {useBranches} from "@/hooks/useBranches.js";
 import {useRegions} from "@/hooks/useRegions.js";
 import {useLoanOfficers} from "@/hooks/useLoanOfficers.js";
 
-export default function BorrowersPage() {
+export default function Page() {
     const {groups = [], isLoading: groupsLoading} = useGroups();
     const {branches = [], isLoading: branchesLoading} = useBranches();
     const {regions = [], isLoading: regionsLoading} = useRegions();

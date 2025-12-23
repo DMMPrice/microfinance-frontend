@@ -1,11 +1,11 @@
 // src/Component/Home/components/DashboardTabs.jsx
 import {Tabs, TabsContent, TabsList, TabsTrigger} from "@/components/ui/tabs";
 
-import RegionManagement from "@/Component/Main Components/RegionManagement.jsx";
-import BranchManagement from "@/Component/Main Components/BranchManagement.jsx";
-import LoanOfficerManagement from "@/Component/Main Components/LoanOfficerManagement.jsx";
-import GroupManagement from "@/Component/Main Components/GroupManagement.jsx";
-import MemberManagement from "@/Component/Main Components/MemberManagement.jsx";
+import RegionManagement from "@/Component/Regions/RegionManagement.jsx";
+import BranchManagement from "@/Component/Branch/BranchManagement.jsx";
+import LoanOfficerManagement from "@/Component/Loan Officer/LoanOfficerManagement.jsx";
+import GroupManagement from "@/Component/Groups/GroupManagement.jsx";
+import MemberManagement from "@/Component/Members/MemberManagement.jsx";
 
 export default function DashboardTabs({
                                           defaultTab = "regions",

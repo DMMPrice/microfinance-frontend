@@ -5,7 +5,13 @@ import {useAuth} from "@/contexts/AuthContext.jsx";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {Label} from "@/components/ui/label";
-import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card";
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from "@/components/ui/card";
 import {useToast} from "@/hooks/use-toast";
 
 export default function Login() {
@@ -17,7 +23,6 @@ export default function Login() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        // We now pass `username` instead of `email`
         const success = await login(username, password);
 
         if (success) {
@@ -35,14 +40,26 @@ export default function Login() {
     return (
         <div className="flex min-h-screen items-center justify-center bg-muted/30">
             <Card className="w-full max-w-md shadow-lg">
-                <CardHeader className="space-y-1">
-                    <CardTitle className="text-2xl font-bold text-center">
-                        Micro Finance System
+                <CardHeader className="space-y-4 text-center">
+                    {/* ✅ Logo */}
+                    <div className="flex justify-center">
+                        <img
+                            src="/logo.svg"
+                            alt="Akota Welfare Society Logo"
+                            className="h-16 w-auto"
+                        />
+                    </div>
+
+                    {/* ✅ Organization Name */}
+                    <CardTitle className="text-2xl font-bold">
+                        Akota Welfare Society
                     </CardTitle>
-                    <CardDescription className="text-center">
+
+                    <CardDescription>
                         Login to access your dashboard
                     </CardDescription>
                 </CardHeader>
+
                 <CardContent>
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div className="space-y-2">
@@ -50,7 +67,7 @@ export default function Login() {
                             <Input
                                 id="username"
                                 type="text"
-                                placeholder="admin@mf.com"
+                                placeholder="admin@aws.org"
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
                                 required
@@ -73,16 +90,6 @@ export default function Login() {
                             Login
                         </Button>
                     </form>
-
-                    <div className="mt-4 text-sm text-muted-foreground space-y-1">
-                        <p className="font-medium">Demo credentials:</p>
-                        <p className="font-mono text-xs">
-                            Username: <span className="font-semibold">admin@mf.com</span>
-                        </p>
-                        <p className="font-mono text-xs">
-                            Password: <span className="font-semibold">admin123</span>
-                        </p>
-                    </div>
                 </CardContent>
             </Card>
         </div>

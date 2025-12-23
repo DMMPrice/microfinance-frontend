@@ -1,14 +1,7 @@
-// src/pages/loans/LoansAllSection.jsx
 import React, {useMemo, useState} from "react";
-import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-    CardDescription,
-} from "@/components/ui/card";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
+import {Badge} from "@/components/ui/badge";
 import {Skeleton} from "@/components/ui/skeleton";
 import {
     Select,
@@ -23,16 +16,18 @@ import {RefreshCw, Search as SearchIcon, Eye} from "lucide-react";
 import {useLoanMaster} from "@/hooks/useLoans.js";
 import {useLoanOfficers} from "@/hooks/useLoanOfficers.js";
 
-const TH = "px-3 py-3 text-center align-middle whitespace-nowrap";
-const TD = "px-3 py-3 align-middle whitespace-nowrap";
-const TD_LEFT = "px-3 py-3 align-middle whitespace-normal";
+import AdvancedTable from "@/Utils/AdvancedTable.jsx";
 
 const STATUS_OPTIONS = ["ALL", "DISBURSED", "ACTIVE", "CLOSED", "CANCELLED"];
 
+function formatMoney(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return "-";
+    return n.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
 export default function LoansAllSection({onOpenSummary}) {
-    // ----------------------------
-    // LO data (from your hook)
-    // ----------------------------
+    // LO
     const loQ = useLoanOfficers();
 
     const loOptions = useMemo(() => {
@@ -45,7 +40,6 @@ export default function LoansAllSection({onOpenSummary}) {
         }));
     }, [loQ.loanOfficers]);
 
-    // ✅ build a fast lookup map: lo_id -> full_name
     const loNameMap = useMemo(() => {
         const map = {};
         (loQ.loanOfficers || []).forEach((x) => {
@@ -54,21 +48,18 @@ export default function LoansAllSection({onOpenSummary}) {
         return map;
     }, [loQ.loanOfficers]);
 
-    // ----------------------------
-    // UI state (draft)
-    // ----------------------------
+    // Draft UI state
     const [searchDraft, setSearchDraft] = useState("");
     const [statusDraft, setStatusDraft] = useState("ALL");
-    const [fromDraft, setFromDraft] = useState(""); // YYYY-MM-DD
-    const [toDraft, setToDraft] = useState(""); // YYYY-MM-DD
-
-    // ✅ LO filter (draft + applied)
+    const [fromDraft, setFromDraft] = useState("");
+    const [toDraft, setToDraft] = useState("");
     const [loDraft, setLoDraft] = useState("ALL");
 
+    // Backend pagination
     const [limit, setLimit] = useState(25);
     const [offset, setOffset] = useState(0);
 
-    // applied filters (query triggers)
+    // Applied filters (trigger query)
     const [applied, setApplied] = useState({
         search: "",
         status: "",
@@ -92,9 +83,6 @@ export default function LoansAllSection({onOpenSummary}) {
 
     const q = useLoanMaster(filters);
 
-    // ----------------------------
-    // Derived values
-    // ----------------------------
     const rows = useMemo(() => {
         const d = q.data;
         if (!d) return [];
@@ -116,9 +104,6 @@ export default function LoansAllSection({onOpenSummary}) {
     const canPrev = offset > 0;
     const canNext = total !== null ? offset + limit < total : rows.length === limit;
 
-    // ----------------------------
-    // Handlers
-    // ----------------------------
     const applyFilters = () => {
         setOffset(0);
         setApplied({
@@ -146,248 +131,278 @@ export default function LoansAllSection({onOpenSummary}) {
         });
     };
 
+    // Table columns (AdvancedTable)
+    const columns = useMemo(
+        () => [
+            {
+                key: "loan_id",
+                header: "Loan ID",
+                sortValue: (r) => r.loan_id ?? r.id ?? r.loan_no ?? "",
+                cell: (r) => <div className="font-medium">{r.loan_id ?? r.id ?? r.loan_no ?? "-"}</div>,
+            },
+            {
+                key: "status",
+                header: "Status",
+                sortValue: (r) => r.status ?? "",
+                cell: (r) => (
+                    <span className="text-xs px-2 py-1 rounded-md border">
+            {String(r.status ?? "-")}
+          </span>
+                ),
+            },
+            {
+                key: "member_name",
+                header: "Member",
+                sortValue: (r) => r.member_name ?? r.member ?? r.member_full_name ?? "",
+                cell: (r) => r.member_name ?? r.member ?? r.member_full_name ?? "-",
+            },
+            {
+                key: "group_name",
+                header: "Group",
+                sortValue: (r) => r.group_name ?? r.group ?? "",
+                cell: (r) => r.group_name ?? r.group ?? "-",
+            },
+            {
+                key: "lo_name",
+                header: "Loan Officer",
+                sortValue: (r) => {
+                    const loIdValue = r.lo_id ?? r.loan_officer_id ?? r.loId ?? "";
+                    return r.lo_name ?? r.loan_officer_name ?? loNameMap[String(loIdValue)] ?? `LO-${loIdValue}`;
+                },
+                cell: (r) => {
+                    const loIdValue = r.lo_id ?? r.loan_officer_id ?? r.loId ?? null;
+                    const loName =
+                        r.lo_name ??
+                        r.loan_officer_name ??
+                        r.loan_officer ??
+                        (loIdValue != null ? loNameMap[String(loIdValue)] || `LO-${loIdValue}` : "-");
+                    return String(loName);
+                },
+            },
+            {
+                key: "disburse_date",
+                header: "Disbursed",
+                sortValue: (r) => r.disburse_date ?? r.disbursed_on ?? r.disbursed_date ?? "",
+                cell: (r) => String(r.disburse_date ?? r.disbursed_on ?? r.disbursed_date ?? "-"),
+            },
+            {
+                key: "principal",
+                header: "Principal",
+                sortValue: (r) => Number(r.principal_amount ?? r.principal ?? r.amount ?? 0),
+                cell: (r) => formatMoney(r.principal_amount ?? r.principal ?? r.amount ?? "-"),
+            },
+            {
+                key: "action",
+                header: "Action",
+                hideable: false,
+                sortValue: () => 0,
+                cell: (r) => {
+                    const loanId = r.loan_id ?? r.id ?? r.loan_no ?? "-";
+                    return (
+                        <Button variant="outline" size="sm" onClick={() => onOpenSummary?.(loanId)}>
+                            <Eye className="h-4 w-4 mr-2"/>
+                            Summary
+                        </Button>
+                    );
+                },
+            },
+        ],
+        [loNameMap, onOpenSummary]
+    );
+
     return (
-        <Card className="rounded-xl">
-            <CardHeader className="space-y-2">
-                <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                    <div>
-                        <CardTitle>All Loans</CardTitle>
-                        <CardDescription>
-                            Browse all loans with filters (including Loan Officer) and open summary.
-                        </CardDescription>
+        <div className="space-y-3">
+            {/* ✅ Fixed / compact filter area like the one you approved */}
+            <div className="rounded-xl border bg-card p-4">
+                <div className="flex flex-col gap-3">
+                    {/* Controls */}
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-12 xl:items-end">
+                        {/* Search */}
+                        <div className="xl:col-span-4">
+                            <div className="relative">
+                                <SearchIcon className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground"/>
+                                <Input
+                                    value={searchDraft}
+                                    onChange={(e) => setSearchDraft(e.target.value)}
+                                    placeholder="Search (loan no / member / phone etc.)"
+                                    className="pl-8 w-full"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Status */}
+                        <div className="xl:col-span-2">
+                            <Select value={statusDraft} onValueChange={setStatusDraft}>
+                                <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="Status"/>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {STATUS_OPTIONS.map((s) => (
+                                        <SelectItem key={s} value={s}>
+                                            {s}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        {/* Loan Officer */}
+                        <div className="xl:col-span-3">
+                            <Select value={loDraft} onValueChange={setLoDraft}>
+                                <SelectTrigger className="w-full">
+                                    <SelectValue
+                                        placeholder={loQ.isLoading ? "Loading Loan Officers..." : "Loan Officer"}
+                                    />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="ALL">All Loan Officers</SelectItem>
+                                    {loQ.isLoading ? (
+                                        <div className="px-3 py-2">
+                                            <Skeleton className="h-4 w-full"/>
+                                        </div>
+                                    ) : loQ.isError ? (
+                                        <div className="px-3 py-2 text-sm text-destructive">
+                                            Failed to load Loan Officers
+                                        </div>
+                                    ) : (
+                                        loOptions.map((o) => (
+                                            <SelectItem key={o.lo_id} value={String(o.lo_id)}>
+                                                {o.label}
+                                            </SelectItem>
+                                        ))
+                                    )}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        {/* Date range */}
+                        <div className="xl:col-span-3">
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                <Input
+                                    type="date"
+                                    value={fromDraft}
+                                    onChange={(e) => setFromDraft(e.target.value)}
+                                    className="w-full"
+                                />
+                                <Input
+                                    type="date"
+                                    value={toDraft}
+                                    onChange={(e) => setToDraft(e.target.value)}
+                                    className="w-full"
+                                />
+                            </div>
+                        </div>
                     </div>
 
-                    {/* ✅ Only Refresh button */}
-                    <div className="flex items-center gap-2">
+                    {/* Actions (wrap safely) */}
+                    <div className="flex flex-wrap items-center gap-2 justify-end">
+                        <Button onClick={applyFilters}>Apply</Button>
+                        <Button variant="outline" onClick={clearFilters}>
+                            Clear
+                        </Button>
                         <Button variant="outline" onClick={() => q.refetch()}>
                             <RefreshCw className="h-4 w-4 mr-2"/>
                             Refresh
                         </Button>
                     </div>
+
+                    {/* Badges row (already wraps, keep it) */}
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="secondary">
+                            Page: <span className="ml-1 font-semibold">{page}</span>
+                        </Badge>
+                        <Badge variant="secondary">
+                            Limit: <span className="ml-1 font-semibold">{limit}</span>
+                        </Badge>
+                        <Badge variant="outline">
+                            Total:{" "}
+                            <span className="ml-1 font-semibold">{total !== null ? total : rows.length}</span>
+                        </Badge>
+
+                        <Badge variant="outline">
+                            Status: <span className="ml-1 font-semibold">{applied.status || "ALL"}</span>
+                        </Badge>
+                        <Badge variant="outline">
+                            LO: <span className="ml-1 font-semibold">{applied.lo_id || "ALL"}</span>
+                        </Badge>
+                        <Badge variant="outline">
+                            Range:{" "}
+                            <span className="ml-1 font-semibold">
+          {applied.disburse_from || "—"} → {applied.disburse_to || "—"}
+        </span>
+                        </Badge>
+                    </div>
+                </div>
+            </div>
+
+
+            {/* ✅ AdvancedTable */}
+            <div className="w-full overflow-x-auto">
+                <AdvancedTable
+                    title="All Loans"
+                    description="Browse all loans with filters (including Loan Officer) and open summary."
+                    data={rows}
+                    columns={columns}
+                    isLoading={q.isLoading}
+                    errorText={q.isError ? "No loans loaded (API error)." : ""}
+                    emptyText="No loans found for the selected filters."
+                    enableSearch={false} // ✅ because search is in filter bar already (backend search)
+                    enablePagination={false} // ✅ we use backend prev/next
+                    enableColumnToggle
+                    stickyHeader
+                    rowKey={(r) => String(r.loan_id ?? r.id ?? r.loan_no ?? Math.random())}
+                />
+            </div>
+
+            {/* ✅ Backend Pagination controls (kept exactly like before) */}
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div className="text-sm text-muted-foreground">
+                    Page <span className="font-medium text-foreground">{page}</span>
+                    {total !== null ? (
+                        <>
+                            {" "}
+                            · Total <span className="font-medium text-foreground">{total}</span>
+                        </>
+                    ) : null}
                 </div>
 
-                {/* Filters row */}
-                <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-6">
-                    {/* Search */}
-                    <div className="relative lg:col-span-2">
-                        <SearchIcon className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground"/>
-                        <Input
-                            value={searchDraft}
-                            onChange={(e) => setSearchDraft(e.target.value)}
-                            placeholder="Search (loan no / member / phone etc.)"
-                            className="pl-8"
-                        />
-                    </div>
-
-                    {/* Status */}
-                    <Select value={statusDraft} onValueChange={setStatusDraft}>
-                        <SelectTrigger>
-                            <SelectValue placeholder="Status"/>
+                <div className="flex items-center gap-2">
+                    <Select
+                        value={String(limit)}
+                        onValueChange={(v) => {
+                            const next = Number(v);
+                            setLimit(next);
+                            setOffset(0);
+                        }}
+                    >
+                        <SelectTrigger className="w-[120px]">
+                            <SelectValue placeholder="Rows"/>
                         </SelectTrigger>
                         <SelectContent>
-                            {STATUS_OPTIONS.map((s) => (
-                                <SelectItem key={s} value={s}>
-                                    {s}
+                            {[10, 25, 50, 100].map((n) => (
+                                <SelectItem key={n} value={String(n)}>
+                                    {n} rows
                                 </SelectItem>
                             ))}
                         </SelectContent>
                     </Select>
 
-                    {/* Loan Officer */}
-                    <Select value={loDraft} onValueChange={setLoDraft}>
-                        <SelectTrigger>
-                            <SelectValue
-                                placeholder={loQ.isLoading ? "Loading Loan Officers..." : "Loan Officer"}
-                            />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="ALL">All Loan Officers</SelectItem>
-
-                            {loQ.isLoading ? (
-                                <div className="px-3 py-2">
-                                    <Skeleton className="h-4 w-full"/>
-                                </div>
-                            ) : loQ.isError ? (
-                                <div className="px-3 py-2 text-sm text-destructive">
-                                    Failed to load Loan Officers
-                                </div>
-                            ) : (
-                                loOptions.map((o) => (
-                                    <SelectItem key={o.lo_id} value={String(o.lo_id)}>
-                                        {o.label}
-                                    </SelectItem>
-                                ))
-                            )}
-                        </SelectContent>
-                    </Select>
-
-                    {/* Disburse from */}
-                    <Input
-                        type="date"
-                        value={fromDraft}
-                        onChange={(e) => setFromDraft(e.target.value)}
-                        placeholder="Disburse from"
-                    />
-
-                    {/* Disburse to */}
-                    <Input
-                        type="date"
-                        value={toDraft}
-                        onChange={(e) => setToDraft(e.target.value)}
-                        placeholder="Disburse to"
-                    />
-
-                    {/* Actions */}
-                    <div className="flex items-center gap-2 md:col-span-2 lg:col-span-6">
-                        <Button onClick={applyFilters} className="w-full md:w-auto">
-                            Apply
-                        </Button>
-                        <Button onClick={clearFilters} variant="outline" className="w-full md:w-auto">
-                            Clear
-                        </Button>
-                    </div>
+                    <Button
+                        variant="outline"
+                        disabled={!canPrev}
+                        onClick={() => setOffset((x) => Math.max(0, x - limit))}
+                    >
+                        Prev
+                    </Button>
+                    <Button
+                        variant="outline"
+                        disabled={!canNext}
+                        onClick={() => setOffset((x) => x + limit)}
+                    >
+                        Next
+                    </Button>
                 </div>
-            </CardHeader>
-
-            <CardContent>
-                {/* Table */}
-                <div className="w-full overflow-auto rounded-lg border">
-                    <table className="w-full text-sm">
-                        <thead className="bg-muted/40">
-                        <tr>
-                            <th className={TH}>Loan ID</th>
-                            <th className={TH}>Status</th>
-                            <th className={TH}>Member</th>
-                            <th className={TH}>Group</th>
-                            <th className={TH}>Loan Officer</th>
-                            <th className={TH}>Disbursed</th>
-                            <th className={TH}>Principal</th>
-                            <th className={TH}>Action</th>
-                        </tr>
-                        </thead>
-
-                        <tbody>
-                        {q.isLoading ? (
-                            Array.from({length: 8}).map((_, i) => (
-                                <tr key={i} className="border-t">
-                                    {Array.from({length: 8}).map((__, j) => (
-                                        <td key={j} className={TD}>
-                                            <Skeleton className="h-4 w-24 mx-auto"/>
-                                        </td>
-                                    ))}
-                                </tr>
-                            ))
-                        ) : rows.length === 0 ? (
-                            <tr className="border-t">
-                                <td colSpan={8} className="p-6 text-center text-muted-foreground">
-                                    No loans found for the selected filters.
-                                </td>
-                            </tr>
-                        ) : (
-                            rows.map((r) => {
-                                const loanId = r.loan_id ?? r.id ?? r.loan_no ?? "-";
-                                const status = r.status ?? "-";
-                                const member = r.member_name ?? r.member ?? r.member_full_name ?? "-";
-                                const group = r.group_name ?? r.group ?? "-";
-
-                                const disb =
-                                    r.disburse_date ?? r.disbursed_on ?? r.disbursed_date ?? "-";
-                                const principal =
-                                    r.principal_amount ?? r.principal ?? r.amount ?? "-";
-
-                                const loIdValue = r.lo_id ?? r.loan_officer_id ?? r.loId ?? null;
-
-                                const loName =
-                                    r.lo_name ??
-                                    r.loan_officer_name ??
-                                    r.loan_officer ??
-                                    (loIdValue != null
-                                        ? loNameMap[String(loIdValue)] || `LO-${loIdValue}`
-                                        : "-");
-
-                                return (
-                                    <tr key={String(loanId)} className="border-t hover:bg-muted/20">
-                                        <td className={TD_LEFT}>
-                                            <div className="font-medium">{loanId}</div>
-                                        </td>
-                                        <td className={TD}>
-                                                <span className="text-xs px-2 py-1 rounded-md border">
-                                                    {String(status)}
-                                                </span>
-                                        </td>
-                                        <td className={TD_LEFT}>{member}</td>
-                                        <td className={TD_LEFT}>{group}</td>
-                                        <td className={TD_LEFT}>{String(loName)}</td>
-                                        <td className={TD}>{String(disb)}</td>
-                                        <td className={TD}>{String(principal)}</td>
-                                        <td className={TD}>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => onOpenSummary?.(loanId)}
-                                            >
-                                                <Eye className="h-4 w-4 mr-2"/>
-                                                Summary
-                                            </Button>
-                                        </td>
-                                    </tr>
-                                );
-                            })
-                        )}
-                        </tbody>
-                    </table>
-                </div>
-
-                {/* Pagination */}
-                <div className="mt-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                    <div className="text-sm text-muted-foreground">
-                        Page <span className="font-medium text-foreground">{page}</span>
-                        {total !== null ? (
-                            <>
-                                {" "}
-                                · Total <span className="font-medium text-foreground">{total}</span>
-                            </>
-                        ) : null}
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        <Select
-                            value={String(limit)}
-                            onValueChange={(v) => {
-                                const next = Number(v);
-                                setLimit(next);
-                                setOffset(0);
-                            }}
-                        >
-                            <SelectTrigger className="w-[120px]">
-                                <SelectValue placeholder="Rows"/>
-                            </SelectTrigger>
-                            <SelectContent>
-                                {[10, 25, 50, 100].map((n) => (
-                                    <SelectItem key={n} value={String(n)}>
-                                        {n} rows
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-
-                        <Button
-                            variant="outline"
-                            disabled={!canPrev}
-                            onClick={() => setOffset((x) => Math.max(0, x - limit))}
-                        >
-                            Prev
-                        </Button>
-                        <Button
-                            variant="outline"
-                            disabled={!canNext}
-                            onClick={() => setOffset((x) => x + limit)}
-                        >
-                            Next
-                        </Button>
-                    </div>
-                </div>
-            </CardContent>
-        </Card>
+            </div>
+        </div>
     );
 }

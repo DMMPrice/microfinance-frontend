@@ -1,3 +1,4 @@
+// src/Utils/DashboardHeader.jsx (or wherever you keep it)
 import {useMemo, useState} from "react";
 import {useAuth} from "@/contexts/AuthContext.jsx";
 import {Button} from "@/components/ui/button.tsx";
@@ -67,15 +68,16 @@ export default function DashboardHeader({
             {breadcrumbs.map((b, idx) => {
                 const last = idx === breadcrumbs.length - 1;
 
-                const node = b.to && !last ? (
-                    <Link to={b.to} className="hover:text-foreground transition-colors">
-                        {b.label}
-                    </Link>
-                ) : (
-                    <span className={last ? "text-foreground font-medium" : ""}>
-            {b.label}
-          </span>
-                );
+                const node =
+                    b.to && !last ? (
+                        <Link to={b.to} className="hover:text-foreground transition-colors">
+                            {b.label}
+                        </Link>
+                    ) : (
+                        <span className={last ? "text-foreground font-medium" : ""}>
+              {b.label}
+            </span>
+                    );
 
                 return (
                     <div key={`${b.label}-${idx}`} className="flex items-center gap-2">
@@ -116,21 +118,21 @@ export default function DashboardHeader({
         );
     }
 
-    // ✅ TOP variant
-    // If breadcrumbs exist -> show breadcrumb bar like screenshot
-    // Else fallback to title/subtitle view
+    // ✅ TOP variant (compact header)
     return (
         <>
-            <header className="border-b bg-card">
-                <div className="w-full px-6 py-3 flex items-center justify-between">
+            <header className="border-b border-border/50 bg-card">
+                <div className="w-full px-6 py-2 flex items-center justify-between">
                     <div className="min-w-0">
                         {BreadcrumbBar ? (
                             BreadcrumbBar
                         ) : (
                             <>
-                                <h2 className="text-lg font-semibold truncate">{computedTitle}</h2>
+                                <h2 className="text-base font-semibold truncate">
+                                    {computedTitle}
+                                </h2>
                                 {computedSubtitle ? (
-                                    <p className="text-sm text-muted-foreground capitalize truncate">
+                                    <p className="text-xs text-muted-foreground capitalize truncate">
                                         {computedSubtitle}
                                     </p>
                                 ) : null}

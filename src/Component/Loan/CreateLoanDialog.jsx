@@ -23,6 +23,61 @@ import {useCreateLoan} from "@/hooks/useLoans";
 import {apiClient} from "@/hooks/useApi.js";
 import {toast} from "@/components/ui/use-toast";
 
+/* ---------------------------------------------------------
+   ✅ Loan Account suggestions cache (LOAD ONCE + MEMORY)
+--------------------------------------------------------- */
+let LOAN_ACCOUNTS_CACHE = null; // in-memory cache (module-level)
+const LOAN_ACCOUNTS_LS_KEY = "mf.loanAccountNos.v1";
+
+async function getLoanAccountNosOnce() {
+    // 1) in-memory cache
+    if (Array.isArray(LOAN_ACCOUNTS_CACHE) && LOAN_ACCOUNTS_CACHE.length) {
+        return LOAN_ACCOUNTS_CACHE;
+    }
+
+    // 2) localStorage cache
+    try {
+        const raw = localStorage.getItem(LOAN_ACCOUNTS_LS_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length) {
+                LOAN_ACCOUNTS_CACHE = parsed;
+                return parsed;
+            }
+        }
+    } catch {
+        // ignore storage errors
+    }
+
+    // 3) fetch once
+    const res = await apiClient.get("/loans/master", {
+        params: {limit: 5000, offset: 0}, // adjust if your backend supports these
+    });
+    const list = Array.isArray(res.data) ? res.data : [];
+
+    // Extract unique loan_account_no
+    const uniq = Array.from(
+        new Set(
+            list
+                .map((x) => (x?.loan_account_no ? String(x.loan_account_no).trim() : ""))
+                .filter(Boolean)
+        )
+    ).sort((a, b) => a.localeCompare(b));
+
+    LOAN_ACCOUNTS_CACHE = uniq;
+
+    // save to localStorage
+    try {
+        localStorage.setItem(LOAN_ACCOUNTS_LS_KEY, JSON.stringify(uniq));
+    } catch {
+        // ignore storage errors
+    }
+
+    return uniq;
+}
+
+/* --------------------------------------------------------- */
+
 function todayISO() {
     return new Date().toISOString().slice(0, 10);
 }
@@ -44,17 +99,11 @@ function round2(n) {
 
 /**
  * ✅ Perfect error message extraction for axios/FastAPI
- * Handles:
- * - {detail: "..."}
- * - {detail: [{loc: [...], msg: "..."}]}  (422 validation)
- * - string response
- * - network errors
  */
 function extractApiError(err) {
     const status = err?.response?.status;
     const data = err?.response?.data;
 
-    // network / CORS / server down
     if (!err?.response) {
         return {
             title: "Network error",
@@ -62,10 +111,8 @@ function extractApiError(err) {
         };
     }
 
-    // FastAPI typical shapes
     const detail = data?.detail ?? data;
 
-    // 422 validation error list
     if (status === 422 && Array.isArray(detail) && detail.length > 0) {
         const first = detail[0];
         const loc = Array.isArray(first?.loc) ? first.loc.join(" → ") : "Validation";
@@ -76,24 +123,15 @@ function extractApiError(err) {
         };
     }
 
-    // detail is string
     if (typeof detail === "string") {
-        // nicer title for conflict
-        if (status === 409) {
-            return {title: "Cannot create loan", description: detail};
-        }
+        if (status === 409) return {title: "Cannot create loan", description: detail};
         return {title: "Request failed", description: detail};
     }
 
-    // detail exists but not string (object)
     if (detail && typeof detail === "object") {
-        return {
-            title: "Request failed",
-            description: JSON.stringify(detail),
-        };
+        return {title: "Request failed", description: JSON.stringify(detail)};
     }
 
-    // fallback
     return {
         title: "Request failed",
         description: err?.message || "Something went wrong.",
@@ -133,6 +171,36 @@ export default function CreateLoanDialog({open, onOpenChange}) {
     }, [open, defaults]);
 
     const set = (k) => (e) => setForm((p) => ({...p, [k]: e.target.value}));
+
+    // ----------------------------
+    // ✅ Loan Account suggestions
+    // ----------------------------
+    const [loanAccountNos, setLoanAccountNos] = useState([]);
+    const [laLoading, setLaLoading] = useState(false);
+    const [laErr, setLaErr] = useState("");
+
+    useEffect(() => {
+        if (!open) return;
+        let cancelled = false;
+
+        (async () => {
+            setLaLoading(true);
+            setLaErr("");
+            try {
+                const list = await getLoanAccountNosOnce();
+                if (!cancelled) setLoanAccountNos(Array.isArray(list) ? list : []);
+            } catch (e) {
+                if (!cancelled)
+                    setLaErr(e?.response?.data?.detail || e?.message || "Failed to load loan accounts");
+            } finally {
+                if (!cancelled) setLaLoading(false);
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [open]);
 
     // ----------------------------
     // Load Groups + Members
@@ -176,7 +244,7 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                 if (!cancelled) setMembers(Array.isArray(res.data) ? res.data : []);
             } catch (e) {
                 if (!cancelled)
-                    setMErr(e?.response?.data?.detail || e.message || "Failed to load members");
+                    setMErr(e?.response?.data?.detail || e.message || "Failed to load Members");
             } finally {
                 if (!cancelled) setMLoading(false);
             }
@@ -303,16 +371,27 @@ export default function CreateLoanDialog({open, onOpenChange}) {
         try {
             await createLoan.mutateAsync(payload);
             toast({title: "Loan created successfully ✅"});
+
+            // (Optional) update cache instantly so new loan appears in suggestions too
+            const newAcc = payload.loan_account_no;
+            if (newAcc) {
+                const next = Array.from(new Set([...(loanAccountNos || []), newAcc])).sort((a, b) =>
+                    a.localeCompare(b)
+                );
+                LOAN_ACCOUNTS_CACHE = next;
+                setLoanAccountNos(next);
+                try {
+                    localStorage.setItem(LOAN_ACCOUNTS_LS_KEY, JSON.stringify(next));
+                } catch {
+                }
+            }
+
             setForm(defaults);
             setShowPreview(false);
             onOpenChange(false);
         } catch (err) {
             const {title, description} = extractApiError(err);
-            toast({
-                title,
-                description,
-                variant: "destructive",
-            });
+            toast({title, description, variant: "destructive"});
         }
     };
 
@@ -324,13 +403,30 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                 </DialogHeader>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* ✅ Loan Account No with Google-like suggestions */}
                     <div className="space-y-2">
                         <Label>Loan Account No</Label>
-                        <Input
-                            value={form.loan_account_no}
-                            onChange={set("loan_account_no")}
-                            placeholder="LN-0001"
-                        />
+
+                        {laLoading ? (
+                            <Skeleton className="h-10 w-full"/>
+                        ) : laErr ? (
+                            <div className="text-sm text-destructive">{laErr}</div>
+                        ) : (
+                            <>
+                                <Input
+                                    value={form.loan_account_no}
+                                    onChange={set("loan_account_no")}
+                                    placeholder="LN-0001"
+                                    list="loan-account-suggestions"
+                                    autoComplete="off"
+                                />
+                                <datalist id="loan-account-suggestions">
+                                    {(loanAccountNos || []).map((acc) => (
+                                        <option key={acc} value={acc}/>
+                                    ))}
+                                </datalist>
+                            </>
+                        )}
                     </div>
 
                     {/* Group */}
@@ -373,7 +469,9 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                                 disabled={!form.group_id}
                             >
                                 <SelectTrigger>
-                                    <SelectValue placeholder={form.group_id ? "Select Member" : "Select Group first"}/>
+                                    <SelectValue
+                                        placeholder={form.group_id ? "Select Member" : "Select Group first"}
+                                    />
                                 </SelectTrigger>
                                 <SelectContent>
                                     {memberOptions.length === 0 ? (
@@ -442,7 +540,9 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                 <div className="mt-4 flex items-center justify-between gap-2">
                     <div className="text-sm text-muted-foreground">
                         Preview schedule from{" "}
-                        <span className="font-medium text-foreground">{form.first_installment_date || "-"}</span>
+                        <span className="font-medium text-foreground">
+              {form.first_installment_date || "-"}
+            </span>
                     </div>
 
                     <Button

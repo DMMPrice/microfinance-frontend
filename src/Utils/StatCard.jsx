@@ -1,32 +1,53 @@
-// src/Component/Home/components/StatCard.jsx
-import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card.tsx";
+// src/Utils/StatCard.jsx  (as you shared, keep same)
+import React from "react";
+import {useNavigate} from "react-router-dom";
+import {Card, CardContent} from "@/components/ui/card";
+import {cn} from "@/lib/utils";
 
-export default function StatCard({title, value, subtitle, Icon}) {
+export default function StatCard({title, value, subtitle, Icon, to, className}) {
+    const navigate = useNavigate();
+    const clickable = Boolean(to);
+
+    const onClick = () => {
+        if (to) navigate(to);
+    };
+
+    const onKeyDown = (e) => {
+        if (!to) return;
+        if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            navigate(to);
+        }
+    };
+
     return (
-        <Card className="rounded-2xl border bg-card/60 backdrop-blur shadow-sm hover:shadow-md transition-shadow">
-            <CardHeader className="pb-2">
-                <div className="flex items-start justify-between gap-4">
+        <Card
+            role={clickable ? "button" : undefined}
+            tabIndex={clickable ? 0 : undefined}
+            onClick={clickable ? onClick : undefined}
+            onKeyDown={clickable ? onKeyDown : undefined}
+            className={cn(
+                "transition",
+                clickable && "cursor-pointer hover:shadow-md active:scale-[0.99]",
+                className
+            )}
+        >
+            <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">
-                            {title}
-                        </CardTitle>
-                        <div className="text-3xl font-semibold tracking-tight">
-                            {value}
+                        <p className="text-sm text-muted-foreground">{title}</p>
+                        <p className="text-2xl font-semibold leading-none">{value}</p>
+                        {subtitle ? (
+                            <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
+                        ) : null}
+                    </div>
+
+                    {Icon ? (
+                        <div className="rounded-lg p-2 bg-secondary">
+                            <Icon className="h-5 w-5 text-primary"/>
                         </div>
-                    </div>
-
-                    <div className="h-10 w-10 rounded-xl border bg-muted/40 flex items-center justify-center">
-                        <Icon className="h-5 w-5 text-muted-foreground"/>
-                    </div>
+                    ) : null}
                 </div>
-            </CardHeader>
-
-            <CardContent className="pt-0">
-                {subtitle ? (
-                    <p className="text-xs text-muted-foreground">{subtitle}</p>
-                ) : (
-                    <div className="h-4"/>
-                )}
             </CardContent>
         </Card>
     );

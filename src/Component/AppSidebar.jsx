@@ -12,7 +12,7 @@ import {
     ChevronDown,
 } from "lucide-react";
 
-import {NavLink} from "@/Component/NavLink.jsx";
+import {NavLink} from "@/Utils/NavLink.jsx";
 import {
     Sidebar,
     SidebarContent,

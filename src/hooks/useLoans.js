@@ -45,14 +45,18 @@ export function useLoanStats() {
 
 /* -------------------- INSTALLMENTS DUE -------------------- */
 export function useDueInstallments(as_on) {
-    const asOn = normalizeDate(as_on);
+    const asOn = normalizeDate(as_on); // should return "" or null when empty
 
     return useQuery({
-        queryKey: ["loans", "installmentsDue", asOn],
-        enabled: !!asOn,
-        queryFn: async () =>
-            (await apiClient.get("/loans/installments/due", {params: {as_on: asOn}}))
-                .data,
+        queryKey: ["loans", "installmentsDue", asOn || "ALL"],
+        enabled: true, // ✅ always enabled
+        queryFn: async () => {
+            const params = {};
+            if (asOn) params.as_on = asOn; // ✅ only send when present
+
+            const res = await apiClient.get("/loans/installments/due", {params});
+            return res.data;
+        },
         keepPreviousData: true,
         refetchOnWindowFocus: false,
     });
@@ -60,18 +64,29 @@ export function useDueInstallments(as_on) {
 
 /* -------------------- COLLECTIONS BY LO -------------------- */
 export function useCollectionsByLO(lo_id, as_on) {
-    const loId = normalizeId(lo_id);
-    const asOn = normalizeDate(as_on);
+    const loId = normalizeId(lo_id);     // may be null / ""
+    const asOn = normalizeDate(as_on);   // may be null / ""
 
     return useQuery({
-        queryKey: ["loans", "collectionsByLO", loId, asOn],
-        enabled: !!loId && !!asOn,
-        queryFn: async () =>
-            (
-                await apiClient.get(`/loans/collections/by-lo/${loId}`, {
-                    params: {as_on: asOn},
-                })
-            ).data,
+        queryKey: ["loans", "collectionsByLO", loId || "ALL", asOn || "ALL"],
+
+        // ✅ always enabled (backend handles optional params)
+        enabled: true,
+
+        queryFn: async () => {
+            const params = {};
+
+            // ✅ send only when present
+            if (loId) params.lo_id = loId;
+            if (asOn) params.as_on = asOn;
+
+            const res = await apiClient.get("/loans/collections/by-lo", {
+                params,
+            });
+
+            return res.data;
+        },
+
         keepPreviousData: true,
         refetchOnWindowFocus: false,
     });

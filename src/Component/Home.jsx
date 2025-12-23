@@ -7,11 +7,11 @@ import DashboardHeader from "@/Utils/DashboardHeader.jsx";
 
 // Pages
 import OverviewPage from "@/pages/OverviewPage.jsx";
-import RegionsPage from "@/pages/RegionsPage.jsx";
-import BranchesPage from "@/pages/BranchesPage.jsx";
-import LoanOfficersPage from "@/pages/LoanOfficersPage.jsx";
-import GroupsPage from "@/pages/GroupsPage.jsx";
-import BorrowersPage from "@/pages/BorrowersPage.jsx";
+import RegionsPage from "@/Component/Regions/Page.jsx";
+import BranchesPage from "@/Component/Branch/Page.jsx";
+import LoanOfficerPage from "@/Component/Loan Officer/Page.jsx";
+import GroupsPage from "@/Component/Groups/Page.jsx";
+import MembersPage from "@/Component/Members/Page.jsx";
 import UsersPage from "@/Pages/UsersPage.jsx";
 
 // ✅ Loans pages
@@ -73,7 +73,7 @@ const ROUTE_META = [
     {
         pattern: "/dashboard/borrowers",
         title: "Members",
-        subtitle: "Create and manage members",
+        subtitle: "Create and manage Members",
         breadcrumbs: [
             {label: "Home", to: "/dashboard"},
             {label: "Members"},
@@ -180,11 +180,10 @@ export default function Home() {
                 <AppSidebar/>
 
                 <div className="flex-1 flex flex-col">
-                    <div className="border-b bg-background sticky top-0 z-10">
-                        <div className="flex items-center gap-2 p-4">
+                    <div className="sticky top-0 z-10 bg-background">
+                        <div className="flex items-center gap-2 px-4">
                             <SidebarTrigger/>
                             <div className="flex-1">
-                                {/* ✅ Breadcrumb-style header like screenshot */}
                                 <DashboardHeader
                                     variant="top"
                                     title={title}
@@ -195,15 +194,16 @@ export default function Home() {
                         </div>
                     </div>
 
+
                     <main className="flex-1 p-4">
                         <Routes>
                             <Route path="/" element={<OverviewPage/>}/>
 
                             <Route path="regions" element={<RegionsPage/>}/>
                             <Route path="branches" element={<BranchesPage/>}/>
-                            <Route path="officers" element={<LoanOfficersPage/>}/>
+                            <Route path="officers" element={<LoanOfficerPage/>}/>
                             <Route path="groups" element={<GroupsPage/>}/>
-                            <Route path="borrowers" element={<BorrowersPage/>}/>
+                            <Route path="borrowers" element={<MembersPage/>}/>
 
                             <Route path="loans" element={<LoansPage/>}/>
                             <Route path="loans/collection-entry" element={<CollectionEntryPage/>}/>
