@@ -13,6 +13,7 @@ import {
     CardTitle,
 } from "@/components/ui/card";
 import {useToast} from "@/hooks/use-toast";
+import {logo} from "@/assets/logo.svg";
 
 export default function Login() {
     const [username, setUsername] = useState("");
@@ -44,7 +45,7 @@ export default function Login() {
                     {/* ✅ Logo */}
                     <div className="flex justify-center">
                         <img
-                            src="/logo.svg"
+                            src={logo}
                             alt="Akota Welfare Society Logo"
                             className="h-16 w-auto"
                         />

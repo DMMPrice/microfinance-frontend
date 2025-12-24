@@ -1,17 +1,22 @@
 {
-  "name": "vite_react_shadcn_ts",
-  "main": "electron/main.cjs",
+  "name": "micro-finance-app",
+  "main": "electron/main.js",
+  "description": "Micro Finance Desktop App",
+  "author": "Aniruddha Ghosh",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev:vite": "vite --port 4000",
+    "electron:dev": "wait-on http://localhost:5173 && electron .",
+    "dev": "concurrently \"npm run dev:vite\" \"npm run electron:dev\"",
     "build": "vite build",
     "build:dev": "vite build --mode development",
+    "build:win": "npm run build && electron-builder --win --publish never",
+    "release:win": "npm run build && electron-builder --win --publish always",
     "lint": "eslint .",
     "preview": "vite preview",
-    "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
-    "electron:build": "vite build && electron-builder"
+    "update-browserslist": "set BROWSERSLIST_DONT_USE_BUN=1 && npx update-browserslist-db@latest"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -48,6 +53,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^3.6.0",
+    "electron-updater": "^6.6.2",
     "embla-carousel-react": "^8.6.0",
     "input-otp": "^1.4.2",
     "jspdf": "^3.0.4",
@@ -91,18 +97,36 @@
     "wait-on": "^9.0.3"
   },
   "build": {
-    "appId": "com.yourcompany.microfinance",
-    "productName": "Micro Finance App",
+    "appId": "Micro Finance dashboard",
+    "productName": "Micro Finance Dashboard",
     "directories": {
       "output": "release"
     },
     "files": [
       "dist/**/*",
-      "electron/**/*",
+      "electron/main.js",
+      "electron/preload.cjs",
       "package.json"
     ],
     "win": {
-      "target": "nsis"
-    }
+      "target": "nsis",
+      "icon": "public/favicon.ico",
+      "artifactName": "Micro-Finance-Setup-${version}.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "DMMPrice",
+        "repo": "microfinance-desktop-builds",
+        "private": false
+      }
+    ]
   }
 }

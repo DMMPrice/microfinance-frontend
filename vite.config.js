@@ -11,8 +11,9 @@ export default defineConfig(({mode}) => {
     const isDev = mode === "development";
 
     return {
+        base: "./",
         server: {
-            host: "::",
+            host: true,
             port: 8080,
         },
 

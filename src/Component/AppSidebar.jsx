@@ -33,6 +33,7 @@ import {
     CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import {useLocation} from "react-router-dom";
+import {logo} from "@/assets/logo.svg";
 
 const navigationItems = [
     {title: "Overview", url: "/dashboard", icon: LayoutDashboard},
@@ -88,7 +89,7 @@ export function AppSidebar() {
                     )}
                 >
                     <img
-                        src="/logo.svg"
+                        src={logo}
                         alt="Akota Society Logo"
                         className={cn("h-8 w-8 object-contain", collapsed && "h-7 w-7")}
                     />
