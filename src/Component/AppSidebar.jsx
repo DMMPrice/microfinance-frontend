@@ -33,7 +33,7 @@ import {
     CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import {useLocation} from "react-router-dom";
-import {logo} from "@/assets/logo.svg";
+import logo from "@/assets/logo.svg";
 
 const navigationItems = [
     {title: "Overview", url: "/dashboard", icon: LayoutDashboard},

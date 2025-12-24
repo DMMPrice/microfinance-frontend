@@ -13,7 +13,7 @@ import {
     CardTitle,
 } from "@/components/ui/card";
 import {useToast} from "@/hooks/use-toast";
-import {logo} from "@/assets/logo.svg";
+import logo from "@/assets/logo.svg";
 
 export default function Login() {
     const [username, setUsername] = useState("");
