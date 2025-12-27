@@ -50,7 +50,6 @@ const MODE_OPTIONS = ["CASH", "UPI", "BANK", "CARD", "OTHER"];
 function csvEscape(v) {
     if (v === null || v === undefined) return "";
     const s = String(v);
-    // wrap with quotes if needed
     if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
     return s;
 }
@@ -71,14 +70,15 @@ function downloadCSV(filename, rows) {
 }
 
 export default function CollectionEntryPage() {
+    // ✅ UI date can show today
     const [asOn, setAsOn] = useState(todayYYYYMMDD());
 
     const [branchId, setBranchId] = useState("");
     const [loId, setLoId] = useState("");
     const [groupId, setGroupId] = useState("ALL");
 
-    // ✅ to control manual load
-    const [loadEnabled, setLoadEnabled] = useState(false);
+    // ✅ IMPORTANT: filters are NOT applied initially
+    const [applyFilters, setApplyFilters] = useState(false);
 
     // per-row form states
     const [rowForm, setRowForm] = useState({});
@@ -112,13 +112,18 @@ export default function CollectionEntryPage() {
             .filter((g) => (lId ? g.lo_id === lId : true));
     }, [groups, branchId, loId]);
 
-    /* -------------------- DUE COLLECTIONS (MANUAL HOOK) -------------------- */
+    /* -------------------- DUE COLLECTIONS -------------------- */
+    // ✅ Initial load: send "" "" -> hook will call /by-lo with NO params
+    // ✅ After Load Due: send loId & asOn
+    const effectiveLoId = applyFilters ? loId : "";
+    const effectiveAsOn = applyFilters ? asOn : "";
+
     const {
         data: rows = [],
         isLoading: rowsLoading,
         isFetching: rowsFetching,
         refetch: refetchDue,
-    } = useCollectionsByLOManual(loId, asOn, loadEnabled);
+    } = useCollectionsByLOManual(effectiveLoId, effectiveAsOn);
 
     const isLoadingDue = rowsLoading || rowsFetching;
 
@@ -140,7 +145,8 @@ export default function CollectionEntryPage() {
     }
 
     function resetTableState() {
-        setLoadEnabled(false);
+        // ✅ When user changes filters, go back to initial mode
+        setApplyFilters(false);
         setRowForm({});
         setPosted({});
         setPosting({});
@@ -159,19 +165,20 @@ export default function CollectionEntryPage() {
         resetTableState();
     }
 
-    async function loadDue() {
-        if (!loId) return;
-        setPosted({});
-        setLoadEnabled(true);
+    function onAsOnChange(v) {
+        setAsOn(v);
+        resetTableState();
+    }
 
-        // if already enabled and user clicks again
+    async function loadDue() {
+        // ✅ Only now we apply filters and send params
+        setPosted({});
+        setApplyFilters(true);
         await refetchDue();
     }
 
     /* -------------------- Initialize rowForm when rows arrive -------------------- */
     useEffect(() => {
-        if (!loadEnabled) return;
-
         const init = {};
         (rows || []).forEach((r) => {
             const key = `${r.installment_no}:${r.loan_id}`;
@@ -183,9 +190,8 @@ export default function CollectionEntryPage() {
                 payment_date: new Date().toISOString().slice(0, 16),
             };
         });
-
         setRowForm(init);
-    }, [rows, loadEnabled]);
+    }, [rows]);
 
     /* -------------------- Filtering / Grouping -------------------- */
     const displayRows = useMemo(() => {
@@ -234,7 +240,6 @@ export default function CollectionEntryPage() {
         }
     }
 
-    /** ✅ Download statement from the payments modal */
     function downloadStatementCSV() {
         if (!selectedLoanId) return;
 
@@ -253,17 +258,16 @@ export default function CollectionEntryPage() {
 
     return (
         <div className="space-y-4">
-            {/* ✅ 1) HEADER BOX */}
             <Card>
                 <CardHeader className="pb-2">
                     <CardTitle>Collection Entry</CardTitle>
                 </CardHeader>
                 <CardContent className="text-sm text-muted-foreground">
-                    Select Branch and Loan Officer, load due installments, then submit row-wise collections.
+                    Initial load shows all due collections (no filters sent). Select Branch + Loan Officer and click
+                    Load Due to filter.
                 </CardContent>
             </Card>
 
-            {/* ✅ 2) FILTERS BOX */}
             <Card>
                 <CardHeader className="pb-2">
                     <CardTitle className="text-base">Filters</CardTitle>
@@ -272,7 +276,11 @@ export default function CollectionEntryPage() {
                     <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
                         <div className="space-y-1">
                             <Label>As On Date</Label>
-                            <Input type="date" value={asOn} onChange={(e) => setAsOn(e.target.value)}/>
+                            <Input
+                                type="date"
+                                value={asOn}
+                                onChange={(e) => onAsOnChange(e.target.value)}
+                            />
                         </div>
 
                         <div className="space-y-1">
@@ -296,8 +304,7 @@ export default function CollectionEntryPage() {
                             <Select value={loId} onValueChange={onLoChange} disabled={!branchId}>
                                 <SelectTrigger>
                                     <SelectValue
-                                        placeholder={!branchId ? "Select Branch first" : "Select Loan Officer"}
-                                    />
+                                        placeholder={!branchId ? "Select Branch first" : "Select Loan Officer"}/>
                                 </SelectTrigger>
                                 <SelectContent>
                                     {filteredLOs.length === 0 ? (
@@ -333,7 +340,7 @@ export default function CollectionEntryPage() {
                         </div>
 
                         <div className="flex items-end gap-2">
-                            <Button onClick={loadDue} disabled={!loId || isLoadingDue} className="w-full">
+                            <Button onClick={loadDue} disabled={isLoadingDue} className="w-full">
                                 {isLoadingDue ? <Loader2 className="h-4 w-4 animate-spin"/> :
                                     <RotateCw className="h-4 w-4"/>}
                                 <span className="ml-2">Load Due</span>
@@ -343,7 +350,6 @@ export default function CollectionEntryPage() {
                 </CardContent>
             </Card>
 
-            {/* ✅ 3) TABLE BOX */}
             <Card>
                 <CardHeader className="pb-2">
                     <CardTitle className="text-base">Due Collections</CardTitle>
@@ -356,9 +362,7 @@ export default function CollectionEntryPage() {
                             <Skeleton className="h-24 w-full"/>
                         </div>
                     ) : grouped.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
-                            No due rows loaded. Use the filters above and click <b>Load Due</b>.
-                        </p>
+                        <p className="text-sm text-muted-foreground">No due rows found.</p>
                     ) : (
                         <Accordion type="multiple" className="w-full">
                             {grouped.map((g) => (
@@ -466,7 +470,6 @@ export default function CollectionEntryPage() {
                                                                 />
                                                             </td>
 
-                                                            {/* ✅ ACTION: Submit + View */}
                                                             <td className="p-2 border text-center">
                                                                 <div className="flex items-center justify-center gap-2">
                                                                     <Button
@@ -517,7 +520,6 @@ export default function CollectionEntryPage() {
                 </CardContent>
             </Card>
 
-            {/* ✅ View Payments Dialog + Download Statement */}
             <Dialog open={openPayments} onOpenChange={setOpenPayments}>
                 <DialogContent className="max-w-4xl">
                     <DialogHeader>
@@ -563,9 +565,7 @@ export default function CollectionEntryPage() {
                                             {x.txn_date ? new Date(x.txn_date).toLocaleString() : "-"}
                                         </td>
                                         <td className="p-2 border text-right">{Number(x.credit || 0).toFixed(2)}</td>
-                                        <td className="p-2 border text-right">
-                                            {Number(x.balance_outstanding || 0).toFixed(2)}
-                                        </td>
+                                        <td className="p-2 border text-right">{Number(x.balance_outstanding || 0).toFixed(2)}</td>
                                         <td className="p-2 border">{x.narration || "-"}</td>
                                     </tr>
                                 ))}

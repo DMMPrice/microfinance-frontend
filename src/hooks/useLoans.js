@@ -45,14 +45,14 @@ export function useLoanStats() {
 
 /* -------------------- INSTALLMENTS DUE -------------------- */
 export function useDueInstallments(as_on) {
-    const asOn = normalizeDate(as_on); // should return "" or null when empty
+    const asOn = normalizeDate(as_on);
 
     return useQuery({
         queryKey: ["loans", "installmentsDue", asOn || "ALL"],
-        enabled: true, // ✅ always enabled
+        enabled: true,
         queryFn: async () => {
             const params = {};
-            if (asOn) params.as_on = asOn; // ✅ only send when present
+            if (asOn) params.as_on = asOn;
 
             const res = await apiClient.get("/loans/installments/due", {params});
             return res.data;
@@ -64,27 +64,21 @@ export function useDueInstallments(as_on) {
 
 /* -------------------- COLLECTIONS BY LO -------------------- */
 export function useCollectionsByLO(lo_id, as_on) {
-    const loId = normalizeId(lo_id);     // may be null / ""
-    const asOn = normalizeDate(as_on);   // may be null / ""
+    const loId = normalizeId(lo_id);
+    const asOn = normalizeDate(as_on);
 
     return useQuery({
         queryKey: ["loans", "collectionsByLO", loId || "ALL", asOn || "ALL"],
-
-        // ✅ always enabled (backend handles optional params)
         enabled: true,
 
         queryFn: async () => {
             const params = {};
 
-            // ✅ send only when present
-            if (loId) params.lo_id = loId;
+            if (loId) params.lo_id = Number(loId);
             if (asOn) params.as_on = asOn;
 
-            const res = await apiClient.get("/loans/collections/by-lo", {
-                params,
-            });
-
-            return res.data;
+            const {data} = await apiClient.get("/loans/collections/by-lo", {params});
+            return data;
         },
 
         keepPreviousData: true,
@@ -125,12 +119,6 @@ export function useLoansByGroup(group_id, status) {
 }
 
 /* -------------------- LOAN MASTER -------------------- */
-/**
- * GET /loans/master
- * Supports filters:
- * status, region_id, branch_id, lo_id, group_id, member_id,
- * disburse_from, disburse_to, search, limit, offset
- */
 export function useLoanMaster(filters = {}) {
     const params = {
         status: normalizeStatus(filters.status) || undefined,
@@ -146,7 +134,6 @@ export function useLoanMaster(filters = {}) {
         offset: filters.offset ?? 0,
     };
 
-    // Make queryKey stable by serializing params
     const key = JSON.stringify(params);
 
     return useQuery({
@@ -206,17 +193,6 @@ export function useCreateLoan() {
 }
 
 /* -------------------- CREATE PAYMENT -------------------- */
-/**
- * POST /loans/{loan_id}/payments
- * payload must match PaymentCreate schema:
- * {
- *   payment_date?: datetime,
- *   amount_received: number,
- *   payment_mode: "CASH" | ...,
- *   receipt_no?: string,
- *   remarks?: string
- * }
- */
 export function useCreateLoanPayment() {
     const qc = useQueryClient();
 
@@ -229,7 +205,6 @@ export function useCreateLoanPayment() {
         onSuccess: (_data, vars) => {
             const loanId = normalizeId(vars?.loan_id);
 
-            // refresh loan related areas
             qc.invalidateQueries({queryKey: ["loans", "stats"]});
             qc.invalidateQueries({queryKey: ["loans", "installmentsDue"]});
             qc.invalidateQueries({queryKey: ["loans", "collectionsByLO"]});
@@ -245,11 +220,6 @@ export function useCreateLoanPayment() {
 }
 
 /* -------------------- APPLY ADVANCE -------------------- */
-/**
- * POST /loans/{loan_id}/apply-advance
- * returns AdvanceApplyResult:
- * { applied_installments, used_advance, remaining_advance }
- */
 export function useApplyLoanAdvance() {
     const qc = useQueryClient();
 
@@ -276,33 +246,32 @@ export function useApplyLoanAdvance() {
     });
 }
 
-/* -------------------- COLLECTIONS BY LO (MANUAL LOAD) -------------------- */
+/* -------------------- COLLECTIONS BY LO (DEFAULT LOAD) -------------------- */
 /**
- * Same as useCollectionsByLO, but you control `enabled` from UI (button click).
+ * Initial load: GET /loans/collections/by-lo (NO params)
+ * After selecting LO/date: GET /loans/collections/by-lo?lo_id=..&as_on=..
  */
-export function useCollectionsByLOManual(lo_id, as_on, enabled = false) {
+export function useCollectionsByLOManual(lo_id, as_on) {
     const loId = normalizeId(lo_id);
     const asOn = normalizeDate(as_on);
 
     return useQuery({
-        queryKey: ["loans", "collectionsByLO", "manual", loId, asOn],
-        enabled: !!enabled && !!loId && !!asOn,
-        queryFn: async () =>
-            (
-                await apiClient.get(`/loans/collections/by-lo/${loId}`, {
-                    params: {as_on: asOn},
-                })
-            ).data,
+        queryKey: ["loans", "collectionsByLO", "manual", loId || "ALL", asOn || "ALL"],
+        enabled: true,
+        queryFn: async () => {
+            const params = {};
+            if (loId) params.lo_id = Number(loId);
+            if (asOn) params.as_on = asOn;
+
+            const {data} = await apiClient.get("/loans/collections/by-lo", {params});
+            return data;
+        },
         keepPreviousData: true,
         refetchOnWindowFocus: false,
     });
 }
 
 /* -------------------- LOAN PAYMENTS (from STATEMENT) -------------------- */
-/**
- * Returns only PAYMENT ledger rows from /loans/{loan_id}/statement
- * API uses txn_date, txn_type, credit, balance_outstanding, narration.
- */
 export function useLoanPayments(loan_id, enabled = false) {
     const loanId = normalizeId(loan_id);
 
@@ -319,4 +288,3 @@ export function useLoanPayments(loan_id, enabled = false) {
         refetchOnWindowFocus: false,
     });
 }
-

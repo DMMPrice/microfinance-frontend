@@ -5,6 +5,9 @@ import {SidebarProvider, SidebarTrigger} from "@/components/ui/sidebar";
 import {AppSidebar} from "@/Component/AppSidebar.jsx";
 import DashboardHeader from "@/Utils/DashboardHeader.jsx";
 
+// Roles
+import {ROLES, normalizeRole} from "@/config/roles";
+
 // Pages
 import OverviewPage from "@/pages/OverviewPage.jsx";
 import RegionsPage from "@/Component/Regions/Page.jsx";
@@ -15,89 +18,61 @@ import MembersPage from "@/Component/Members/Page.jsx";
 import UsersPage from "@/Pages/UsersPage.jsx";
 
 // ✅ Loans pages
-import LoansPage from "@/Component/Loan/LoansPage.jsx";
-import CollectionEntryPage from "@/Component/Loan/CollectionEntryPage.jsx";
-import StatementDownloadPage from "@/Component/Loan/StatementDownloadPage.jsx";
-import LoanViewPage from "@/Component/Loan/LoanViewPage.jsx";
+import LoansPage from "@/Component/Loan/Loan Dashboard/LoansPage.jsx";
+import CollectionEntryPage from "@/Component/Loan/Collection Entry/CollectionEntryPage.jsx";
+import StatementDownloadPage from "@/Component/Loan/Statement Download/StatementDownloadPage.jsx";
+import LoanViewPage from "@/Component/Loan/Loan View/LoanViewPage.jsx";
+import LoanViewLandingPage from "@/Component/Loan/Loan View/LoanViewLandingPage.jsx";
 
-// ✅ NEW: Loan view landing page
-import LoanViewLandingPage from "@/Component/Loan/LoanViewLandingPage.jsx";
-
-// ✅ Route meta for dynamic header + breadcrumbs
+/* -------------------- Route meta for header -------------------- */
 const ROUTE_META = [
     {
         pattern: "/dashboard",
         title: "Dashboard",
         subtitle: "Overview",
-        breadcrumbs: [
-            {label: "Home", to: "/dashboard"},
-            {label: "Dashboard"},
-        ],
+        breadcrumbs: [{label: "Home", to: "/dashboard"}, {label: "Dashboard"}],
     },
     {
         pattern: "/dashboard/regions",
         title: "Regions",
         subtitle: "Create and manage regions",
-        breadcrumbs: [
-            {label: "Home", to: "/dashboard"},
-            {label: "Regions"},
-        ],
+        breadcrumbs: [{label: "Home", to: "/dashboard"}, {label: "Regions"}],
     },
     {
         pattern: "/dashboard/branches",
         title: "Branches",
         subtitle: "Create and manage branches",
-        breadcrumbs: [
-            {label: "Home", to: "/dashboard"},
-            {label: "Branches"},
-        ],
+        breadcrumbs: [{label: "Home", to: "/dashboard"}, {label: "Branches"}],
     },
     {
         pattern: "/dashboard/officers",
         title: "Loan Officers",
         subtitle: "Create and manage loan officers",
-        breadcrumbs: [
-            {label: "Home", to: "/dashboard"},
-            {label: "Loan Officers"},
-        ],
+        breadcrumbs: [{label: "Home", to: "/dashboard"}, {label: "Loan Officers"}],
     },
     {
         pattern: "/dashboard/groups",
         title: "Groups",
         subtitle: "Create and manage groups",
-        breadcrumbs: [
-            {label: "Home", to: "/dashboard"},
-            {label: "Groups"},
-        ],
+        breadcrumbs: [{label: "Home", to: "/dashboard"}, {label: "Groups"}],
     },
     {
         pattern: "/dashboard/borrowers",
-        title: "Members",
-        subtitle: "Create and manage Members",
-        breadcrumbs: [
-            {label: "Home", to: "/dashboard"},
-            {label: "Members"},
-        ],
+        title: "Borrowers",
+        subtitle: "Create and manage borrowers",
+        breadcrumbs: [{label: "Home", to: "/dashboard"}, {label: "Borrowers"}],
     },
     {
         pattern: "/dashboard/users",
         title: "Users Management",
         subtitle: "Manage system users",
-        breadcrumbs: [
-            {label: "Home", to: "/dashboard"},
-            {label: "Users Management"},
-        ],
+        breadcrumbs: [{label: "Home", to: "/dashboard"}, {label: "Users Management"}],
     },
-
-    // Loans
     {
         pattern: "/dashboard/loans",
         title: "Loans",
         subtitle: "Loan dashboard",
-        breadcrumbs: [
-            {label: "Home", to: "/dashboard"},
-            {label: "Loans"},
-        ],
+        breadcrumbs: [{label: "Home", to: "/dashboard"}, {label: "Loans"}],
     },
     {
         pattern: "/dashboard/loans/collection-entry",
@@ -143,13 +118,8 @@ const ROUTE_META = [
 ];
 
 function getRouteMeta(pathname) {
-    // exact matches first
     let found = ROUTE_META.find((r) => matchPath({path: r.pattern, end: true}, pathname));
-
-    // fallback to partial matches
-    if (!found) {
-        found = ROUTE_META.find((r) => matchPath({path: r.pattern, end: false}, pathname));
-    }
+    if (!found) found = ROUTE_META.find((r) => matchPath({path: r.pattern, end: false}, pathname));
 
     return (
         found || {
@@ -160,9 +130,50 @@ function getRouteMeta(pathname) {
     );
 }
 
+/* -------------------- RBAC helpers -------------------- */
+const ADMIN_DASH_ROLES = [ROLES.ADMIN, ROLES.SUPER_ADMIN];
+
+const BRANCH_MGMT_ROLES = [
+    ROLES.ADMIN,
+    ROLES.SUPER_ADMIN,
+    ROLES.REGIONAL_MANAGER,
+    ROLES.BRANCH_MANAGER,
+];
+
+const USERS_MGMT_ROLES = [ROLES.ADMIN, ROLES.SUPER_ADMIN];
+
+const ALL_BUSINESS_ROLES = [
+    ROLES.ADMIN,
+    ROLES.SUPER_ADMIN,
+    ROLES.REGIONAL_MANAGER,
+    ROLES.BRANCH_MANAGER,
+    ROLES.LOAN_OFFICER,
+];
+
+// ✅ Everyone EXCEPT loan_officer (for Groups)
+const NON_LOAN_OFFICER_ROLES = [
+    ROLES.ADMIN,
+    ROLES.SUPER_ADMIN,
+    ROLES.REGIONAL_MANAGER,
+    ROLES.BRANCH_MANAGER,
+];
+
+function Guard({allowedRoles, role, children}) {
+    if (!role) return <Navigate to="/login" replace/>;
+    if (!allowedRoles || allowedRoles.length === 0) return children;
+
+    const ok = allowedRoles.includes(role);
+    if (!ok) return <Navigate to="/dashboard/loans" replace/>;
+
+    return children;
+}
+
 export default function Home() {
-    const {user} = useAuth();
+    const {user, profile} = useAuth();
     const {pathname} = useLocation();
+
+    // ✅ authoritative role from profileData
+    const role = normalizeRole(profile?.role || user?.role);
 
     const {title, subtitle, breadcrumbs} = getRouteMeta(pathname);
 
@@ -170,6 +181,15 @@ export default function Home() {
         return (
             <div className="flex items-center justify-center min-h-screen">
                 <p className="text-muted-foreground">Session not found. Please log in again.</p>
+            </div>
+        );
+    }
+
+    // ✅ Prevent flicker/blank when profile loads
+    if (!role) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <p className="text-muted-foreground">Loading...</p>
             </div>
         );
     }
@@ -194,25 +214,121 @@ export default function Home() {
                         </div>
                     </div>
 
-
                     <main className="flex-1 p-4">
                         <Routes>
-                            <Route path="/" element={<OverviewPage/>}/>
+                            {/* ✅ FIX: index route (NO redirect loop) */}
+                            <Route
+                                index
+                                element={
+                                    ADMIN_DASH_ROLES.includes(role)
+                                        ? <OverviewPage/>
+                                        : <Navigate to="loans" replace/>
+                                }
+                            />
 
-                            <Route path="regions" element={<RegionsPage/>}/>
-                            <Route path="branches" element={<BranchesPage/>}/>
-                            <Route path="officers" element={<LoanOfficerPage/>}/>
-                            <Route path="groups" element={<GroupsPage/>}/>
-                            <Route path="borrowers" element={<MembersPage/>}/>
+                            {/* Admin-only */}
+                            <Route
+                                path="regions"
+                                element={
+                                    <Guard role={role} allowedRoles={ADMIN_DASH_ROLES}>
+                                        <RegionsPage/>
+                                    </Guard>
+                                }
+                            />
 
-                            <Route path="loans" element={<LoansPage/>}/>
-                            <Route path="loans/collection-entry" element={<CollectionEntryPage/>}/>
-                            <Route path="loans/statement-download" element={<StatementDownloadPage/>}/>
-                            <Route path="loans/view" element={<LoanViewLandingPage/>}/>
-                            <Route path="loans/view/:loan_id" element={<LoanViewPage/>}/>
+                            {/* Branch mgmt */}
+                            <Route
+                                path="branches"
+                                element={
+                                    <Guard role={role} allowedRoles={BRANCH_MGMT_ROLES}>
+                                        <BranchesPage/>
+                                    </Guard>
+                                }
+                            />
 
-                            <Route path="users" element={<UsersPage/>}/>
+                            {/* Loan officers mgmt */}
+                            <Route
+                                path="officers"
+                                element={
+                                    <Guard role={role} allowedRoles={BRANCH_MGMT_ROLES}>
+                                        <LoanOfficerPage/>
+                                    </Guard>
+                                }
+                            />
 
+                            {/* Groups: NOT allowed for loan_officer */}
+                            <Route
+                                path="groups"
+                                element={
+                                    <Guard role={role} allowedRoles={NON_LOAN_OFFICER_ROLES}>
+                                        <GroupsPage/>
+                                    </Guard>
+                                }
+                            />
+
+                            {/* Borrowers: allowed for loan_officer */}
+                            <Route
+                                path="borrowers"
+                                element={
+                                    <Guard role={role} allowedRoles={ALL_BUSINESS_ROLES}>
+                                        <MembersPage/>
+                                    </Guard>
+                                }
+                            />
+
+                            {/* Loans: allowed for loan_officer */}
+                            <Route
+                                path="loans"
+                                element={
+                                    <Guard role={role} allowedRoles={ALL_BUSINESS_ROLES}>
+                                        <LoansPage/>
+                                    </Guard>
+                                }
+                            />
+                            <Route
+                                path="loans/collection-entry"
+                                element={
+                                    <Guard role={role} allowedRoles={ALL_BUSINESS_ROLES}>
+                                        <CollectionEntryPage/>
+                                    </Guard>
+                                }
+                            />
+                            <Route
+                                path="loans/statement-download"
+                                element={
+                                    <Guard role={role} allowedRoles={ALL_BUSINESS_ROLES}>
+                                        <StatementDownloadPage/>
+                                    </Guard>
+                                }
+                            />
+                            <Route
+                                path="loans/view"
+                                element={
+                                    <Guard role={role} allowedRoles={ALL_BUSINESS_ROLES}>
+                                        <LoanViewLandingPage/>
+                                    </Guard>
+                                }
+                            />
+                            <Route
+                                path="loans/view/:loan_id"
+                                element={
+                                    <Guard role={role} allowedRoles={ALL_BUSINESS_ROLES}>
+                                        <LoanViewPage/>
+                                    </Guard>
+                                }
+                            />
+
+                            {/* Users: admin only */}
+                            <Route
+                                path="users"
+                                element={
+                                    <Guard role={role} allowedRoles={USERS_MGMT_ROLES}>
+                                        <UsersPage/>
+                                    </Guard>
+                                }
+                            />
+
+                            {/* Catch-all */}
                             <Route path="*" element={<Navigate to="." replace/>}/>
                         </Routes>
                     </main>
