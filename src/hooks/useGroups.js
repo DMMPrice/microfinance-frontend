@@ -4,11 +4,55 @@ import {api} from "@/lib/http.js"; // axios instance with auth header
 
 const GROUPS_KEY = ["groups"];
 
+function getProfileDataSafe() {
+    try {
+        return JSON.parse(localStorage.getItem("profileData") || "{}");
+    } catch {
+        return {};
+    }
+}
+
 /**
  * 🔹 Main hook – list groups + create/delete/assign
+ * ✅ Supports optional filters: lo_id, region_id, branch_id
+ * ✅ Auto-applies region/branch for RM/BM from profileData if filters not provided
  */
-export function useGroups() {
+export function useGroups(filters = {}) {
     const queryClient = useQueryClient();
+
+    const profile = getProfileDataSafe();
+
+    const role = String(profile?.role ?? "").trim(); // e.g. "regional_manager"
+    const profileRegionId = profile?.region_id ?? profile?.regionId ?? null;
+    const profileBranchId = profile?.branch_id ?? profile?.branchId ?? null;
+    const profileUserId = profile?.user_id ?? profile?.userId ?? null;
+
+    const isRM = role === "regional_manager";
+    const isBM = role === "branch_manager";
+    const isLO = role === "loan_officer";
+
+    // ✅ Caller can pass filters, otherwise auto-filter for RM/BM/LO
+    const effectiveFilters = {
+        region_id:
+            filters?.region_id ??
+            filters?.regionId ??
+            (isRM ? profileRegionId : null),
+
+        branch_id:
+            filters?.branch_id ??
+            filters?.branchId ??
+            (isBM ? profileBranchId : null),
+
+        lo_id:
+            filters?.lo_id ??
+            filters?.loId ??
+            (isLO ? profileUserId : null),
+    };
+
+    // remove null/undefined filters so request params remain clean
+    const params = Object.fromEntries(
+        Object.entries(effectiveFilters).filter(([, v]) => v !== null && v !== undefined && v !== "")
+    );
 
     // GET /groups
     const {
@@ -18,18 +62,30 @@ export function useGroups() {
         error,
         refetch,
     } = useQuery({
-        queryKey: GROUPS_KEY,
+        queryKey: Object.keys(params).length
+            ? [...GROUPS_KEY, params]
+            : GROUPS_KEY,
         queryFn: async () => {
-            const res = await api.get("/groups/");
+            const res = await api.get("/groups/", {params});
             return res.data; // list[GroupOut]
         },
+        keepPreviousData: true,
+        refetchOnWindowFocus: false,
     });
 
     // POST /groups
     const createGroupMutation = useMutation({
         mutationFn: async (payload) => {
             // payload: { group_name, lo_id, region_id, branch_id, meeting_day }
-            const res = await api.post("/groups", payload);
+            // ✅ Optional safety: RM/BM cannot create outside their scope
+            const finalPayload = {
+                ...payload,
+                region_id: isRM ? profileRegionId : payload?.region_id,
+                branch_id: isBM ? profileBranchId : payload?.branch_id,
+                // (LO usually shouldn't create groups; but if allowed, keep lo_id as payload)
+            };
+
+            const res = await api.post("/groups", finalPayload);
             return res.data;
         },
         onSuccess: () => {
@@ -70,6 +126,10 @@ export function useGroups() {
         createGroupMutation,
         deleteGroupMutation,
         assignLoanOfficerMutation,
+
+        // helpful for UI/debug
+        appliedParams: params,
+        role,
     };
 }
 
@@ -85,6 +145,8 @@ export function useGroup(groupId, {enabled = true} = {}) {
             const res = await api.get(`/groups/${groupId}/`);
             return res.data; // GroupOut
         },
+        keepPreviousData: true,
+        refetchOnWindowFocus: false,
     });
 }
 
@@ -98,8 +160,9 @@ export function useGroupSummary(groupId, {enabled = true} = {}) {
         enabled: enabled && !!groupId,
         queryFn: async () => {
             const res = await api.get(`/groups/${groupId}/summary`);
-            // response_model = GroupSummaryOut
-            return res.data;
+            return res.data; // GroupSummaryOut
         },
+        keepPreviousData: true,
+        refetchOnWindowFocus: false,
     });
 }

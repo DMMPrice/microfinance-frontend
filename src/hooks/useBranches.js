@@ -4,8 +4,39 @@ import {api} from "@/lib/http.js";
 
 const BRANCHES_KEY = ["branches"];
 
+const normalizeRole = (r) => String(r ?? "").trim().toLowerCase();
+
+function getProfileDataSafe() {
+    try {
+        return JSON.parse(localStorage.getItem("profileData") || "{}");
+    } catch {
+        return {};
+    }
+}
+
 export function useBranches(regionId = null) {
     const queryClient = useQueryClient();
+
+    // ✅ Read logged-in profile info from localStorage.profileData
+    const profile = getProfileDataSafe();
+
+    const role = normalizeRole(profile?.role);
+
+    // ✅ Your profileData has region_id (as per screenshot)
+    const profileRegionId =
+        profile?.region_id ??
+        profile?.regionId ??
+        null;
+
+    const isRegionalManager = ["regional_manager", "regional manager", "rm"].includes(role);
+
+    /**
+     * ✅ Effective region filter rules:
+     * 1) If caller passes regionId -> use it (Admin filtering etc.)
+     * 2) Else if Regional Manager -> force profileRegionId
+     * 3) Else -> no filter (Admin sees all)
+     */
+    const effectiveRegionId = regionId ?? (isRegionalManager ? profileRegionId : null);
 
     const {
         data: branches = [],
@@ -14,19 +45,27 @@ export function useBranches(regionId = null) {
         error,
         refetch,
     } = useQuery({
-        queryKey: regionId ? [...BRANCHES_KEY, {regionId}] : BRANCHES_KEY,
+        queryKey: effectiveRegionId
+            ? [...BRANCHES_KEY, {regionId: effectiveRegionId}]
+            : BRANCHES_KEY,
+        enabled: !isRegionalManager || !!profileRegionId, // RM must have region_id to fetch
         queryFn: async () => {
-            const params = regionId ? {region_id: regionId} : {};
+            const params = effectiveRegionId ? {region_id: effectiveRegionId} : {};
             const res = await api.get("/branches/", {params});
             return res.data; // list[BranchOut]
         },
+        keepPreviousData: true,
+        refetchOnWindowFocus: false,
     });
 
     const createBranchMutation = useMutation({
         mutationFn: async ({branch_name, region_id}) => {
+            // ✅ Safety: If RM creates branch, force their region_id
+            const finalRegionId = isRegionalManager ? profileRegionId : region_id;
+
             const res = await api.post("/branches/", {
                 branch_name,
-                region_id,
+                region_id: finalRegionId,
             });
             return res.data;
         },
@@ -37,6 +76,12 @@ export function useBranches(regionId = null) {
 
     const updateBranchMutation = useMutation({
         mutationFn: async ({branch_id, ...payload}) => {
+            // ✅ Optional safety: Prevent RM from changing region_id
+            if (isRegionalManager) {
+                const {region_id, regionId, ...rest} = payload;
+                payload = rest;
+            }
+
             const res = await api.put(`/branches/${branch_id}`, payload);
             return res.data;
         },
@@ -64,5 +109,8 @@ export function useBranches(regionId = null) {
         createBranchMutation,
         updateBranchMutation,
         deleteBranchMutation,
+        effectiveRegionId,
+        isRegionalManager,
+        profileRegionId,
     };
 }

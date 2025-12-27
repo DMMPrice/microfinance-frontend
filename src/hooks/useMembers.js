@@ -12,8 +12,65 @@ function authHeader() {
     return token ? {Authorization: `Bearer ${token}`} : {};
 }
 
-export function useMembers() {
+function getProfileDataSafe() {
+    try {
+        return JSON.parse(localStorage.getItem("profileData") || "{}");
+    } catch {
+        return {};
+    }
+}
+
+/**
+ * ✅ useMembers(filters?)
+ * Supports optional filters:
+ * - group_id, lo_id, branch_id, region_id
+ *
+ * Auto-applies:
+ * - RM -> region_id from profileData
+ * - BM -> branch_id from profileData
+ * - LO -> lo_id = profileData.user_id
+ */
+export function useMembers(filters = {}) {
     const queryClient = useQueryClient();
+
+    const profile = getProfileDataSafe();
+
+    const role = String(profile?.role ?? "").trim(); // "regional_manager"
+    const profileRegionId = profile?.region_id ?? profile?.regionId ?? null;
+    const profileBranchId = profile?.branch_id ?? profile?.branchId ?? null;
+    const profileUserId = profile?.user_id ?? profile?.userId ?? null;
+
+    const isRM = role === "regional_manager";
+    const isBM = role === "branch_manager";
+    const isLO = role === "loan_officer";
+
+    // ✅ Effective filters (caller wins; else auto-scope for RM/BM/LO)
+    const effectiveFilters = {
+        region_id:
+            filters?.region_id ??
+            filters?.regionId ??
+            (isRM ? profileRegionId : null),
+
+        branch_id:
+            filters?.branch_id ??
+            filters?.branchId ??
+            (isBM ? profileBranchId : null),
+
+        lo_id:
+            filters?.lo_id ??
+            filters?.loId ??
+            (isLO ? profileUserId : null),
+
+        group_id:
+            filters?.group_id ??
+            filters?.groupId ??
+            null,
+    };
+
+    // remove null/undefined/empty filters
+    const params = Object.fromEntries(
+        Object.entries(effectiveFilters).filter(([, v]) => v !== null && v !== undefined && v !== "")
+    );
 
     // -----------------------
     // LIST MEMBERS
@@ -25,11 +82,16 @@ export function useMembers() {
         error,
         refetch,
     } = useQuery({
-        queryKey: MEMBERS_KEY,
+        queryKey: Object.keys(params).length ? [...MEMBERS_KEY, params] : MEMBERS_KEY,
         queryFn: async () => {
-            const res = await api.get("/members/", {headers: authHeader()});
+            const res = await api.get("/members/", {
+                headers: authHeader(),
+                params, // ✅ send query params: group_id/lo_id/branch_id/region_id
+            });
             return res.data;
         },
+        keepPreviousData: true,
+        refetchOnWindowFocus: false,
     });
 
     // -----------------------
@@ -37,7 +99,17 @@ export function useMembers() {
     // -----------------------
     const createMemberMutation = useMutation({
         mutationFn: async (payload) => {
-            const res = await api.post("/members", payload, {headers: authHeader()});
+            // Optional safety: enforce scope for RM/BM/LO on create
+            const finalPayload = {
+                ...payload,
+                region_id: isRM ? profileRegionId : payload?.region_id,
+                branch_id: isBM ? profileBranchId : payload?.branch_id,
+                lo_id: isLO ? profileUserId : payload?.lo_id,
+            };
+
+            const res = await api.post("/members", finalPayload, {
+                headers: authHeader(),
+            });
             return res.data;
         },
         onSuccess: () => {
@@ -46,15 +118,29 @@ export function useMembers() {
     });
 
     // -----------------------
-    // ✅ UPDATE MEMBER (FIXED)
+    // UPDATE MEMBER
     // -----------------------
     const updateMemberMutation = useMutation({
         mutationFn: async ({member_id, payload}) => {
-            const res = await api.put(
-                `/members/${member_id}`,
-                payload,
-                {headers: authHeader()}
-            );
+            // Optional safety: prevent changing scope fields for RM/BM/LO
+            let finalPayload = payload;
+
+            if (isRM || isBM || isLO) {
+                const {
+                    region_id,
+                    regionId,
+                    branch_id,
+                    branchId,
+                    lo_id,
+                    loId,
+                    ...rest
+                } = payload || {};
+                finalPayload = rest;
+            }
+
+            const res = await api.put(`/members/${member_id}`, finalPayload, {
+                headers: authHeader(),
+            });
             return res.data;
         },
         onSuccess: () => {
@@ -95,5 +181,9 @@ export function useMembers() {
 
         deleteMember: deleteMemberMutation.mutateAsync,
         isDeleting: deleteMemberMutation.isPending,
+
+        // helpful debug / UI
+        appliedParams: params,
+        role,
     };
 }
