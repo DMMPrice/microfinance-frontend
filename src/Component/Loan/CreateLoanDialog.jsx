@@ -51,7 +51,7 @@ async function getLoanAccountNosOnce() {
 
     // 3) fetch once
     const res = await apiClient.get("/loans/master", {
-        params: {limit: 5000, offset: 0}, // adjust if your backend supports these
+        params: {limit: 5000, offset: 0},
     });
     const list = Array.isArray(res.data) ? res.data : [];
 
@@ -156,7 +156,8 @@ export default function CreateLoanDialog({open, onOpenChange}) {
             first_installment_date: first,
             duration_weeks: 12,
             principal_amount: "",
-            weekly_interest_percent: "",
+            // ✅ change meaning: now it's ANNUAL interest % (simple interest for 12 months)
+            annual_interest_percent: "",
         };
     }, []);
 
@@ -191,7 +192,11 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                 if (!cancelled) setLoanAccountNos(Array.isArray(list) ? list : []);
             } catch (e) {
                 if (!cancelled)
-                    setLaErr(e?.response?.data?.detail || e?.message || "Failed to load loan accounts");
+                    setLaErr(
+                        e?.response?.data?.detail ||
+                        e?.message ||
+                        "Failed to load loan accounts"
+                    );
             } finally {
                 if (!cancelled) setLaLoading(false);
             }
@@ -298,14 +303,21 @@ export default function CreateLoanDialog({open, onOpenChange}) {
     }, [form.group_id]);
 
     // ----------------------------
-    // Interest calculation (weekly %)
+    // ✅ Interest calculation (Simple Interest for 12 months)
+    // Interest = P * R * 1year
+    // Weekly installment = (P + Interest) / weeks
     // ----------------------------
     const principal = safeNum(form.principal_amount);
     const weeks = Math.max(0, safeNum(form.duration_weeks));
-    const weeklyRate = safeNum(form.weekly_interest_percent);
+    const annualRate = safeNum(form.annual_interest_percent);
 
-    const weeklyInterestAmount = round2((principal * weeklyRate) / 100);
-    const totalInterestAuto = round2(weeklyInterestAmount * weeks);
+    const totalInterestAuto = round2((principal * annualRate) / 100);
+
+    const principalPerWeek = weeks ? round2(principal / weeks) : 0;
+    const interestPerWeek = weeks ? round2(totalInterestAuto / weeks) : 0;
+    const installmentPerWeek = weeks
+        ? round2((principal + totalInterestAuto) / weeks)
+        : 0;
 
     // ----------------------------
     // Schedule Preview
@@ -314,31 +326,30 @@ export default function CreateLoanDialog({open, onOpenChange}) {
         if (!weeks) return [];
         if (!principal) return [];
 
-        const principalPer = weeks ? principal / weeks : 0;
-        const interestPer = weeklyInterestAmount;
-
         const first = form.first_installment_date || todayISO();
         let bal = principal;
 
         const rows = [];
         for (let i = 0; i < weeks; i++) {
             const dueDate = addDaysISO(first, i * 7);
-            const p = principalPer;
-            const it = interestPer;
-            const total = p + it;
-            bal = Math.max(0, bal - p);
+
+            const p = principalPerWeek;
+            const it = interestPerWeek;
+            const total = round2(p + it);
+
+            bal = Math.max(0, round2(bal - p));
 
             rows.push({
                 inst_no: i + 1,
                 due_date: dueDate,
-                principal_due: round2(p),
-                interest_due: round2(it),
-                total_due: round2(total),
-                principal_balance: round2(bal),
+                principal_due: p,
+                interest_due: it,
+                total_due: total,
+                principal_balance: bal,
             });
         }
         return rows;
-    }, [weeks, principal, weeklyInterestAmount, form.first_installment_date]);
+    }, [weeks, principal, principalPerWeek, interestPerWeek, form.first_installment_date]);
 
     // ----------------------------
     // Submit
@@ -352,8 +363,8 @@ export default function CreateLoanDialog({open, onOpenChange}) {
             return toast({title: "Member is required", variant: "destructive"});
         if (!form.principal_amount)
             return toast({title: "Principal is required", variant: "destructive"});
-        if (!form.weekly_interest_percent)
-            return toast({title: "Weekly Interest (%) is required", variant: "destructive"});
+        if (!form.annual_interest_percent)
+            return toast({title: "Annual Interest (%) is required", variant: "destructive"});
 
         const payload = {
             loan_account_no: form.loan_account_no.trim(),
@@ -364,8 +375,14 @@ export default function CreateLoanDialog({open, onOpenChange}) {
             duration_weeks: Number(form.duration_weeks),
             principal_amount: Number(form.principal_amount),
 
-            // ✅ backend expects this
+            // ✅ backend expects this total interest amount
             flat_interest_total: Number(totalInterestAuto),
+
+            // (optional, but useful for audit)
+            annual_interest_percent: Number(form.annual_interest_percent),
+
+            // (optional, if backend wants it)
+            installment_amount: Number(installmentPerWeek),
         };
 
         try {
@@ -519,19 +536,19 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                         <Input value={form.principal_amount} onChange={set("principal_amount")} placeholder="10000"/>
                     </div>
 
-                    {/* Weekly Interest */}
+                    {/* ✅ Annual Interest (Simple Interest for 12 months) */}
                     <div className="space-y-2">
-                        <Label>Weekly Interest (%)</Label>
+                        <Label>Annual Interest (%)</Label>
                         <Input
-                            value={form.weekly_interest_percent}
-                            onChange={set("weekly_interest_percent")}
-                            placeholder="e.g. 2"
+                            value={form.annual_interest_percent}
+                            onChange={set("annual_interest_percent")}
+                            placeholder="e.g. 24"
                         />
                         <div className="text-xs text-muted-foreground">
-                            Weekly Interest Amount:{" "}
-                            <span className="font-medium text-foreground">{weeklyInterestAmount || 0}</span>
-                            {" "}· Total Interest (auto):{" "}
+                            Total Interest (12 months):{" "}
                             <span className="font-medium text-foreground">{totalInterestAuto || 0}</span>
+                            {" "}· Weekly Installment:{" "}
+                            <span className="font-medium text-foreground">{installmentPerWeek || 0}</span>
                         </div>
                     </div>
                 </div>
@@ -572,7 +589,7 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                             {scheduleRows.length === 0 ? (
                                 <tr>
                                     <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">
-                                        Enter Duration / Principal / Weekly Interest to preview schedule.
+                                        Enter Duration / Principal / Annual Interest to preview schedule.
                                     </td>
                                 </tr>
                             ) : (

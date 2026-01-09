@@ -9,7 +9,7 @@ import {
     UserCog,
     LayoutDashboard,
     Layers,
-    ChevronDown,
+    ChevronDown, Settings,
 } from "lucide-react";
 
 import {NavLink} from "@/Utils/NavLink.jsx";
@@ -180,6 +180,12 @@ const navigationItems = [
         icon: UserCog,
         allowedRoles: [ROLES.ADMIN, ROLES.SUPER_ADMIN],
     },
+    {
+        title: "System Settings",
+        url: "/dashboard/settings",
+        icon: Settings,
+        allowedRoles: [ROLES.ADMIN, ROLES.SUPER_ADMIN],
+    }
 ];
 
 export function AppSidebar() {

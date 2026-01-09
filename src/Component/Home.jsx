@@ -24,6 +24,8 @@ import StatementDownloadPage from "@/Component/Loan/Statement Download/Statement
 import LoanViewPage from "@/Component/Loan/Loan View/LoanViewPage.jsx";
 import LoanViewLandingPage from "@/Component/Loan/Loan View/LoanViewLandingPage.jsx";
 
+import SettingPage from "@/Component/Settings/Page.jsx";
+
 /* -------------------- Route meta for header -------------------- */
 const ROUTE_META = [
     {
@@ -115,6 +117,12 @@ const ROUTE_META = [
             {label: "Details"},
         ],
     },
+    {
+        pattern: "/dashboard/settings",
+        title: "System Settings",
+        subtitle: "Manage system settings",
+        breadcrumbs: [{label: "Home", to: "/dashboard"}, {label: "System Settings"}],
+    }
 ];
 
 function getRouteMeta(pathname) {
@@ -157,6 +165,8 @@ const NON_LOAN_OFFICER_ROLES = [
     ROLES.REGIONAL_MANAGER,
     ROLES.BRANCH_MANAGER,
 ];
+
+const SYSTEM_ROLES = [ROLES.ADMIN, ROLES.SUPER_ADMIN];
 
 function Guard({allowedRoles, role, children}) {
     if (!role) return <Navigate to="/login" replace/>;
@@ -324,6 +334,16 @@ export default function Home() {
                                 element={
                                     <Guard role={role} allowedRoles={USERS_MGMT_ROLES}>
                                         <UsersPage/>
+                                    </Guard>
+                                }
+                            />
+
+                            {/* System Settings */}
+                            <Route
+                                path="settings"
+                                element={
+                                    <Guard role={role} allowedRoles={SYSTEM_ROLES}>
+                                        <SettingPage/>
                                     </Guard>
                                 }
                             />
