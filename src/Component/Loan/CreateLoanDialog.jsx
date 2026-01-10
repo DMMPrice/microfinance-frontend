@@ -22,6 +22,7 @@ import {
 import {useCreateLoan} from "@/hooks/useLoans";
 import {apiClient} from "@/hooks/useApi.js";
 import {toast} from "@/components/ui/use-toast";
+import PreviewScheduleDialog from "./PreviewScheduleDialog";
 
 /* ---------------------------------------------------------
    ✅ Loan Account suggestions cache (LOAD ONCE + MEMORY)
@@ -83,6 +84,7 @@ function todayISO() {
 }
 
 function addDaysISO(isoDate, days) {
+    // isoDate is "YYYY-MM-DD" or compatible
     const d = new Date(isoDate);
     d.setDate(d.getDate() + days);
     return d.toISOString().slice(0, 10);
@@ -138,6 +140,10 @@ function extractApiError(err) {
     };
 }
 
+// Defaults until you add settings keys later
+const DEFAULT_PROCESSING_PCT = 1; // 1%
+const DEFAULT_INSURANCE_PCT = 0.5; // 0.5%
+
 export default function CreateLoanDialog({open, onOpenChange}) {
     const createLoan = useCreateLoan();
 
@@ -151,27 +157,99 @@ export default function CreateLoanDialog({open, onOpenChange}) {
             loan_account_no: "",
             group_id: "",
             member_id: "",
-            product_id: 1,
+            product_id: 1, // ✅ keep in payload, UI removed
             disburse_date: today,
-            first_installment_date: first,
-            duration_weeks: 12,
+            first_installment_date: first, // ✅ auto disburse+7
+            duration_weeks: 12, // ✅ will auto load from settings
             principal_amount: "",
-            // ✅ change meaning: now it's ANNUAL interest % (simple interest for 12 months)
             annual_interest_percent: "",
+
+            // ✅ new fee fields
+            processing_fee_percent: DEFAULT_PROCESSING_PCT,
+            insurance_fee_percent: DEFAULT_INSURANCE_PCT,
         };
     }, []);
 
     const [form, setForm] = useState(defaults);
-    const [showPreview, setShowPreview] = useState(false);
+
+    // Preview modal
+    const [previewOpen, setPreviewOpen] = useState(false);
 
     useEffect(() => {
         if (open) {
             setForm(defaults);
-            setShowPreview(false);
+            setPreviewOpen(false);
         }
     }, [open, defaults]);
 
     const set = (k) => (e) => setForm((p) => ({...p, [k]: e.target.value}));
+
+    // ----------------------------
+    // ✅ Auto: First installment = disburse + 7 days
+    // ----------------------------
+    useEffect(() => {
+        if (!open) return;
+        if (!form.disburse_date) return;
+
+        const next = addDaysISO(form.disburse_date, 7);
+        setForm((p) => ({...p, first_installment_date: next}));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [form.disburse_date, open]);
+
+    // ----------------------------
+    // ✅ Settings: duration from MAX_WEEK_SETTING
+    // ----------------------------
+    const [settingsLoading, setSettingsLoading] = useState(false);
+    const [settingsErr, setSettingsErr] = useState("");
+
+    useEffect(() => {
+        if (!open) return;
+        let cancelled = false;
+
+        (async () => {
+            setSettingsLoading(true);
+            setSettingsErr("");
+            try {
+                const res = await apiClient.get("/settings");
+                const list = Array.isArray(res.data) ? res.data : [];
+
+                const maxWeekRaw = list.find((x) => x.key === "MAX_WEEK_SETTING")?.value;
+                const maxWeek = Number(maxWeekRaw || 12);
+
+                // later you will create these keys
+                const procPctRaw = list.find((x) => x.key === "PROCESSING_FEES")?.value;
+                const insPctRaw = list.find((x) => x.key === "INSURANCE_FEES")?.value;
+
+                const procPct = Number(procPctRaw ?? DEFAULT_PROCESSING_PCT);
+                const insPct = Number(insPctRaw ?? DEFAULT_INSURANCE_PCT);
+
+                if (!cancelled) {
+                    setForm((p) => ({
+                        ...p,
+                        duration_weeks: Number.isFinite(maxWeek) && maxWeek > 0 ? maxWeek : 12,
+                        processing_fee_percent: Number.isFinite(procPct)
+                            ? procPct
+                            : DEFAULT_PROCESSING_PCT,
+                        insurance_fee_percent: Number.isFinite(insPct)
+                            ? insPct
+                            : DEFAULT_INSURANCE_PCT,
+                    }));
+                }
+            } catch (e) {
+                if (!cancelled) {
+                    setSettingsErr(
+                        e?.response?.data?.detail || e?.message || "Failed to load settings"
+                    );
+                }
+            } finally {
+                if (!cancelled) setSettingsLoading(false);
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [open]);
 
     // ----------------------------
     // ✅ Loan Account suggestions
@@ -193,9 +271,7 @@ export default function CreateLoanDialog({open, onOpenChange}) {
             } catch (e) {
                 if (!cancelled)
                     setLaErr(
-                        e?.response?.data?.detail ||
-                        e?.message ||
-                        "Failed to load loan accounts"
+                        e?.response?.data?.detail || e?.message || "Failed to load loan accounts"
                     );
             } finally {
                 if (!cancelled) setLaLoading(false);
@@ -304,8 +380,6 @@ export default function CreateLoanDialog({open, onOpenChange}) {
 
     // ----------------------------
     // ✅ Interest calculation (Simple Interest for 12 months)
-    // Interest = P * R * 1year
-    // Weekly installment = (P + Interest) / weeks
     // ----------------------------
     const principal = safeNum(form.principal_amount);
     const weeks = Math.max(0, safeNum(form.duration_weeks));
@@ -315,12 +389,21 @@ export default function CreateLoanDialog({open, onOpenChange}) {
 
     const principalPerWeek = weeks ? round2(principal / weeks) : 0;
     const interestPerWeek = weeks ? round2(totalInterestAuto / weeks) : 0;
-    const installmentPerWeek = weeks
-        ? round2((principal + totalInterestAuto) / weeks)
-        : 0;
+
+    const installmentPerWeek = weeks ? round2((principal + totalInterestAuto) / weeks) : 0;
 
     // ----------------------------
-    // Schedule Preview
+    // ✅ Fees (percent of principal) - only first installment
+    // ----------------------------
+    const processingPct = safeNum(form.processing_fee_percent);
+    const insurancePct = safeNum(form.insurance_fee_percent);
+
+    const processingFeeAmt = round2((principal * processingPct) / 100);
+    const insuranceFeeAmt = round2((principal * insurancePct) / 100);
+    const firstInstFees = round2(processingFeeAmt + insuranceFeeAmt);
+
+    // ----------------------------
+    // Schedule Preview rows (with fees on first installment only)
     // ----------------------------
     const scheduleRows = useMemo(() => {
         if (!weeks) return [];
@@ -335,7 +418,9 @@ export default function CreateLoanDialog({open, onOpenChange}) {
 
             const p = principalPerWeek;
             const it = interestPerWeek;
-            const total = round2(p + it);
+            const fees = i === 0 ? firstInstFees : 0;
+
+            const total = round2(p + it + fees);
 
             bal = Math.max(0, round2(bal - p));
 
@@ -344,12 +429,20 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                 due_date: dueDate,
                 principal_due: p,
                 interest_due: it,
+                fees_due: fees,
                 total_due: total,
                 principal_balance: bal,
             });
         }
         return rows;
-    }, [weeks, principal, principalPerWeek, interestPerWeek, form.first_installment_date]);
+    }, [
+        weeks,
+        principal,
+        principalPerWeek,
+        interestPerWeek,
+        form.first_installment_date,
+        firstInstFees,
+    ]);
 
     // ----------------------------
     // Submit
@@ -357,10 +450,8 @@ export default function CreateLoanDialog({open, onOpenChange}) {
     const onSubmit = async () => {
         if (!form.loan_account_no?.trim())
             return toast({title: "Loan A/C No is required", variant: "destructive"});
-        if (!form.group_id)
-            return toast({title: "Group is required", variant: "destructive"});
-        if (!form.member_id)
-            return toast({title: "Member is required", variant: "destructive"});
+        if (!form.group_id) return toast({title: "Group is required", variant: "destructive"});
+        if (!form.member_id) return toast({title: "Member is required", variant: "destructive"});
         if (!form.principal_amount)
             return toast({title: "Principal is required", variant: "destructive"});
         if (!form.annual_interest_percent)
@@ -369,27 +460,38 @@ export default function CreateLoanDialog({open, onOpenChange}) {
         const payload = {
             loan_account_no: form.loan_account_no.trim(),
             member_id: Number(form.member_id),
+
+            // ✅ keep product_id (UI removed)
             product_id: Number(form.product_id),
+
             disburse_date: form.disburse_date,
             first_installment_date: form.first_installment_date,
+
+            // ✅ auto from settings
             duration_weeks: Number(form.duration_weeks),
+
             principal_amount: Number(form.principal_amount),
 
             // ✅ backend expects this total interest amount
             flat_interest_total: Number(totalInterestAuto),
 
-            // (optional, but useful for audit)
+            // optional
             annual_interest_percent: Number(form.annual_interest_percent),
-
-            // (optional, if backend wants it)
             installment_amount: Number(installmentPerWeek),
+
+            // ✅ NEW: fees
+            processing_fee_percent: Number(processingPct),
+            insurance_fee_percent: Number(insurancePct),
+            processing_fee_amount: Number(processingFeeAmt),
+            insurance_fee_amount: Number(insuranceFeeAmt),
+            first_installment_extra_amount: Number(firstInstFees),
         };
 
         try {
             await createLoan.mutateAsync(payload);
             toast({title: "Loan created successfully ✅"});
 
-            // (Optional) update cache instantly so new loan appears in suggestions too
+            // Update cache instantly
             const newAcc = payload.loan_account_no;
             if (newAcc) {
                 const next = Array.from(new Set([...(loanAccountNos || []), newAcc])).sort((a, b) =>
@@ -400,11 +502,12 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                 try {
                     localStorage.setItem(LOAN_ACCOUNTS_LS_KEY, JSON.stringify(next));
                 } catch {
+                    // ignore
                 }
             }
 
             setForm(defaults);
-            setShowPreview(false);
+            setPreviewOpen(false);
             onOpenChange(false);
         } catch (err) {
             const {title, description} = extractApiError(err);
@@ -413,212 +516,231 @@ export default function CreateLoanDialog({open, onOpenChange}) {
     };
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-4xl">
-                <DialogHeader>
-                    <DialogTitle>Create Loan</DialogTitle>
-                </DialogHeader>
+        <>
+            <Dialog open={open} onOpenChange={onOpenChange}>
+                {/* ✅ ONLY SCROLLABLE MODAL (no sticky header/footer) */}
+                <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+                    <DialogHeader className="space-y-3">
+                        <DialogTitle>Create Loan</DialogTitle>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* ✅ Loan Account No with Google-like suggestions */}
-                    <div className="space-y-2">
-                        <Label>Loan Account No</Label>
+                        {/* ✅ Static/Auto fields placed right after header */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 rounded-lg border p-3 bg-muted/20">
+                            {/* Duration (auto from settings) */}
+                            <div className="space-y-1">
+                                <Label className="text-xs text-muted-foreground">Duration (weeks)</Label>
 
-                        {laLoading ? (
-                            <Skeleton className="h-10 w-full"/>
-                        ) : laErr ? (
-                            <div className="text-sm text-destructive">{laErr}</div>
-                        ) : (
-                            <>
-                                <Input
-                                    value={form.loan_account_no}
-                                    onChange={set("loan_account_no")}
-                                    placeholder="LN-0001"
-                                    list="loan-account-suggestions"
-                                    autoComplete="off"
-                                />
-                                <datalist id="loan-account-suggestions">
-                                    {(loanAccountNos || []).map((acc) => (
-                                        <option key={acc} value={acc}/>
-                                    ))}
-                                </datalist>
-                            </>
-                        )}
-                    </div>
-
-                    {/* Group */}
-                    <div className="space-y-2">
-                        <Label>Group</Label>
-                        {gLoading ? (
-                            <Skeleton className="h-10 w-full"/>
-                        ) : gErr ? (
-                            <div className="text-sm text-destructive">{gErr}</div>
-                        ) : (
-                            <Select
-                                value={form.group_id ? String(form.group_id) : ""}
-                                onValueChange={(v) => setForm((p) => ({...p, group_id: v}))}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select Group"/>
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {(groups || []).map((g) => (
-                                        <SelectItem key={g.group_id} value={String(g.group_id)}>
-                                            {g.group_name} (G-{g.group_id})
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        )}
-                    </div>
-
-                    {/* Member */}
-                    <div className="space-y-2">
-                        <Label>Member</Label>
-                        {mLoading ? (
-                            <Skeleton className="h-10 w-full"/>
-                        ) : mErr ? (
-                            <div className="text-sm text-destructive">{mErr}</div>
-                        ) : (
-                            <Select
-                                value={form.member_id ? String(form.member_id) : ""}
-                                onValueChange={(v) => setForm((p) => ({...p, member_id: v}))}
-                                disabled={!form.group_id}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue
-                                        placeholder={form.group_id ? "Select Member" : "Select Group first"}
-                                    />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {memberOptions.length === 0 ? (
-                                        <div className="px-3 py-2 text-sm text-muted-foreground">
-                                            No members found for this group
+                                {settingsLoading ? (
+                                    <Skeleton className="h-10 w-full"/>
+                                ) : (
+                                    <>
+                                        <Input value={form.duration_weeks} disabled/>
+                                        <div className="text-[11px] text-muted-foreground">
+                                            Auto from system settings (MAX_WEEK_SETTING)
                                         </div>
-                                    ) : (
-                                        memberOptions.map((o) => (
-                                            <SelectItem key={o.value} value={o.value}>
-                                                {o.label}
+                                    </>
+                                )}
+                            </div>
+
+                            {/* First Installment Date (auto +7 days) */}
+                            <div className="space-y-1">
+                                <Label className="text-xs text-muted-foreground">First Installment Date</Label>
+                                <Input type="date" value={form.first_installment_date} disabled/>
+                                <div className="text-[11px] text-muted-foreground">
+                                    Auto: Disburse date + 7 days
+                                </div>
+                            </div>
+                        </div>
+                    </DialogHeader>
+
+                    {/* Settings warning (optional) */}
+                    {settingsErr ? <div className="text-sm text-destructive">{settingsErr}</div> : null}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* ✅ Loan Account No suggestions */}
+                        <div className="space-y-2">
+                            <Label>Loan Account No</Label>
+
+                            {laLoading ? (
+                                <Skeleton className="h-10 w-full"/>
+                            ) : laErr ? (
+                                <div className="text-sm text-destructive">{laErr}</div>
+                            ) : (
+                                <>
+                                    <Input
+                                        value={form.loan_account_no}
+                                        onChange={set("loan_account_no")}
+                                        placeholder="LN-0001"
+                                        list="loan-account-suggestions"
+                                        autoComplete="off"
+                                    />
+                                    <datalist id="loan-account-suggestions">
+                                        {(loanAccountNos || []).map((acc) => (
+                                            <option key={acc} value={acc}/>
+                                        ))}
+                                    </datalist>
+                                </>
+                            )}
+                        </div>
+
+                        {/* Group */}
+                        <div className="space-y-2">
+                            <Label>Group</Label>
+                            {gLoading ? (
+                                <Skeleton className="h-10 w-full"/>
+                            ) : gErr ? (
+                                <div className="text-sm text-destructive">{gErr}</div>
+                            ) : (
+                                <Select
+                                    value={form.group_id ? String(form.group_id) : ""}
+                                    onValueChange={(v) => setForm((p) => ({...p, group_id: v}))}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select Group"/>
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {(groups || []).map((g) => (
+                                            <SelectItem key={g.group_id} value={String(g.group_id)}>
+                                                {g.group_name} (G-{g.group_id})
                                             </SelectItem>
-                                        ))
-                                    )}
-                                </SelectContent>
-                            </Select>
-                        )}
-                    </div>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
+                        </div>
 
-                    <div className="space-y-2">
-                        <Label>Product ID</Label>
-                        <Input value={form.product_id} onChange={set("product_id")} placeholder="1"/>
-                    </div>
+                        {/* Member */}
+                        <div className="space-y-2">
+                            <Label>Member</Label>
+                            {mLoading ? (
+                                <Skeleton className="h-10 w-full"/>
+                            ) : mErr ? (
+                                <div className="text-sm text-destructive">{mErr}</div>
+                            ) : (
+                                <Select
+                                    value={form.member_id ? String(form.member_id) : ""}
+                                    onValueChange={(v) => setForm((p) => ({...p, member_id: v}))}
+                                    disabled={!form.group_id}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue
+                                            placeholder={form.group_id ? "Select Member" : "Select Group first"}
+                                        />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {memberOptions.length === 0 ? (
+                                            <div className="px-3 py-2 text-sm text-muted-foreground">
+                                                No members found for this group
+                                            </div>
+                                        ) : (
+                                            memberOptions.map((o) => (
+                                                <SelectItem key={o.value} value={o.value}>
+                                                    {o.label}
+                                                </SelectItem>
+                                            ))
+                                        )}
+                                    </SelectContent>
+                                </Select>
+                            )}
+                        </div>
 
-                    <div className="space-y-2">
-                        <Label>Duration (weeks)</Label>
-                        <Input value={form.duration_weeks} onChange={set("duration_weeks")} placeholder="12"/>
-                    </div>
+                        {/* Disburse Date */}
+                        <div className="space-y-2">
+                            <Label>Disburse Date</Label>
+                            <Input type="date" value={form.disburse_date} onChange={set("disburse_date")}/>
+                        </div>
 
-                    <div className="space-y-2">
-                        <Label>Disburse Date</Label>
-                        <Input type="date" value={form.disburse_date} onChange={set("disburse_date")}/>
-                    </div>
+                        {/* Principal */}
+                        <div className="space-y-2">
+                            <Label>Principal Amount</Label>
+                            <Input
+                                value={form.principal_amount}
+                                onChange={set("principal_amount")}
+                                placeholder="10000"
+                            />
+                        </div>
 
-                    <div className="space-y-2">
-                        <Label>First Installment Date</Label>
-                        <Input
-                            type="date"
-                            value={form.first_installment_date}
-                            onChange={set("first_installment_date")}
-                        />
-                    </div>
+                        {/* Annual Interest */}
+                        <div className="space-y-2">
+                            <Label>Annual Interest (%)</Label>
+                            <Input
+                                value={form.annual_interest_percent}
+                                onChange={set("annual_interest_percent")}
+                                placeholder="e.g. 24"
+                            />
+                            <div className="text-xs text-muted-foreground">
+                                Total Interest (12 months):{" "}
+                                <span className="font-medium text-foreground">{totalInterestAuto || 0}</span>{" "}
+                                · Weekly Installment:{" "}
+                                <span className="font-medium text-foreground">{installmentPerWeek || 0}</span>
+                            </div>
+                        </div>
 
-                    <div className="space-y-2">
-                        <Label>Principal Amount</Label>
-                        <Input value={form.principal_amount} onChange={set("principal_amount")} placeholder="10000"/>
-                    </div>
+                        {/* Processing Fees */}
+                        <div className="space-y-2">
+                            <Label>Processing Fees (%)</Label>
+                            <Input
+                                value={form.processing_fee_percent}
+                                onChange={set("processing_fee_percent")}
+                                placeholder="e.g. 1"
+                            />
+                            <div className="text-xs text-muted-foreground">
+                                Amount: <span className="font-medium text-foreground">{processingFeeAmt}</span>
+                            </div>
+                        </div>
 
-                    {/* ✅ Annual Interest (Simple Interest for 12 months) */}
-                    <div className="space-y-2">
-                        <Label>Annual Interest (%)</Label>
-                        <Input
-                            value={form.annual_interest_percent}
-                            onChange={set("annual_interest_percent")}
-                            placeholder="e.g. 24"
-                        />
-                        <div className="text-xs text-muted-foreground">
-                            Total Interest (12 months):{" "}
-                            <span className="font-medium text-foreground">{totalInterestAuto || 0}</span>
-                            {" "}· Weekly Installment:{" "}
-                            <span className="font-medium text-foreground">{installmentPerWeek || 0}</span>
+                        {/* Insurance Fees */}
+                        <div className="space-y-2">
+                            <Label>Insurance Fees (%)</Label>
+                            <Input
+                                value={form.insurance_fee_percent}
+                                onChange={set("insurance_fee_percent")}
+                                placeholder="e.g. 0.5"
+                            />
+                            <div className="text-xs text-muted-foreground">
+                                Amount: <span className="font-medium text-foreground">{insuranceFeeAmt}</span>
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                {/* Preview */}
-                <div className="mt-4 flex items-center justify-between gap-2">
-                    <div className="text-sm text-muted-foreground">
-                        Preview schedule from{" "}
-                        <span className="font-medium text-foreground">
-              {form.first_installment_date || "-"}
-            </span>
+                    {/* Preview */}
+                    <div className="mt-4 flex items-center justify-between gap-2">
+                        <div className="text-sm text-muted-foreground">
+                            Preview schedule from{" "}
+                            <span className="font-medium text-foreground">
+                {form.first_installment_date || "-"}
+              </span>{" "}
+                            · 1st installment includes fees:{" "}
+                            <span className="font-medium text-foreground">{firstInstFees}</span>
+                        </div>
+
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setPreviewOpen(true)}
+                            disabled={!weeks || !principal || !form.first_installment_date}
+                        >
+                            Preview Schedule
+                        </Button>
                     </div>
 
-                    <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setShowPreview((s) => !s)}
-                        disabled={!weeks || !principal || !form.first_installment_date}
-                    >
-                        {showPreview ? "Hide Preview" : "Preview Schedule"}
-                    </Button>
-                </div>
+                    <DialogFooter className="gap-2">
+                        <Button variant="outline" onClick={() => onOpenChange(false)}>
+                            Cancel
+                        </Button>
 
-                {showPreview ? (
-                    <div className="mt-3 rounded-lg border overflow-auto max-h-[260px]">
-                        <table className="w-full text-sm">
-                            <thead className="bg-muted/40 sticky top-0">
-                            <tr>
-                                <th className="px-3 py-2 text-center whitespace-nowrap">Inst #</th>
-                                <th className="px-3 py-2 text-center whitespace-nowrap">Due Date</th>
-                                <th className="px-3 py-2 text-right whitespace-nowrap">Principal</th>
-                                <th className="px-3 py-2 text-right whitespace-nowrap">Interest</th>
-                                <th className="px-3 py-2 text-right whitespace-nowrap">Total</th>
-                                <th className="px-3 py-2 text-right whitespace-nowrap">Balance</th>
-                            </tr>
-                            </thead>
-                            <tbody>
-                            {scheduleRows.length === 0 ? (
-                                <tr>
-                                    <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">
-                                        Enter Duration / Principal / Annual Interest to preview schedule.
-                                    </td>
-                                </tr>
-                            ) : (
-                                scheduleRows.map((x) => (
-                                    <tr key={x.inst_no} className="border-t">
-                                        <td className="px-3 py-2 text-center">{x.inst_no}</td>
-                                        <td className="px-3 py-2 text-center">{x.due_date}</td>
-                                        <td className="px-3 py-2 text-right">{x.principal_due.toFixed(2)}</td>
-                                        <td className="px-3 py-2 text-right">{x.interest_due.toFixed(2)}</td>
-                                        <td className="px-3 py-2 text-right font-medium">{x.total_due.toFixed(2)}</td>
-                                        <td className="px-3 py-2 text-right">{x.principal_balance.toFixed(2)}</td>
-                                    </tr>
-                                ))
-                            )}
-                            </tbody>
-                        </table>
-                    </div>
-                ) : null}
+                        <Button onClick={onSubmit} disabled={createLoan.isPending}>
+                            {createLoan.isPending ? "Creating..." : "Create Loan"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
-                <DialogFooter className="gap-2">
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>
-                        Cancel
-                    </Button>
-
-                    <Button onClick={onSubmit} disabled={createLoan.isPending}>
-                        {createLoan.isPending ? "Creating..." : "Create Loan"}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+            {/* ✅ Separate modal for preview */}
+            <PreviewScheduleDialog
+                open={previewOpen}
+                onOpenChange={setPreviewOpen}
+                scheduleRows={scheduleRows}
+            />
+        </>
     );
 }
