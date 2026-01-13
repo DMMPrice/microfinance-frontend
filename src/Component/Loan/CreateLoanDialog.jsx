@@ -24,19 +24,25 @@ import {apiClient} from "@/hooks/useApi.js";
 import {toast} from "@/components/ui/use-toast";
 import PreviewScheduleDialog from "./PreviewScheduleDialog";
 
+import {
+    todayISO,
+    addDaysISO,
+    safeNum,
+    round2,
+    computeLoanNumbers,
+} from "./Loan Dashboard/loanCalc.js";
+
 /* ---------------------------------------------------------
    ✅ Loan Account suggestions cache (LOAD ONCE + MEMORY)
 --------------------------------------------------------- */
-let LOAN_ACCOUNTS_CACHE = null; // in-memory cache (module-level)
+let LOAN_ACCOUNTS_CACHE = null;
 const LOAN_ACCOUNTS_LS_KEY = "mf.loanAccountNos.v1";
 
 async function getLoanAccountNosOnce() {
-    // 1) in-memory cache
     if (Array.isArray(LOAN_ACCOUNTS_CACHE) && LOAN_ACCOUNTS_CACHE.length) {
         return LOAN_ACCOUNTS_CACHE;
     }
 
-    // 2) localStorage cache
     try {
         const raw = localStorage.getItem(LOAN_ACCOUNTS_LS_KEY);
         if (raw) {
@@ -46,17 +52,11 @@ async function getLoanAccountNosOnce() {
                 return parsed;
             }
         }
-    } catch {
-        // ignore storage errors
-    }
+    } catch {}
 
-    // 3) fetch once
-    const res = await apiClient.get("/loans/master", {
-        params: {limit: 5000, offset: 0},
-    });
+    const res = await apiClient.get("/loans/master", {params: {limit: 5000, offset: 0}});
     const list = Array.isArray(res.data) ? res.data : [];
 
-    // Extract unique loan_account_no
     const uniq = Array.from(
         new Set(
             list
@@ -67,35 +67,11 @@ async function getLoanAccountNosOnce() {
 
     LOAN_ACCOUNTS_CACHE = uniq;
 
-    // save to localStorage
     try {
         localStorage.setItem(LOAN_ACCOUNTS_LS_KEY, JSON.stringify(uniq));
-    } catch {
-        // ignore storage errors
-    }
+    } catch {}
 
     return uniq;
-}
-
-/* --------------------------------------------------------- */
-
-function todayISO() {
-    return new Date().toISOString().slice(0, 10);
-}
-
-function addDaysISO(isoDate, days) {
-    const d = new Date(isoDate);
-    d.setDate(d.getDate() + days);
-    return d.toISOString().slice(0, 10);
-}
-
-function safeNum(v) {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : 0;
-}
-
-function round2(n) {
-    return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 }
 
 /**
@@ -106,10 +82,7 @@ function extractApiError(err) {
     const data = err?.response?.data;
 
     if (!err?.response) {
-        return {
-            title: "Network error",
-            description: err?.message || "Unable to reach server.",
-        };
+        return {title: "Network error", description: err?.message || "Unable to reach server."};
     }
 
     const detail = data?.detail ?? data;
@@ -118,10 +91,7 @@ function extractApiError(err) {
         const first = detail[0];
         const loc = Array.isArray(first?.loc) ? first.loc.join(" → ") : "Validation";
         const msg = first?.msg || "Invalid input";
-        return {
-            title: "Validation error",
-            description: `${loc}: ${msg}`,
-        };
+        return {title: "Validation error", description: `${loc}: ${msg}`};
     }
 
     if (typeof detail === "string") {
@@ -133,45 +103,39 @@ function extractApiError(err) {
         return {title: "Request failed", description: JSON.stringify(detail)};
     }
 
-    return {
-        title: "Request failed",
-        description: err?.message || "Something went wrong.",
-    };
+    return {title: "Request failed", description: err?.message || "Something went wrong."};
 }
 
-// Local defaults (only if /settings missing)
-const DEFAULT_PROCESSING_PCT = 1; // 1%
-const DEFAULT_INSURANCE_PCT = 0.5; // 0.5%
+// Defaults if /settings missing
+const DEFAULT_PROCESSING_PCT = 1;
+const DEFAULT_INSURANCE_PCT = 0.5;
+const DEFAULT_BOOK_PRICE = 0;
 
 export default function CreateLoanDialog({open, onOpenChange}) {
     const createLoan = useCreateLoan();
 
-    // ----------------------------
-    // Defaults
-    // ----------------------------
     const defaults = useMemo(() => {
         const today = todayISO();
-        const first = addDaysISO(today, 7);
         return {
             loan_account_no: "",
             group_id: "",
             member_id: "",
             product_id: 1,
             disburse_date: today,
-            first_installment_date: first,
+            first_installment_date: addDaysISO(today, 7),
             duration_weeks: 12,
             principal_amount: "",
+
+            // from settings (TOTAL % for duration)
             annual_interest_percent: "",
 
-            // ✅ fee percents will be overwritten from /settings
             processing_fee_percent: DEFAULT_PROCESSING_PCT,
             insurance_fee_percent: DEFAULT_INSURANCE_PCT,
+            book_price_amount: DEFAULT_BOOK_PRICE,
         };
     }, []);
 
     const [form, setForm] = useState(defaults);
-
-    // Preview modal
     const [previewOpen, setPreviewOpen] = useState(false);
 
     useEffect(() => {
@@ -183,25 +147,15 @@ export default function CreateLoanDialog({open, onOpenChange}) {
 
     const set = (k) => (e) => setForm((p) => ({...p, [k]: e.target.value}));
 
-    // ----------------------------
-    // ✅ Auto: First installment = disburse + 7 days
-    // ----------------------------
+    // Auto first installment = disburse + 7 days
     useEffect(() => {
         if (!open) return;
         if (!form.disburse_date) return;
-
-        const next = addDaysISO(form.disburse_date, 7);
-        setForm((p) => ({...p, first_installment_date: next}));
+        setForm((p) => ({...p, first_installment_date: addDaysISO(form.disburse_date, 7)}));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [form.disburse_date, open]);
 
-    // ----------------------------
-    // ✅ Settings: duration + fees from /settings
-    // Keys:
-    // - MAX_WEEK_SETTING
-    // - PROCESSING_FEES
-    // - INSURANCE_FEES
-    // ----------------------------
+    // Settings fetch
     const [settingsLoading, setSettingsLoading] = useState(false);
     const [settingsErr, setSettingsErr] = useState("");
 
@@ -221,6 +175,9 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                 const maxWeek = Number(getVal("MAX_WEEK_SETTING") ?? 12);
                 const procPct = Number(getVal("PROCESSING_FEES") ?? DEFAULT_PROCESSING_PCT);
                 const insPct = Number(getVal("INSURANCE_FEES") ?? DEFAULT_INSURANCE_PCT);
+                const bookAmt = Number(getVal("BOOK_PRICE") ?? DEFAULT_BOOK_PRICE);
+
+                const interestPct = Number(getVal("INTEREST_RATE"));
 
                 if (!cancelled) {
                     setForm((p) => ({
@@ -228,14 +185,12 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                         duration_weeks: Number.isFinite(maxWeek) && maxWeek > 0 ? maxWeek : 12,
                         processing_fee_percent: Number.isFinite(procPct) ? procPct : DEFAULT_PROCESSING_PCT,
                         insurance_fee_percent: Number.isFinite(insPct) ? insPct : DEFAULT_INSURANCE_PCT,
+                        book_price_amount: Number.isFinite(bookAmt) ? bookAmt : DEFAULT_BOOK_PRICE,
+                        annual_interest_percent: Number.isFinite(interestPct) ? String(interestPct) : "",
                     }));
                 }
             } catch (e) {
-                if (!cancelled) {
-                    setSettingsErr(
-                        e?.response?.data?.detail || e?.message || "Failed to load settings"
-                    );
-                }
+                if (!cancelled) setSettingsErr(e?.response?.data?.detail || e?.message || "Failed to load settings");
             } finally {
                 if (!cancelled) setSettingsLoading(false);
             }
@@ -246,9 +201,7 @@ export default function CreateLoanDialog({open, onOpenChange}) {
         };
     }, [open]);
 
-    // ----------------------------
-    // ✅ Loan Account suggestions
-    // ----------------------------
+    // Loan A/C suggestions
     const [loanAccountNos, setLoanAccountNos] = useState([]);
     const [laLoading, setLaLoading] = useState(false);
     const [laErr, setLaErr] = useState("");
@@ -264,10 +217,7 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                 const list = await getLoanAccountNosOnce();
                 if (!cancelled) setLoanAccountNos(Array.isArray(list) ? list : []);
             } catch (e) {
-                if (!cancelled)
-                    setLaErr(
-                        e?.response?.data?.detail || e?.message || "Failed to load loan accounts"
-                    );
+                if (!cancelled) setLaErr(e?.response?.data?.detail || e?.message || "Failed to load loan accounts");
             } finally {
                 if (!cancelled) setLaLoading(false);
             }
@@ -278,12 +228,9 @@ export default function CreateLoanDialog({open, onOpenChange}) {
         };
     }, [open]);
 
-    // ----------------------------
-    // Load Groups + Members
-    // ----------------------------
+    // Groups + Members
     const [groups, setGroups] = useState([]);
     const [members, setMembers] = useState([]);
-
     const [gLoading, setGLoading] = useState(false);
     const [mLoading, setMLoading] = useState(false);
     const [gErr, setGErr] = useState("");
@@ -300,8 +247,7 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                 const res = await apiClient.get("/groups/");
                 if (!cancelled) setGroups(Array.isArray(res.data) ? res.data : []);
             } catch (e) {
-                if (!cancelled)
-                    setGErr(e?.response?.data?.detail || e.message || "Failed to load groups");
+                if (!cancelled) setGErr(e?.response?.data?.detail || e?.message || "Failed to load groups");
             } finally {
                 if (!cancelled) setGLoading(false);
             }
@@ -319,8 +265,7 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                 }
                 if (!cancelled) setMembers(Array.isArray(res.data) ? res.data : []);
             } catch (e) {
-                if (!cancelled)
-                    setMErr(e?.response?.data?.detail || e.message || "Failed to load Members");
+                if (!cancelled) setMErr(e?.response?.data?.detail || e?.message || "Failed to load Members");
             } finally {
                 if (!cancelled) setMLoading(false);
             }
@@ -344,18 +289,15 @@ export default function CreateLoanDialog({open, onOpenChange}) {
 
     const memberOptions = useMemo(() => {
         const gid = form.group_id ? String(form.group_id) : "";
-        const list = (members || []).filter((m) => {
-            if (!gid) return true;
-            return String(m.group_id) === gid;
-        });
+        const list = (members || []).filter((m) => (!gid ? true : String(m.group_id) === gid));
 
-        const key = (m) => {
+        const sortKey = (m) => {
             const gName = (groupNameById[String(m.group_id)] || "").toLowerCase();
             const name = (m.full_name || "").toLowerCase();
             return `${gName}__${name}`;
         };
 
-        list.sort((a, b) => key(a).localeCompare(key(b)));
+        list.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
 
         return list.map((m) => {
             const gName = groupNameById[String(m.group_id)] || `Group-${m.group_id}`;
@@ -373,75 +315,30 @@ export default function CreateLoanDialog({open, onOpenChange}) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [form.group_id]);
 
-    // ----------------------------
-    // ✅ Interest calculation (Simple Interest for 12 months)
-    // ----------------------------
+    // ✅ All math via helper
+    const weeks = safeNum(form.duration_weeks);
     const principal = safeNum(form.principal_amount);
-    const weeks = Math.max(0, safeNum(form.duration_weeks));
-    const annualRate = safeNum(form.annual_interest_percent);
 
-    const totalInterestAuto = round2((principal * annualRate) / 100);
-
-    const principalPerWeek = weeks ? round2(principal / weeks) : 0;
-    const interestPerWeek = weeks ? round2(totalInterestAuto / weeks) : 0;
-
-    const installmentPerWeek = weeks ? round2((principal + totalInterestAuto) / weeks) : 0;
-
-    // ----------------------------
-    // ✅ Fees (percent of principal) - only first installment
-    // ----------------------------
-    const processingPct = safeNum(form.processing_fee_percent);
-    const insurancePct = safeNum(form.insurance_fee_percent);
-
-    const processingFeeAmt = round2((principal * processingPct) / 100);
-    const insuranceFeeAmt = round2((principal * insurancePct) / 100);
-    const firstInstFees = round2(processingFeeAmt + insuranceFeeAmt);
-
-    // ----------------------------
-    // Schedule Preview rows (with fees on first installment only)
-    // ----------------------------
-    const scheduleRows = useMemo(() => {
-        if (!weeks) return [];
-        if (!principal) return [];
-
-        const first = form.first_installment_date || todayISO();
-        let bal = principal;
-
-        const rows = [];
-        for (let i = 0; i < weeks; i++) {
-            const dueDate = addDaysISO(first, i * 7);
-
-            const p = principalPerWeek;
-            const it = interestPerWeek;
-            const fees = i === 0 ? firstInstFees : 0;
-
-            const total = round2(p + it + fees);
-
-            bal = Math.max(0, round2(bal - p));
-
-            rows.push({
-                inst_no: i + 1,
-                due_date: dueDate,
-                principal_due: p,
-                interest_due: it,
-                fees_due: fees,
-                total_due: total,
-                principal_balance: bal,
-            });
-        }
-        return rows;
+    const calc = useMemo(() => {
+        return computeLoanNumbers({
+            principal,
+            weeks,
+            totalInterestPercent: safeNum(form.annual_interest_percent),
+            processingPct: safeNum(form.processing_fee_percent),
+            insurancePct: safeNum(form.insurance_fee_percent),
+            bookPriceAmt: safeNum(form.book_price_amount),
+            firstInstallmentDate: form.first_installment_date,
+        });
     }, [
-        weeks,
         principal,
-        principalPerWeek,
-        interestPerWeek,
+        weeks,
+        form.annual_interest_percent,
+        form.processing_fee_percent,
+        form.insurance_fee_percent,
+        form.book_price_amount,
         form.first_installment_date,
-        firstInstFees,
     ]);
 
-    // ----------------------------
-    // Submit
-    // ----------------------------
     const onSubmit = async () => {
         if (!form.loan_account_no?.trim())
             return toast({title: "Loan A/C No is required", variant: "destructive"});
@@ -449,8 +346,12 @@ export default function CreateLoanDialog({open, onOpenChange}) {
         if (!form.member_id) return toast({title: "Member is required", variant: "destructive"});
         if (!form.principal_amount)
             return toast({title: "Principal is required", variant: "destructive"});
-        if (!form.annual_interest_percent)
-            return toast({title: "Annual Interest (%) is required", variant: "destructive"});
+        if (!String(form.annual_interest_percent || "").trim())
+            return toast({
+                title: "Interest rate not loaded",
+                description: "Please set INTEREST_RATE in System Settings.",
+                variant: "destructive",
+            });
 
         const payload = {
             loan_account_no: form.loan_account_no.trim(),
@@ -462,24 +363,28 @@ export default function CreateLoanDialog({open, onOpenChange}) {
             duration_weeks: Number(form.duration_weeks),
 
             principal_amount: Number(form.principal_amount),
-            flat_interest_total: Number(totalInterestAuto),
 
-            annual_interest_percent: Number(form.annual_interest_percent),
-            installment_amount: Number(installmentPerWeek),
+            // ✅ total interest amount derived from TOTAL % for duration
+            flat_interest_total: Number(calc.totalInterestAmount),
 
-            // ✅ fees (from settings; not editable)
-            processing_fee_percent: Number(processingPct),
-            insurance_fee_percent: Number(insurancePct),
-            processing_fee_amount: Number(processingFeeAmt),
-            insurance_fee_amount: Number(insuranceFeeAmt),
-            first_installment_extra_amount: Number(firstInstFees),
+            // ✅ keep backend field name, meaning = TOTAL % for duration
+            annual_interest_percent: Number(calc.totalInterestPercent),
+
+            installment_amount: Number(calc.installmentPerWeek),
+
+            processing_fee_percent: Number(form.processing_fee_percent),
+            insurance_fee_percent: Number(form.insurance_fee_percent),
+            processing_fee_amount: Number(calc.processingFeeAmt),
+            insurance_fee_amount: Number(calc.insuranceFeeAmt),
+
+            book_price_amount: Number(calc.bookPriceAmt),
+            first_installment_extra_amount: Number(calc.firstInstallmentExtra),
         };
 
         try {
             await createLoan.mutateAsync(payload);
             toast({title: "Loan created successfully ✅"});
 
-            // Update cache instantly
             const newAcc = payload.loan_account_no;
             if (newAcc) {
                 const next = Array.from(new Set([...(loanAccountNos || []), newAcc])).sort((a, b) =>
@@ -489,9 +394,7 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                 setLoanAccountNos(next);
                 try {
                     localStorage.setItem(LOAN_ACCOUNTS_LS_KEY, JSON.stringify(next));
-                } catch {
-                    // ignore
-                }
+                } catch {}
             }
 
             setForm(defaults);
@@ -506,77 +409,62 @@ export default function CreateLoanDialog({open, onOpenChange}) {
     return (
         <>
             <Dialog open={open} onOpenChange={onOpenChange}>
-                {/* ✅ ONLY SCROLLABLE MODAL (no sticky header/footer) */}
                 <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
-                    <DialogHeader className="space-y-3">
+                    <DialogHeader className="space-y-2">
                         <DialogTitle>Create Loan</DialogTitle>
 
-                        {/* ✅ Static/Auto fields placed right after header */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 rounded-lg border p-3 bg-muted/20">
-                            {/* Duration (auto from settings) */}
-                            <div className="space-y-1">
-                                <Label className="text-xs text-muted-foreground">Duration (weeks)</Label>
-                                {settingsLoading ? (
-                                    <Skeleton className="h-10 w-full"/>
-                                ) : (
-                                    <>
-                                        <Input value={form.duration_weeks} disabled/>
-                                        <div className="text-[11px] text-muted-foreground">
-                                            Auto from system settings (MAX_WEEK_SETTING)
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-
-                            {/* First Installment Date (auto +7 days) */}
-                            <div className="space-y-1">
-                                <Label className="text-xs text-muted-foreground">First Installment Date</Label>
-                                <Input type="date" value={form.first_installment_date} disabled/>
-                                <div className="text-[11px] text-muted-foreground">
-                                    Auto: Disburse date + 7 days
+                        {/* compact strip */}
+                        <div className="rounded-xl border bg-muted/20 px-3 py-2">
+                            {settingsLoading ? (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                                    <Skeleton className="h-9 w-full" />
+                                    <Skeleton className="h-9 w-full" />
+                                    <Skeleton className="h-9 w-full" />
+                                    <Skeleton className="h-9 w-full" />
                                 </div>
-                            </div>
+                            ) : (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                                    <div className="rounded-lg bg-background border px-3 py-2">
+                                        <div className="text-[11px] text-muted-foreground">Duration (weeks)</div>
+                                        <div className="text-sm font-medium">{form.duration_weeks}</div>
+                                        <div className="text-[10px] text-muted-foreground">MAX_WEEK_SETTING</div>
+                                    </div>
 
-                            {/* ✅ Processing Fees (auto from settings) */}
-                            <div className="space-y-1">
-                                <Label className="text-xs text-muted-foreground">Processing Fees (%)</Label>
-                                {settingsLoading ? (
-                                    <Skeleton className="h-10 w-full"/>
-                                ) : (
-                                    <>
-                                        <Input value={form.processing_fee_percent} disabled/>
-                                        <div className="text-[11px] text-muted-foreground">
-                                            Auto from system settings (PROCESSING_FEES)
+                                    <div className="rounded-lg bg-background border px-3 py-2">
+                                        <div className="text-[11px] text-muted-foreground">Interest Rate (total %)</div>
+                                        <div className="text-sm font-medium">{form.annual_interest_percent || "-"}</div>
+                                        <div className="text-[10px] text-muted-foreground">
+                                            weekly: {calc.weeklyInterestPercent || 0}%
                                         </div>
-                                    </>
-                                )}
-                            </div>
+                                    </div>
 
-                            {/* ✅ Insurance Fees (auto from settings) */}
-                            <div className="space-y-1">
-                                <Label className="text-xs text-muted-foreground">Insurance Fees (%)</Label>
-                                {settingsLoading ? (
-                                    <Skeleton className="h-10 w-full"/>
-                                ) : (
-                                    <>
-                                        <Input value={form.insurance_fee_percent} disabled/>
-                                        <div className="text-[11px] text-muted-foreground">
-                                            Auto from system settings (INSURANCE_FEES)
+                                    <div className="rounded-lg bg-background border px-3 py-2">
+                                        <div className="text-[11px] text-muted-foreground">1st Installment</div>
+                                        <div className="text-sm font-medium">{form.first_installment_date}</div>
+                                        <div className="text-[10px] text-muted-foreground">Disburse + 7 days</div>
+                                    </div>
+
+                                    <div className="rounded-lg bg-background border px-3 py-2">
+                                        <div className="text-[11px] text-muted-foreground">Fees (% + ₹)</div>
+                                        <div className="text-sm font-medium">
+                                            {form.processing_fee_percent}% · {form.insurance_fee_percent}% · ₹{form.book_price_amount}
                                         </div>
-                                    </>
-                                )}
-                            </div>
+                                        <div className="text-[10px] text-muted-foreground">
+                                            PROCESSING_FEES · INSURANCE_FEES · BOOK_PRICE
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </DialogHeader>
 
                     {settingsErr ? <div className="text-sm text-destructive">{settingsErr}</div> : null}
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {/* Loan Account No */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
                         <div className="space-y-2">
                             <Label>Loan Account No</Label>
                             {laLoading ? (
-                                <Skeleton className="h-10 w-full"/>
+                                <Skeleton className="h-10 w-full" />
                             ) : laErr ? (
                                 <div className="text-sm text-destructive">{laErr}</div>
                             ) : (
@@ -590,18 +478,17 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                                     />
                                     <datalist id="loan-account-suggestions">
                                         {(loanAccountNos || []).map((acc) => (
-                                            <option key={acc} value={acc}/>
+                                            <option key={acc} value={acc} />
                                         ))}
                                     </datalist>
                                 </>
                             )}
                         </div>
 
-                        {/* Group */}
                         <div className="space-y-2">
                             <Label>Group</Label>
                             {gLoading ? (
-                                <Skeleton className="h-10 w-full"/>
+                                <Skeleton className="h-10 w-full" />
                             ) : gErr ? (
                                 <div className="text-sm text-destructive">{gErr}</div>
                             ) : (
@@ -610,7 +497,7 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                                     onValueChange={(v) => setForm((p) => ({...p, group_id: v}))}
                                 >
                                     <SelectTrigger>
-                                        <SelectValue placeholder="Select Group"/>
+                                        <SelectValue placeholder="Select Group" />
                                     </SelectTrigger>
                                     <SelectContent>
                                         {(groups || []).map((g) => (
@@ -623,11 +510,10 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                             )}
                         </div>
 
-                        {/* Member */}
                         <div className="space-y-2">
                             <Label>Member</Label>
                             {mLoading ? (
-                                <Skeleton className="h-10 w-full"/>
+                                <Skeleton className="h-10 w-full" />
                             ) : mErr ? (
                                 <div className="text-sm text-destructive">{mErr}</div>
                             ) : (
@@ -637,8 +523,7 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                                     disabled={!form.group_id}
                                 >
                                     <SelectTrigger>
-                                        <SelectValue
-                                            placeholder={form.group_id ? "Select Member" : "Select Group first"}/>
+                                        <SelectValue placeholder={form.group_id ? "Select Member" : "Select Group first"} />
                                     </SelectTrigger>
                                     <SelectContent>
                                         {memberOptions.length === 0 ? (
@@ -657,56 +542,62 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                             )}
                         </div>
 
-                        {/* Disburse Date */}
                         <div className="space-y-2">
                             <Label>Disburse Date</Label>
-                            <Input type="date" value={form.disburse_date} onChange={set("disburse_date")}/>
+                            <Input type="date" value={form.disburse_date} onChange={set("disburse_date")} />
                         </div>
 
-                        {/* Principal */}
                         <div className="space-y-2">
                             <Label>Principal Amount</Label>
-                            <Input value={form.principal_amount} onChange={set("principal_amount")}
-                                   placeholder="10000"/>
+                            <Input value={form.principal_amount} onChange={set("principal_amount")} placeholder="10000" />
                         </div>
 
-                        {/* Annual Interest */}
+                        {/* Interest (not editable) */}
                         <div className="space-y-2">
-                            <Label>Annual Interest (%)</Label>
-                            <Input
-                                value={form.annual_interest_percent}
-                                onChange={set("annual_interest_percent")}
-                                placeholder="e.g. 24"
-                            />
-                            <div className="text-xs text-muted-foreground">
-                                Total Interest (12 months):{" "}
-                                <span className="font-medium text-foreground">{totalInterestAuto || 0}</span> · Weekly
-                                Installment:{" "}
-                                <span className="font-medium text-foreground">{installmentPerWeek || 0}</span>
-                            </div>
+                            <Label>Interest Rate (total %)</Label>
+                            {settingsLoading ? (
+                                <Skeleton className="h-10 w-full" />
+                            ) : (
+                                <>
+                                    <Input value={form.annual_interest_percent} disabled />
+                                    <div className="text-xs text-muted-foreground">
+                                        Weekly rate: <span className="font-medium text-foreground">{calc.weeklyInterestPercent || 0}%</span>{" "}
+                                        · Total Interest:{" "}
+                                        <span className="font-medium text-foreground">{calc.totalInterestAmount || 0}</span>{" "}
+                                        · Weekly Installment:{" "}
+                                        <span className="font-medium text-foreground">{calc.installmentPerWeek || 0}</span>
+                                    </div>
+                                </>
+                            )}
                         </div>
 
-                        {/* Processing Fee Amount (info only) */}
                         <div className="space-y-2">
                             <Label>Processing Fee Amount</Label>
-                            <Input value={processingFeeAmt} disabled/>
+                            <Input value={calc.processingFeeAmt} disabled />
                         </div>
 
-                        {/* Insurance Fee Amount (info only) */}
                         <div className="space-y-2">
                             <Label>Insurance Fee Amount</Label>
-                            <Input value={insuranceFeeAmt} disabled/>
+                            <Input value={calc.insuranceFeeAmt} disabled />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Book Price (1st installment)</Label>
+                            <Input value={calc.bookPriceAmt} disabled />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>First Installment Extra Total</Label>
+                            <Input value={calc.firstInstallmentExtra} disabled />
                         </div>
                     </div>
 
-                    {/* Preview */}
                     <div className="mt-4 flex items-center justify-between gap-2">
                         <div className="text-sm text-muted-foreground">
                             Preview schedule from{" "}
-                            <span
-                                className="font-medium text-foreground">{form.first_installment_date || "-"}</span>{" "}
-                            · 1st installment includes fees:{" "}
-                            <span className="font-medium text-foreground">{firstInstFees}</span>
+                            <span className="font-medium text-foreground">{form.first_installment_date || "-"}</span> ·
+                            1st installment extra:{" "}
+                            <span className="font-medium text-foreground">{calc.firstInstallmentExtra}</span>
                         </div>
 
                         <Button
@@ -731,7 +622,11 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                 </DialogContent>
             </Dialog>
 
-            <PreviewScheduleDialog open={previewOpen} onOpenChange={setPreviewOpen} scheduleRows={scheduleRows}/>
+            <PreviewScheduleDialog
+                open={previewOpen}
+                onOpenChange={setPreviewOpen}
+                scheduleRows={calc.scheduleRows}
+            />
         </>
     );
 }

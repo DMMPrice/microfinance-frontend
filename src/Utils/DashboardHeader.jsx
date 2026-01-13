@@ -1,10 +1,11 @@
-// src/Utils/DashboardHeader.jsx (or wherever you keep it)
+// src/Utils/DashboardHeader.jsx
 import {useMemo, useState} from "react";
 import {useAuth} from "@/contexts/AuthContext.jsx";
 import {Button} from "@/components/ui/button.tsx";
-import {LogOut, ChevronRight} from "lucide-react";
+import {LogOut, ChevronRight, User} from "lucide-react";
 import {Link, useNavigate} from "react-router-dom";
 import {ConfirmDialog} from "@/Utils/ConfirmDialog.jsx";
+import ProfileModal from "@/Utils/ProfileModal.jsx";
 
 /**
  * DashboardHeader (Breadcrumb + Dynamic)
@@ -29,6 +30,7 @@ export default function DashboardHeader({
     const navigate = useNavigate();
 
     const [logoutOpen, setLogoutOpen] = useState(false);
+    const [profileOpen, setProfileOpen] = useState(false);
 
     const computedTitle = useMemo(() => {
         if (title) return title;
@@ -48,8 +50,25 @@ export default function DashboardHeader({
         navigate("/login");
     };
 
+    /* ---------------- Buttons ---------------- */
+
+    const ProfileBtn = (
+        <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setProfileOpen(true)}
+        >
+            <User className="mr-2 h-4 w-4"/>
+            Profile
+        </Button>
+    );
+
     const LogoutBtn = showLogout ? (
-        <Button variant="outline" size="sm" onClick={() => setLogoutOpen(true)}>
+        <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setLogoutOpen(true)}
+        >
             <LogOut className="mr-2 h-4 w-4"/>
             Logout
         </Button>
@@ -58,11 +77,13 @@ export default function DashboardHeader({
     const RightArea = (
         <div className="flex items-center gap-2">
             {rightContent}
+            {ProfileBtn}
             {LogoutBtn}
         </div>
     );
 
-    // ✅ Breadcrumb renderer (like your screenshot)
+    /* ---------------- Breadcrumb ---------------- */
+
     const BreadcrumbBar = breadcrumbs?.length ? (
         <nav className="flex items-center gap-2 text-sm text-muted-foreground">
             {breadcrumbs.map((b, idx) => {
@@ -70,18 +91,23 @@ export default function DashboardHeader({
 
                 const node =
                     b.to && !last ? (
-                        <Link to={b.to} className="hover:text-foreground transition-colors">
+                        <Link
+                            to={b.to}
+                            className="hover:text-foreground transition-colors"
+                        >
                             {b.label}
                         </Link>
                     ) : (
                         <span className={last ? "text-foreground font-medium" : ""}>
-              {b.label}
-            </span>
+                            {b.label}
+                        </span>
                     );
 
                 return (
                     <div key={`${b.label}-${idx}`} className="flex items-center gap-2">
-                        {idx !== 0 ? <ChevronRight className="h-4 w-4 opacity-60"/> : null}
+                        {idx !== 0 && (
+                            <ChevronRight className="h-4 w-4 opacity-60"/>
+                        )}
                         {node}
                     </div>
                 );
@@ -89,13 +115,16 @@ export default function DashboardHeader({
         </nav>
     ) : null;
 
-    // ✅ Sidebar variant (keep it simple)
+    /* ---------------- Sidebar Variant ---------------- */
+
     if (variant === "sidebar") {
         return (
             <>
                 <div className="flex items-center justify-between w-full">
                     <div className="min-w-0">
-                        <h2 className="text-lg font-semibold truncate">{computedTitle}</h2>
+                        <h2 className="text-lg font-semibold truncate">
+                            {computedTitle}
+                        </h2>
                         {computedSubtitle ? (
                             <p className="text-xs text-muted-foreground truncate">
                                 {computedSubtitle}
@@ -105,6 +134,7 @@ export default function DashboardHeader({
                     {RightArea}
                 </div>
 
+                {/* Logout confirmation */}
                 <ConfirmDialog
                     open={logoutOpen}
                     onOpenChange={setLogoutOpen}
@@ -114,11 +144,18 @@ export default function DashboardHeader({
                     cancelLabel="Cancel"
                     onConfirm={handleLogoutConfirm}
                 />
+
+                {/* Profile modal */}
+                <ProfileModal
+                    open={profileOpen}
+                    onOpenChange={setProfileOpen}
+                />
             </>
         );
     }
 
-    // ✅ TOP variant (compact header)
+    /* ---------------- Top Variant ---------------- */
+
     return (
         <>
             <header className="border-b border-border/50 bg-card">
@@ -144,6 +181,7 @@ export default function DashboardHeader({
                 </div>
             </header>
 
+            {/* Logout confirmation */}
             <ConfirmDialog
                 open={logoutOpen}
                 onOpenChange={setLogoutOpen}
@@ -152,6 +190,12 @@ export default function DashboardHeader({
                 confirmLabel="Logout"
                 cancelLabel="Cancel"
                 onConfirm={handleLogoutConfirm}
+            />
+
+            {/* Profile modal */}
+            <ProfileModal
+                open={profileOpen}
+                onOpenChange={setProfileOpen}
             />
         </>
     );

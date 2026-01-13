@@ -1,6 +1,7 @@
 // src/hooks/useRegions.js
 import {useQuery, useMutation, useQueryClient} from "@tanstack/react-query";
 import {api} from "@/lib/http.js";
+import {useMemo} from "react";
 
 const REGIONS_KEY = ["regions"];
 
@@ -18,9 +19,26 @@ export function useRegions() {
         queryKey: REGIONS_KEY,
         queryFn: async () => {
             const res = await api.get("/regions/");
-            return res.data;
+            return res.data; // list[{region_id, region_name, ...}]
         },
+        refetchOnWindowFocus: false,
     });
+
+    // ✅ map for quick lookup
+    const regionById = useMemo(() => {
+        const map = {};
+        for (const r of regions || []) {
+            const id = r.region_id ?? r.id;
+            if (id != null) map[id] = r;
+        }
+        return map;
+    }, [regions]);
+
+    const getRegionName = (regionId) => {
+        if (regionId == null) return "";
+        const r = regionById[regionId];
+        return r?.region_name || r?.name || "";
+    };
 
     // POST /regions
     const createRegionMutation = useMutation({
@@ -55,9 +73,11 @@ export function useRegions() {
         },
     });
 
-    // RETURN MUST BE INSIDE THE HOOK
     return {
         regions,
+        regionById,
+        getRegionName,
+
         isLoading,
         isError,
         error,

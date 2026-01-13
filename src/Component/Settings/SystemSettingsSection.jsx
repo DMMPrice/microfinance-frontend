@@ -54,7 +54,8 @@ export default function SystemSettingsSection() {
     const [newValue, setNewValue] = useState("");
     const [newDesc, setNewDesc] = useState("");
 
-    const {mutateAsync: patchSetting} = useUpdateSetting({
+    // ✅ FIX: your hook returns { mutate, loading } not { mutateAsync, isPending }
+    const {mutate: patchSetting, loading: patching} = useUpdateSetting({
         onSuccess: (data) => {
             toast({title: "Setting updated", description: `${data.key} = ${String(data.value)}`});
         },
@@ -67,7 +68,8 @@ export default function SystemSettingsSection() {
         },
     });
 
-    const {mutateAsync: createSetting, isPending: creating} = useCreateSetting({
+    // ✅ FIX: your hook returns { mutate, loading } not { mutateAsync, isPending }
+    const {mutate: createSetting, loading: creating} = useCreateSetting({
         onSuccess: (data) => {
             toast({title: "Setting created", description: `${data.key} = ${String(data.value)}`});
         },
@@ -159,10 +161,11 @@ export default function SystemSettingsSection() {
                 </div>
 
                 <div className="flex gap-2 md:pt-1">
-                    <Button onClick={() => setAddOpen(true)} disabled={loading || !!savingKey}>
+                    <Button onClick={() => setAddOpen(true)} disabled={loading || !!savingKey || patching || creating}>
                         Add Setting
                     </Button>
-                    <Button onClick={refetch} variant="outline" disabled={loading || !!savingKey}>
+                    <Button onClick={refetch} variant="outline"
+                            disabled={loading || !!savingKey || patching || creating}>
                         {loading ? "Loading..." : "Refresh"}
                     </Button>
                 </div>
@@ -211,17 +214,12 @@ export default function SystemSettingsSection() {
                                                 <Switch
                                                     checked={row.value === "true"}
                                                     disabled={rowSaving}
-                                                    onCheckedChange={(checked) =>
-                                                        onPatch(row.key, checked ? "true" : "false")
-                                                    }
+                                                    onCheckedChange={(checked) => onPatch(row.key, checked ? "true" : "false")}
                                                 />
                                             </div>
                                         ) : (
-                                            <Button
-                                                variant="outline"
-                                                onClick={() => openEditDialog(row)}
-                                                disabled={rowSaving}
-                                            >
+                                            <Button variant="outline" onClick={() => openEditDialog(row)}
+                                                    disabled={rowSaving}>
                                                 {rowSaving ? "Saving..." : "Edit"}
                                             </Button>
                                         )}
@@ -261,11 +259,7 @@ export default function SystemSettingsSection() {
                     </div>
 
                     <DialogFooter className="gap-2">
-                        <Button
-                            variant="outline"
-                            onClick={() => closeDialogSafely(false)}
-                            disabled={isDialogSaving}
-                        >
+                        <Button variant="outline" onClick={() => closeDialogSafely(false)} disabled={isDialogSaving}>
                             Cancel
                         </Button>
                         <Button onClick={saveDialog} disabled={!activeRow || isDialogSaving}>
@@ -292,8 +286,7 @@ export default function SystemSettingsSection() {
                                 placeholder="e.g., MAX_LOAN_AMOUNT"
                                 disabled={creating}
                             />
-                            <div className="text-xs text-muted-foreground">
-                                Tip: Use UPPER_SNAKE_CASE for consistency.
+                            <div className="text-xs text-muted-foreground">Tip: Use UPPER_SNAKE_CASE for consistency.
                             </div>
                         </div>
 

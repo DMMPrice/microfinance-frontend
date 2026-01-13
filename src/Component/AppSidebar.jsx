@@ -11,7 +11,6 @@ import {
     Layers,
     ChevronDown,
     Settings,
-    ReceiptIndianRupee,
 } from "lucide-react";
 
 import {NavLink} from "@/Utils/NavLink.jsx";
@@ -36,8 +35,6 @@ import {
 } from "@/components/ui/collapsible";
 import {useLocation} from "react-router-dom";
 import logo from "@/assets/logo.svg";
-
-/* -------------------- Roles -------------------- */
 import {
     ROLES,
     ROLE_LABEL,
@@ -78,7 +75,6 @@ const navigationItems = [
                     ROLES.ADMIN,
                     ROLES.SUPER_ADMIN,
                     ROLES.REGIONAL_MANAGER,
-                    ROLES.BRANCH_MANAGER,
                 ],
             },
             {
@@ -90,7 +86,6 @@ const navigationItems = [
                     ROLES.REGIONAL_MANAGER,
                     ROLES.BRANCH_MANAGER,
                 ],
-                icon: ReceiptIndianRupee,
             },
         ],
     },

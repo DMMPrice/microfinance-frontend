@@ -319,16 +319,14 @@ export function useUpdateLoan() {
 
 /* -------------------- CANCEL LOAN (DELETE /loans/{loan_id}) -------------------- */
 /** Option A: soft delete/cancel -> sets status CANCELLED in backend */
-export function useCancelLoan() {
+export function useDeactivateLoan() {
     const qc = useQueryClient();
 
     return useMutation({
         mutationFn: async ({ loan_id }) => {
             const loanId = normalizeId(loan_id);
             if (!loanId) throw new Error("loan_id is required");
-            // backend returns 204 -> axios returns empty string; just return true
-            await apiClient.delete(`/loans/${loanId}`);
-            return true;
+            return (await apiClient.patch(`/loans/${loanId}/deactivate`)).data;
         },
         onSuccess: (_data, vars) => {
             const loanId = normalizeId(vars?.loan_id);

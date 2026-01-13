@@ -14,7 +14,7 @@ import LoanSummaryDrawer from "@/Component/Loan/LoanSummaryDrawer.jsx";
 import {
     useLoanStats,
     useUpdateLoan,
-    useCancelLoan,
+    useDeactivateLoan,
 } from "@/hooks/useLoans.js";
 
 import {toast} from "@/components/ui/use-toast";
@@ -67,7 +67,7 @@ export default function LoansPage() {
 
     // mutations
     const updateMut = useUpdateLoan();
-    const cancelMut = useCancelLoan();
+    const cancelMut = useDeactivateLoan();
 
     const openSummary = (loanId) => {
         setSelectedLoanId(loanId);
