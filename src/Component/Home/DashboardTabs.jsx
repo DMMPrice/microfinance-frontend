@@ -2,7 +2,7 @@
 import {Tabs, TabsContent, TabsList, TabsTrigger} from "@/components/ui/tabs";
 
 import RegionManagement from "@/Component/Regions/RegionManagement.jsx";
-import BranchManagement from "@/Component/Branch/BranchManagement.jsx";
+import BranchManagement from "@/Component/Branch/Home/BranchManagement.jsx";
 import LoanOfficerManagement from "@/Component/Loan Officer/LoanOfficerManagement.jsx";
 import GroupManagement from "@/Component/Groups/GroupManagement.jsx";
 import MemberManagement from "@/Component/Members/MemberManagement.jsx";

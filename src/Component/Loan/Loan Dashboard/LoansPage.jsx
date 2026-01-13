@@ -11,7 +11,15 @@ import {Plus, RefreshCw} from "lucide-react";
 import CreateLoanDialog from "@/Component/Loan/CreateLoanDialog.jsx";
 import LoanSummaryDrawer from "@/Component/Loan/LoanSummaryDrawer.jsx";
 
-import {useLoanStats} from "@/hooks/useLoans.js";
+import {
+    useLoanStats,
+    useUpdateLoan,
+    useCancelLoan,
+} from "@/hooks/useLoans.js";
+
+import {toast} from "@/components/ui/use-toast";
+import {ConfirmDialog} from "@/Utils/ConfirmDialog.jsx";
+import EditLoanDialog from "@/Component/Loan/EditLoanDialog.jsx"; // ✅ create this
 
 // ✅ sections
 import LoansAllSection from "@/Component/Loan/LoansAllSection.jsx";
@@ -41,15 +49,40 @@ export default function LoansPage() {
         );
     };
 
+    // dialogs
     const [createOpen, setCreateOpen] = useState(false);
+
     const [summaryOpen, setSummaryOpen] = useState(false);
     const [selectedLoanId, setSelectedLoanId] = useState(null);
 
+    // ✅ Edit state
+    const [editOpen, setEditOpen] = useState(false);
+    const [editRow, setEditRow] = useState(null);
+
+    // ✅ Delete confirm state
+    const [deleteOpen, setDeleteOpen] = useState(false);
+    const [deleteLoanId, setDeleteLoanId] = useState(null);
+
     const statsQ = useLoanStats();
+
+    // mutations
+    const updateMut = useUpdateLoan();
+    const cancelMut = useCancelLoan();
 
     const openSummary = (loanId) => {
         setSelectedLoanId(loanId);
         setSummaryOpen(true);
+    };
+
+    // ✅ REQUIRED: openEdit + openDelete
+    const openEdit = (row) => {
+        setEditRow(row || null);
+        setEditOpen(true);
+    };
+
+    const openDelete = (loanId) => {
+        setDeleteLoanId(loanId ?? null);
+        setDeleteOpen(true);
     };
 
     // ✅ KPI keys should follow API response (show only those present)
@@ -136,6 +169,8 @@ export default function LoansPage() {
                 <LoansAllSection
                     onCreate={() => setCreateOpen(true)}
                     onOpenSummary={openSummary}
+                    onEditLoan={openEdit}       // ✅ added
+                    onDeleteLoan={openDelete}   // ✅ added
                 />
             )}
 
@@ -147,10 +182,65 @@ export default function LoansPage() {
 
             {/* Dialogs */}
             <CreateLoanDialog open={createOpen} onOpenChange={setCreateOpen}/>
+
             <LoanSummaryDrawer
                 open={summaryOpen}
                 onOpenChange={setSummaryOpen}
                 loanId={selectedLoanId}
+            />
+
+            {/* ✅ Edit dialog (PUT /loans/{loan_id}) */}
+            <EditLoanDialog
+                open={editOpen}
+                onOpenChange={(v) => {
+                    setEditOpen(v);
+                    if (!v) setEditRow(null);
+                }}
+                row={editRow}
+                isSaving={updateMut.isPending}
+                onSave={async (loan_id, payload) => {
+                    try {
+                        await updateMut.mutateAsync({loan_id, payload});
+                        toast({title: "Loan updated"});
+                        setEditOpen(false);
+                        setEditRow(null);
+                    } catch (e) {
+                        toast({
+                            title: "Update failed",
+                            description: e?.response?.data?.detail || e.message,
+                            variant: "destructive",
+                        });
+                    }
+                }}
+            />
+
+            {/* ✅ Delete confirm (Option A Cancel) */}
+            <ConfirmDialog
+                open={deleteOpen}
+                onOpenChange={(v) => {
+                    setDeleteOpen(v);
+                    if (!v) setDeleteLoanId(null);
+                }}
+                title="Delete Loan?"
+                description="This will cancel the loan. Allowed only if no payments exist."
+                confirmText="Yes, Cancel Loan"
+                variant="destructive"
+                loading={cancelMut.isPending}
+                onConfirm={async () => {
+                    try {
+                        if (!deleteLoanId) return;
+                        await cancelMut.mutateAsync({loan_id: deleteLoanId});
+                        toast({title: "Loan cancelled"});
+                        setDeleteOpen(false);
+                        setDeleteLoanId(null);
+                    } catch (e) {
+                        toast({
+                            title: "Unable to cancel loan",
+                            description: e?.response?.data?.detail || e.message,
+                            variant: "destructive",
+                        });
+                    }
+                }}
             />
         </div>
     );

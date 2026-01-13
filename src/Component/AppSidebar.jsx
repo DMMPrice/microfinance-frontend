@@ -9,7 +9,9 @@ import {
     UserCog,
     LayoutDashboard,
     Layers,
-    ChevronDown, Settings,
+    ChevronDown,
+    Settings,
+    ReceiptIndianRupee,
 } from "lucide-react";
 
 import {NavLink} from "@/Utils/NavLink.jsx";
@@ -45,15 +47,12 @@ import {
 
 /* -------------------- Navigation Config -------------------- */
 const navigationItems = [
-    // ✅ only admin + super_admin
     {
         title: "Overview",
         url: "/dashboard",
         icon: LayoutDashboard,
         allowedRoles: [ROLES.ADMIN, ROLES.SUPER_ADMIN],
     },
-
-    // ✅ only admin + super_admin
     {
         title: "Regions",
         url: "/dashboard/regions",
@@ -61,10 +60,9 @@ const navigationItems = [
         allowedRoles: [ROLES.ADMIN, ROLES.SUPER_ADMIN],
     },
 
-    // ✅ admin, super_admin, regional_manager, branch_manager (NO loan_officer)
+    // ✅ Branches (with submenu)
     {
         title: "Branches",
-        url: "/dashboard/branches",
         icon: Building2,
         allowedRoles: [
             ROLES.ADMIN,
@@ -72,9 +70,31 @@ const navigationItems = [
             ROLES.REGIONAL_MANAGER,
             ROLES.BRANCH_MANAGER,
         ],
+        children: [
+            {
+                title: "Branch List",
+                url: "/dashboard/branches/home",
+                allowedRoles: [
+                    ROLES.ADMIN,
+                    ROLES.SUPER_ADMIN,
+                    ROLES.REGIONAL_MANAGER,
+                    ROLES.BRANCH_MANAGER,
+                ],
+            },
+            {
+                title: "Expenses",
+                url: "/dashboard/branches/expenses",
+                allowedRoles: [
+                    ROLES.ADMIN,
+                    ROLES.SUPER_ADMIN,
+                    ROLES.REGIONAL_MANAGER,
+                    ROLES.BRANCH_MANAGER,
+                ],
+                icon: ReceiptIndianRupee,
+            },
+        ],
     },
 
-    // ✅ admin, super_admin, regional_manager, branch_manager (NO loan_officer)
     {
         title: "Loan Officers",
         url: "/dashboard/officers",
@@ -87,7 +107,6 @@ const navigationItems = [
         ],
     },
 
-    // ❌ Loan Officer cannot see Groups
     {
         title: "Groups",
         url: "/dashboard/groups",
@@ -100,7 +119,6 @@ const navigationItems = [
         ],
     },
 
-    // ✅ Loan Officer CAN see Borrowers
     {
         title: "Borrowers",
         url: "/dashboard/borrowers",
@@ -114,7 +132,7 @@ const navigationItems = [
         ],
     },
 
-    // ✅ Loan Officer CAN see Loans
+    // ✅ Loans (with submenu)
     {
         title: "Loans",
         icon: CreditCard,
@@ -173,7 +191,6 @@ const navigationItems = [
         ],
     },
 
-    // ✅ only admin + super_admin
     {
         title: "Users Management",
         url: "/dashboard/users",
@@ -185,19 +202,16 @@ const navigationItems = [
         url: "/dashboard/settings",
         icon: Settings,
         allowedRoles: [ROLES.ADMIN, ROLES.SUPER_ADMIN],
-    }
+    },
 ];
 
 export function AppSidebar() {
     const {state} = useSidebar();
-
-    // ✅ get profile also (stored from /auth/me)
     const {user, profile} = useAuth();
-
     const {pathname} = useLocation();
     const collapsed = state === "collapsed";
 
-    /* -------------------- Role (Source of Truth = profileData) -------------------- */
+    /* -------------------- Role -------------------- */
     const role = normalizeRole(profile?.role || user?.role);
 
     const canSee = (item) => {
@@ -206,20 +220,46 @@ export function AppSidebar() {
         return hasRole(role, item.allowedRoles);
     };
 
-    /* -------------------- Loans Collapsible -------------------- */
-    const isOnLoansRoute = useMemo(
-        () => pathname.startsWith("/dashboard/loans"),
-        [pathname]
-    );
+    /* -------------------- Parent route helper -------------------- */
+    const isOnParentRoute = (parentItem) => {
+        if (!parentItem?.children?.length) return false;
+        return parentItem.children.some((c) => pathname.startsWith(c.url));
+    };
 
-    const [loansOpen, setLoansOpen] = useState(isOnLoansRoute);
+    /* -------------------- Open state for all parents -------------------- */
+    const [openMap, setOpenMap] = useState(() => {
+        const initial = {};
+        navigationItems.forEach((item) => {
+            if (item.children?.length) {
+                initial[item.title] = isOnParentRoute(item);
+            }
+        });
+        return initial;
+    });
 
+    // ✅ keep correct submenu opened when route changes
     useEffect(() => {
-        setLoansOpen(isOnLoansRoute);
-    }, [isOnLoansRoute]);
+        setOpenMap((prev) => {
+            const next = {...prev};
+            navigationItems.forEach((item) => {
+                if (item.children?.length) {
+                    next[item.title] = isOnParentRoute(item);
+                }
+            });
+            return next;
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pathname]);
 
+    // ✅ collapse sidebar => close all submenus
     useEffect(() => {
-        if (collapsed) setLoansOpen(false);
+        if (collapsed) {
+            setOpenMap((prev) => {
+                const next = {...prev};
+                Object.keys(next).forEach((k) => (next[k] = false));
+                return next;
+            });
+        }
     }, [collapsed]);
 
     return (
@@ -276,16 +316,24 @@ export function AppSidebar() {
                                         );
                                     }
 
-                                    // ----------- Parent (Loans) -----------
+                                    // ----------- Parent Item (Branches / Loans) -----------
+                                    const parentOpen = !!openMap[item.title];
+                                    const parentActive = isOnParentRoute(item);
+
                                     return (
                                         <SidebarMenuItem key={item.title}>
-                                            <Collapsible open={loansOpen} onOpenChange={setLoansOpen}>
+                                            <Collapsible
+                                                open={parentOpen}
+                                                onOpenChange={(v) =>
+                                                    setOpenMap((prev) => ({...prev, [item.title]: v}))
+                                                }
+                                            >
                                                 <CollapsibleTrigger asChild>
                                                     <SidebarMenuButton
                                                         tooltip={item.title}
                                                         className={cn(
                                                             "justify-between",
-                                                            isOnLoansRoute &&
+                                                            parentActive &&
                                                             "bg-accent text-accent-foreground font-medium"
                                                         )}
                                                     >
@@ -298,7 +346,7 @@ export function AppSidebar() {
                                                             <ChevronDown
                                                                 className={cn(
                                                                     "h-4 w-4 opacity-70 transition-transform duration-200",
-                                                                    loansOpen ? "rotate-180" : "rotate-0"
+                                                                    parentOpen ? "rotate-180" : "rotate-0"
                                                                 )}
                                                             />
                                                         )}
@@ -309,29 +357,23 @@ export function AppSidebar() {
                                                     <div className={cn("mt-1 pl-6", collapsed && "pl-0")}>
                                                         {item.children
                                                             .filter(canSee)
-                                                            .map((child) => {
-                                                                const isLoanViewRoute =
-                                                                    child.url === "/dashboard/loans/view" &&
-                                                                    pathname.startsWith("/dashboard/loans/view");
-
-                                                                return (
-                                                                    <div key={child.title} className="py-0.5">
-                                                                        <NavLink
-                                                                            to={child.url}
-                                                                            end={child.url !== "/dashboard/loans/view"}
-                                                                            className={cn(
-                                                                                "block rounded-md px-2 py-1 text-sm hover:bg-accent",
-                                                                                collapsed && "hidden",
-                                                                                isLoanViewRoute &&
-                                                                                "bg-accent text-accent-foreground font-medium"
-                                                                            )}
-                                                                            activeClassName="bg-accent text-accent-foreground font-medium"
-                                                                        >
-                                                                            {child.title}
-                                                                        </NavLink>
-                                                                    </div>
-                                                                );
-                                                            })}
+                                                            .map((child) => (
+                                                                <div key={child.title} className="py-0.5">
+                                                                    <NavLink
+                                                                        to={child.url}
+                                                                        end={child.url !== "/dashboard/loans/view"} // keep your loan view behavior
+                                                                        className={cn(
+                                                                            "block rounded-md px-2 py-1 text-sm hover:bg-accent",
+                                                                            collapsed && "hidden",
+                                                                            pathname.startsWith(child.url) &&
+                                                                            "bg-accent text-accent-foreground font-medium"
+                                                                        )}
+                                                                        activeClassName="bg-accent text-accent-foreground font-medium"
+                                                                    >
+                                                                        {child.title}
+                                                                    </NavLink>
+                                                                </div>
+                                                            ))}
                                                     </div>
                                                 </CollapsibleContent>
                                             </Collapsible>

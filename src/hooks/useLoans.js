@@ -288,3 +288,61 @@ export function useLoanPayments(loan_id, enabled = false) {
         refetchOnWindowFocus: false,
     });
 }
+
+/* -------------------- UPDATE LOAN (PUT /loans/{loan_id}) -------------------- */
+export function useUpdateLoan() {
+    const qc = useQueryClient();
+
+    return useMutation({
+        mutationFn: async ({ loan_id, payload }) => {
+            const loanId = normalizeId(loan_id);
+            if (!loanId) throw new Error("loan_id is required");
+            if (!payload || typeof payload !== "object") throw new Error("payload is required");
+            return (await apiClient.put(`/loans/${loanId}`, payload)).data;
+        },
+        onSuccess: (_data, vars) => {
+            const loanId = normalizeId(vars?.loan_id);
+
+            qc.invalidateQueries({ queryKey: ["loans", "stats"] });
+            qc.invalidateQueries({ queryKey: ["loans", "installmentsDue"] });
+            qc.invalidateQueries({ queryKey: ["loans", "collectionsByLO"] });
+            qc.invalidateQueries({ queryKey: ["loans", "master"] });
+
+            if (loanId) {
+                qc.invalidateQueries({ queryKey: ["loans", "summary", loanId] });
+                qc.invalidateQueries({ queryKey: ["loans", "schedule", loanId] });
+                qc.invalidateQueries({ queryKey: ["loans", "statement", loanId] });
+            }
+        },
+    });
+}
+
+/* -------------------- CANCEL LOAN (DELETE /loans/{loan_id}) -------------------- */
+/** Option A: soft delete/cancel -> sets status CANCELLED in backend */
+export function useCancelLoan() {
+    const qc = useQueryClient();
+
+    return useMutation({
+        mutationFn: async ({ loan_id }) => {
+            const loanId = normalizeId(loan_id);
+            if (!loanId) throw new Error("loan_id is required");
+            // backend returns 204 -> axios returns empty string; just return true
+            await apiClient.delete(`/loans/${loanId}`);
+            return true;
+        },
+        onSuccess: (_data, vars) => {
+            const loanId = normalizeId(vars?.loan_id);
+
+            qc.invalidateQueries({ queryKey: ["loans", "stats"] });
+            qc.invalidateQueries({ queryKey: ["loans", "installmentsDue"] });
+            qc.invalidateQueries({ queryKey: ["loans", "collectionsByLO"] });
+            qc.invalidateQueries({ queryKey: ["loans", "master"] });
+
+            if (loanId) {
+                qc.invalidateQueries({ queryKey: ["loans", "summary", loanId] });
+                qc.invalidateQueries({ queryKey: ["loans", "schedule", loanId] });
+                qc.invalidateQueries({ queryKey: ["loans", "statement", loanId] });
+            }
+        },
+    });
+}

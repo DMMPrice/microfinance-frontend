@@ -84,7 +84,6 @@ function todayISO() {
 }
 
 function addDaysISO(isoDate, days) {
-    // isoDate is "YYYY-MM-DD" or compatible
     const d = new Date(isoDate);
     d.setDate(d.getDate() + days);
     return d.toISOString().slice(0, 10);
@@ -140,7 +139,7 @@ function extractApiError(err) {
     };
 }
 
-// Defaults until you add settings keys later
+// Local defaults (only if /settings missing)
 const DEFAULT_PROCESSING_PCT = 1; // 1%
 const DEFAULT_INSURANCE_PCT = 0.5; // 0.5%
 
@@ -157,14 +156,14 @@ export default function CreateLoanDialog({open, onOpenChange}) {
             loan_account_no: "",
             group_id: "",
             member_id: "",
-            product_id: 1, // ✅ keep in payload, UI removed
+            product_id: 1,
             disburse_date: today,
-            first_installment_date: first, // ✅ auto disburse+7
-            duration_weeks: 12, // ✅ will auto load from settings
+            first_installment_date: first,
+            duration_weeks: 12,
             principal_amount: "",
             annual_interest_percent: "",
 
-            // ✅ new fee fields
+            // ✅ fee percents will be overwritten from /settings
             processing_fee_percent: DEFAULT_PROCESSING_PCT,
             insurance_fee_percent: DEFAULT_INSURANCE_PCT,
         };
@@ -197,7 +196,11 @@ export default function CreateLoanDialog({open, onOpenChange}) {
     }, [form.disburse_date, open]);
 
     // ----------------------------
-    // ✅ Settings: duration from MAX_WEEK_SETTING
+    // ✅ Settings: duration + fees from /settings
+    // Keys:
+    // - MAX_WEEK_SETTING
+    // - PROCESSING_FEES
+    // - INSURANCE_FEES
     // ----------------------------
     const [settingsLoading, setSettingsLoading] = useState(false);
     const [settingsErr, setSettingsErr] = useState("");
@@ -213,26 +216,18 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                 const res = await apiClient.get("/settings");
                 const list = Array.isArray(res.data) ? res.data : [];
 
-                const maxWeekRaw = list.find((x) => x.key === "MAX_WEEK_SETTING")?.value;
-                const maxWeek = Number(maxWeekRaw || 12);
+                const getVal = (key) => list.find((x) => x?.key === key)?.value;
 
-                // later you will create these keys
-                const procPctRaw = list.find((x) => x.key === "PROCESSING_FEES")?.value;
-                const insPctRaw = list.find((x) => x.key === "INSURANCE_FEES")?.value;
-
-                const procPct = Number(procPctRaw ?? DEFAULT_PROCESSING_PCT);
-                const insPct = Number(insPctRaw ?? DEFAULT_INSURANCE_PCT);
+                const maxWeek = Number(getVal("MAX_WEEK_SETTING") ?? 12);
+                const procPct = Number(getVal("PROCESSING_FEES") ?? DEFAULT_PROCESSING_PCT);
+                const insPct = Number(getVal("INSURANCE_FEES") ?? DEFAULT_INSURANCE_PCT);
 
                 if (!cancelled) {
                     setForm((p) => ({
                         ...p,
                         duration_weeks: Number.isFinite(maxWeek) && maxWeek > 0 ? maxWeek : 12,
-                        processing_fee_percent: Number.isFinite(procPct)
-                            ? procPct
-                            : DEFAULT_PROCESSING_PCT,
-                        insurance_fee_percent: Number.isFinite(insPct)
-                            ? insPct
-                            : DEFAULT_INSURANCE_PCT,
+                        processing_fee_percent: Number.isFinite(procPct) ? procPct : DEFAULT_PROCESSING_PCT,
+                        insurance_fee_percent: Number.isFinite(insPct) ? insPct : DEFAULT_INSURANCE_PCT,
                     }));
                 }
             } catch (e) {
@@ -460,26 +455,19 @@ export default function CreateLoanDialog({open, onOpenChange}) {
         const payload = {
             loan_account_no: form.loan_account_no.trim(),
             member_id: Number(form.member_id),
-
-            // ✅ keep product_id (UI removed)
             product_id: Number(form.product_id),
 
             disburse_date: form.disburse_date,
             first_installment_date: form.first_installment_date,
-
-            // ✅ auto from settings
             duration_weeks: Number(form.duration_weeks),
 
             principal_amount: Number(form.principal_amount),
-
-            // ✅ backend expects this total interest amount
             flat_interest_total: Number(totalInterestAuto),
 
-            // optional
             annual_interest_percent: Number(form.annual_interest_percent),
             installment_amount: Number(installmentPerWeek),
 
-            // ✅ NEW: fees
+            // ✅ fees (from settings; not editable)
             processing_fee_percent: Number(processingPct),
             insurance_fee_percent: Number(insurancePct),
             processing_fee_amount: Number(processingFeeAmt),
@@ -528,7 +516,6 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                             {/* Duration (auto from settings) */}
                             <div className="space-y-1">
                                 <Label className="text-xs text-muted-foreground">Duration (weeks)</Label>
-
                                 {settingsLoading ? (
                                     <Skeleton className="h-10 w-full"/>
                                 ) : (
@@ -549,17 +536,45 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                                     Auto: Disburse date + 7 days
                                 </div>
                             </div>
+
+                            {/* ✅ Processing Fees (auto from settings) */}
+                            <div className="space-y-1">
+                                <Label className="text-xs text-muted-foreground">Processing Fees (%)</Label>
+                                {settingsLoading ? (
+                                    <Skeleton className="h-10 w-full"/>
+                                ) : (
+                                    <>
+                                        <Input value={form.processing_fee_percent} disabled/>
+                                        <div className="text-[11px] text-muted-foreground">
+                                            Auto from system settings (PROCESSING_FEES)
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+
+                            {/* ✅ Insurance Fees (auto from settings) */}
+                            <div className="space-y-1">
+                                <Label className="text-xs text-muted-foreground">Insurance Fees (%)</Label>
+                                {settingsLoading ? (
+                                    <Skeleton className="h-10 w-full"/>
+                                ) : (
+                                    <>
+                                        <Input value={form.insurance_fee_percent} disabled/>
+                                        <div className="text-[11px] text-muted-foreground">
+                                            Auto from system settings (INSURANCE_FEES)
+                                        </div>
+                                    </>
+                                )}
+                            </div>
                         </div>
                     </DialogHeader>
 
-                    {/* Settings warning (optional) */}
                     {settingsErr ? <div className="text-sm text-destructive">{settingsErr}</div> : null}
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {/* ✅ Loan Account No suggestions */}
+                        {/* Loan Account No */}
                         <div className="space-y-2">
                             <Label>Loan Account No</Label>
-
                             {laLoading ? (
                                 <Skeleton className="h-10 w-full"/>
                             ) : laErr ? (
@@ -623,8 +638,7 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                                 >
                                     <SelectTrigger>
                                         <SelectValue
-                                            placeholder={form.group_id ? "Select Member" : "Select Group first"}
-                                        />
+                                            placeholder={form.group_id ? "Select Member" : "Select Group first"}/>
                                     </SelectTrigger>
                                     <SelectContent>
                                         {memberOptions.length === 0 ? (
@@ -652,11 +666,8 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                         {/* Principal */}
                         <div className="space-y-2">
                             <Label>Principal Amount</Label>
-                            <Input
-                                value={form.principal_amount}
-                                onChange={set("principal_amount")}
-                                placeholder="10000"
-                            />
+                            <Input value={form.principal_amount} onChange={set("principal_amount")}
+                                   placeholder="10000"/>
                         </div>
 
                         {/* Annual Interest */}
@@ -669,36 +680,22 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                             />
                             <div className="text-xs text-muted-foreground">
                                 Total Interest (12 months):{" "}
-                                <span className="font-medium text-foreground">{totalInterestAuto || 0}</span>{" "}
-                                · Weekly Installment:{" "}
+                                <span className="font-medium text-foreground">{totalInterestAuto || 0}</span> · Weekly
+                                Installment:{" "}
                                 <span className="font-medium text-foreground">{installmentPerWeek || 0}</span>
                             </div>
                         </div>
 
-                        {/* Processing Fees */}
+                        {/* Processing Fee Amount (info only) */}
                         <div className="space-y-2">
-                            <Label>Processing Fees (%)</Label>
-                            <Input
-                                value={form.processing_fee_percent}
-                                onChange={set("processing_fee_percent")}
-                                placeholder="e.g. 1"
-                            />
-                            <div className="text-xs text-muted-foreground">
-                                Amount: <span className="font-medium text-foreground">{processingFeeAmt}</span>
-                            </div>
+                            <Label>Processing Fee Amount</Label>
+                            <Input value={processingFeeAmt} disabled/>
                         </div>
 
-                        {/* Insurance Fees */}
+                        {/* Insurance Fee Amount (info only) */}
                         <div className="space-y-2">
-                            <Label>Insurance Fees (%)</Label>
-                            <Input
-                                value={form.insurance_fee_percent}
-                                onChange={set("insurance_fee_percent")}
-                                placeholder="e.g. 0.5"
-                            />
-                            <div className="text-xs text-muted-foreground">
-                                Amount: <span className="font-medium text-foreground">{insuranceFeeAmt}</span>
-                            </div>
+                            <Label>Insurance Fee Amount</Label>
+                            <Input value={insuranceFeeAmt} disabled/>
                         </div>
                     </div>
 
@@ -706,9 +703,8 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                     <div className="mt-4 flex items-center justify-between gap-2">
                         <div className="text-sm text-muted-foreground">
                             Preview schedule from{" "}
-                            <span className="font-medium text-foreground">
-                {form.first_installment_date || "-"}
-              </span>{" "}
+                            <span
+                                className="font-medium text-foreground">{form.first_installment_date || "-"}</span>{" "}
                             · 1st installment includes fees:{" "}
                             <span className="font-medium text-foreground">{firstInstFees}</span>
                         </div>
@@ -735,12 +731,7 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                 </DialogContent>
             </Dialog>
 
-            {/* ✅ Separate modal for preview */}
-            <PreviewScheduleDialog
-                open={previewOpen}
-                onOpenChange={setPreviewOpen}
-                scheduleRows={scheduleRows}
-            />
+            <PreviewScheduleDialog open={previewOpen} onOpenChange={setPreviewOpen} scheduleRows={scheduleRows}/>
         </>
     );
 }

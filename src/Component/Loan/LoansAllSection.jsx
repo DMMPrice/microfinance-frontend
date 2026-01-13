@@ -11,7 +11,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 
-import {RefreshCw, Search as SearchIcon, Eye} from "lucide-react";
+import {RefreshCw, Search as SearchIcon, Eye, Pencil, Trash2} from "lucide-react";
 
 import {useLoanMaster} from "@/hooks/useLoans.js";
 import {useLoanOfficers} from "@/hooks/useLoanOfficers.js";
@@ -26,7 +26,7 @@ function formatMoney(v) {
     return n.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
 }
 
-export default function LoansAllSection({onOpenSummary}) {
+export default function LoansAllSection({onOpenSummary, onEditLoan, onDeleteLoan}) {
     // LO
     const loQ = useLoanOfficers();
 
@@ -134,11 +134,16 @@ export default function LoansAllSection({onOpenSummary}) {
     // Table columns (AdvancedTable)
     const columns = useMemo(
         () => [
+            // ✅ Loan account no instead of Loan ID
             {
-                key: "loan_id",
-                header: "Loan ID",
-                sortValue: (r) => r.loan_id ?? r.id ?? r.loan_no ?? "",
-                cell: (r) => <div className="font-medium">{r.loan_id ?? r.id ?? r.loan_no ?? "-"}</div>,
+                key: "loan_account_no",
+                header: "Loan A/C No",
+                sortValue: (r) => r.loan_account_no ?? "",
+                cell: (r) => (
+                    <div className="font-medium">
+                        {r.loan_account_no ?? "-"}
+                    </div>
+                ),
             },
             {
                 key: "status",
@@ -146,8 +151,8 @@ export default function LoansAllSection({onOpenSummary}) {
                 sortValue: (r) => r.status ?? "",
                 cell: (r) => (
                     <span className="text-xs px-2 py-1 rounded-md border">
-            {String(r.status ?? "-")}
-          </span>
+                        {String(r.status ?? "-")}
+                    </span>
                 ),
             },
             {
@@ -167,7 +172,12 @@ export default function LoansAllSection({onOpenSummary}) {
                 header: "Loan Officer",
                 sortValue: (r) => {
                     const loIdValue = r.lo_id ?? r.loan_officer_id ?? r.loId ?? "";
-                    return r.lo_name ?? r.loan_officer_name ?? loNameMap[String(loIdValue)] ?? `LO-${loIdValue}`;
+                    return (
+                        r.lo_name ??
+                        r.loan_officer_name ??
+                        loNameMap[String(loIdValue)] ??
+                        `LO-${loIdValue}`
+                    );
                 },
                 cell: (r) => {
                     const loIdValue = r.lo_id ?? r.loan_officer_id ?? r.loId ?? null;
@@ -197,22 +207,50 @@ export default function LoansAllSection({onOpenSummary}) {
                 hideable: false,
                 sortValue: () => 0,
                 cell: (r) => {
-                    const loanId = r.loan_id ?? r.id ?? r.loan_no ?? "-";
+                    // ✅ IMPORTANT: summary/edit/delete should use real loan_id
+                    const loanId = r.loan_id ?? r.id ?? null;
+
                     return (
-                        <Button variant="outline" size="sm" onClick={() => onOpenSummary?.(loanId)}>
-                            <Eye className="h-4 w-4 mr-2"/>
-                            Summary
-                        </Button>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => loanId && onOpenSummary?.(loanId)}
+                                disabled={!loanId}
+                            >
+                                <Eye className="h-4 w-4 mr-2"/>
+                                Summary
+                            </Button>
+
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => onEditLoan?.(r)}
+                            >
+                                <Pencil className="h-4 w-4 mr-2"/>
+                                Edit
+                            </Button>
+
+                            <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => loanId && onDeleteLoan?.(loanId)}
+                                disabled={!loanId}
+                            >
+                                <Trash2 className="h-4 w-4 mr-2"/>
+                                Delete
+                            </Button>
+                        </div>
                     );
                 },
             },
         ],
-        [loNameMap, onOpenSummary]
+        [loNameMap, onOpenSummary, onEditLoan, onDeleteLoan]
     );
 
     return (
         <div className="space-y-3">
-            {/* ✅ Fixed / compact filter area like the one you approved */}
+            {/* ✅ Fixed / compact filter area */}
             <div className="rounded-xl border bg-card p-4">
                 <div className="flex flex-col gap-3">
                     {/* Controls */}
@@ -294,7 +332,7 @@ export default function LoansAllSection({onOpenSummary}) {
                         </div>
                     </div>
 
-                    {/* Actions (wrap safely) */}
+                    {/* Actions */}
                     <div className="flex flex-wrap items-center gap-2 justify-end">
                         <Button onClick={applyFilters}>Apply</Button>
                         <Button variant="outline" onClick={clearFilters}>
@@ -306,7 +344,7 @@ export default function LoansAllSection({onOpenSummary}) {
                         </Button>
                     </div>
 
-                    {/* Badges row (already wraps, keep it) */}
+                    {/* Badges row */}
                     <div className="flex flex-wrap items-center gap-2">
                         <Badge variant="secondary">
                             Page: <span className="ml-1 font-semibold">{page}</span>
@@ -328,13 +366,12 @@ export default function LoansAllSection({onOpenSummary}) {
                         <Badge variant="outline">
                             Range:{" "}
                             <span className="ml-1 font-semibold">
-          {applied.disburse_from || "—"} → {applied.disburse_to || "—"}
-        </span>
+                                {applied.disburse_from || "—"} → {applied.disburse_to || "—"}
+                            </span>
                         </Badge>
                     </div>
                 </div>
             </div>
-
 
             {/* ✅ AdvancedTable */}
             <div className="w-full overflow-x-auto">
@@ -346,15 +383,15 @@ export default function LoansAllSection({onOpenSummary}) {
                     isLoading={q.isLoading}
                     errorText={q.isError ? "No loans loaded (API error)." : ""}
                     emptyText="No loans found for the selected filters."
-                    enableSearch={false} // ✅ because search is in filter bar already (backend search)
-                    enablePagination={false} // ✅ we use backend prev/next
+                    enableSearch={false}
+                    enablePagination={false} // backend prev/next
                     enableColumnToggle
                     stickyHeader
-                    rowKey={(r) => String(r.loan_id ?? r.id ?? r.loan_no ?? Math.random())}
+                    rowKey={(r) => String(r.loan_id ?? r.id ?? r.loan_account_no ?? Math.random())}
                 />
             </div>
 
-            {/* ✅ Backend Pagination controls (kept exactly like before) */}
+            {/* ✅ Backend Pagination controls */}
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div className="text-sm text-muted-foreground">
                     Page <span className="font-medium text-foreground">{page}</span>

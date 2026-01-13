@@ -1,5 +1,5 @@
 // src/pages/Page.jsx
-import BranchManagement from "@/Component/Branch/BranchManagement.jsx";
+import BranchManagement from "@/Component/Branch/Home/BranchManagement.jsx";
 
 export default function Page() {
     return (

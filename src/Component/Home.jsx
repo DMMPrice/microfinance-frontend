@@ -11,11 +11,12 @@ import {ROLES, normalizeRole} from "@/config/roles";
 // Pages
 import OverviewPage from "@/pages/OverviewPage.jsx";
 import RegionsPage from "@/Component/Regions/Page.jsx";
-import BranchesPage from "@/Component/Branch/Page.jsx";
+import BranchesPage from "@/Component/Branch/Home/Page.jsx";
 import LoanOfficerPage from "@/Component/Loan Officer/Page.jsx";
 import GroupsPage from "@/Component/Groups/Page.jsx";
 import MembersPage from "@/Component/Members/Page.jsx";
 import UsersPage from "@/Pages/UsersPage.jsx";
+import BranchExpensesPage from "@/Component/Branch/Expenses/Page.jsx";
 
 // ✅ Loans pages
 import LoansPage from "@/Component/Loan/Loan Dashboard/LoansPage.jsx";
@@ -46,6 +47,19 @@ const ROUTE_META = [
         subtitle: "Create and manage branches",
         breadcrumbs: [{label: "Home", to: "/dashboard"}, {label: "Branches"}],
     },
+
+    // ✅ NEW: Branch Expenses header meta
+    {
+        pattern: "/dashboard/branches/expenses",
+        title: "Branch Expenses",
+        subtitle: "Track and manage branch expenses",
+        breadcrumbs: [
+            {label: "Home", to: "/dashboard"},
+            {label: "Branches", to: "/dashboard/branches"},
+            {label: "Expenses"},
+        ],
+    },
+
     {
         pattern: "/dashboard/officers",
         title: "Loan Officers",
@@ -248,10 +262,20 @@ export default function Home() {
 
                             {/* Branch mgmt */}
                             <Route
-                                path="branches"
+                                path="branches/home"
                                 element={
                                     <Guard role={role} allowedRoles={BRANCH_MGMT_ROLES}>
                                         <BranchesPage/>
+                                    </Guard>
+                                }
+                            />
+
+                            {/* ✅ NEW: Branch Expenses route */}
+                            <Route
+                                path="branches/expenses"
+                                element={
+                                    <Guard role={role} allowedRoles={BRANCH_MGMT_ROLES}>
+                                        <BranchExpensesPage/>
                                     </Guard>
                                 }
                             />
