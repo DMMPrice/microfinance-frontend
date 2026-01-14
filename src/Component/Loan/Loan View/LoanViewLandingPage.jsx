@@ -5,7 +5,7 @@ import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card.tsx
 import {Input} from "@/components/ui/input.tsx";
 import {Button} from "@/components/ui/button.tsx";
 import {Label} from "@/components/ui/label.tsx";
-import {toast} from "@/components/ui/use-toast"; // if you have it
+import {toast} from "@/components/ui/use-toast";
 import {useResolveLoanId} from "@/hooks/useLoanResolver.js";
 
 function readLoanAccountSuggestions() {
@@ -27,21 +27,17 @@ export default function LoanViewLandingPage() {
     const navigate = useNavigate();
 
     const suggestions = useMemo(() => readLoanAccountSuggestions(), []);
-
-    // resolve only when it's an account no (not numeric)
     const {data: resolvedLoanId, isFetching} = useResolveLoanId(loanRef);
 
     function go() {
         const ref = String(loanRef).trim();
         if (!ref) return;
 
-        // If user typed numeric loan_id, go directly
         if (isNumericId(ref)) {
             navigate(`/dashboard/loans/view/${encodeURIComponent(ref)}`);
             return;
         }
 
-        // Otherwise, must resolve loan_id first
         if (!resolvedLoanId) {
             toast?.({
                 title: "Loan not found",
@@ -51,17 +47,18 @@ export default function LoanViewLandingPage() {
             return;
         }
 
-        // ✅ Navigate using loan_id (so LoanViewPage will call backend by loan_id)
         navigate(`/dashboard/loans/view/${encodeURIComponent(String(resolvedLoanId))}`);
     }
 
     return (
-        <div className="max-w-xl">
-            <Card>
-                <CardHeader>
-                    <CardTitle>Loan View</CardTitle>
+        /* ✅ FULL PAGE CENTER */
+        <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4">
+            <Card className="w-full max-w-md shadow-md">
+                <CardHeader className="text-center">
+                    <CardTitle>Loan Detail View</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3">
+
+                <CardContent className="space-y-4">
                     <div className="space-y-1">
                         <Label>Enter Loan Account No</Label>
                         <Input
@@ -78,8 +75,12 @@ export default function LoanViewLandingPage() {
                         </datalist>
                     </div>
 
-                    <Button onClick={go} disabled={isFetching}>
-                        {isFetching ? "Searching..." : "Open Loan"}
+                    <Button
+                        onClick={go}
+                        disabled={isFetching}
+                        className="w-full"
+                    >
+                        {isFetching ? "Searching..." : "Show Details"}
                     </Button>
                 </CardContent>
             </Card>

@@ -1,5 +1,5 @@
 // src/Component/AppSidebar.jsx
-import React, {useEffect, useMemo, useState} from "react";
+import React, {useEffect, useState} from "react";
 import {
     Map,
     Building2,
@@ -33,14 +33,9 @@ import {
     CollapsibleContent,
     CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import {useLocation} from "react-router-dom";
+import {useLocation, matchPath} from "react-router-dom";
 import logo from "@/assets/logo.svg";
-import {
-    ROLES,
-    ROLE_LABEL,
-    hasRole,
-    normalizeRole,
-} from "@/config/roles";
+import {ROLES, ROLE_LABEL, hasRole, normalizeRole} from "@/config/roles";
 
 /* -------------------- Navigation Config -------------------- */
 const navigationItems = [
@@ -162,17 +157,6 @@ const navigationItems = [
                 ],
             },
             {
-                title: "Statement Download",
-                url: "/dashboard/loans/statement-download",
-                allowedRoles: [
-                    ROLES.ADMIN,
-                    ROLES.SUPER_ADMIN,
-                    ROLES.REGIONAL_MANAGER,
-                    ROLES.BRANCH_MANAGER,
-                    ROLES.LOAN_OFFICER,
-                ],
-            },
-            {
                 title: "Loan View",
                 url: "/dashboard/loans/view",
                 allowedRoles: [
@@ -215,10 +199,16 @@ export function AppSidebar() {
         return hasRole(role, item.allowedRoles);
     };
 
-    /* -------------------- Parent route helper -------------------- */
+    /* -------------------- Active helpers -------------------- */
+    const isChildActive = (child) => {
+        // Only Loan View stays active for /dashboard/loans/view/:loan_id
+        const end = child.url !== "/dashboard/loans/view";
+        return !!matchPath({path: child.url, end}, pathname);
+    };
+
     const isOnParentRoute = (parentItem) => {
         if (!parentItem?.children?.length) return false;
-        return parentItem.children.some((c) => pathname.startsWith(c.url));
+        return parentItem.children.some((c) => isChildActive(c));
     };
 
     /* -------------------- Open state for all parents -------------------- */
@@ -352,23 +342,28 @@ export function AppSidebar() {
                                                     <div className={cn("mt-1 pl-6", collapsed && "pl-0")}>
                                                         {item.children
                                                             .filter(canSee)
-                                                            .map((child) => (
-                                                                <div key={child.title} className="py-0.5">
-                                                                    <NavLink
-                                                                        to={child.url}
-                                                                        end={child.url !== "/dashboard/loans/view"} // keep your loan view behavior
-                                                                        className={cn(
-                                                                            "block rounded-md px-2 py-1 text-sm hover:bg-accent",
-                                                                            collapsed && "hidden",
-                                                                            pathname.startsWith(child.url) &&
-                                                                            "bg-accent text-accent-foreground font-medium"
-                                                                        )}
-                                                                        activeClassName="bg-accent text-accent-foreground font-medium"
-                                                                    >
-                                                                        {child.title}
-                                                                    </NavLink>
-                                                                </div>
-                                                            ))}
+                                                            .map((child) => {
+                                                                const active = isChildActive(child);
+
+                                                                return (
+                                                                    <div key={child.title} className="py-0.5">
+                                                                        <NavLink
+                                                                            to={child.url}
+                                                                            // ✅ exact for all, except loan view should stay active for /view/:loan_id
+                                                                            end={child.url !== "/dashboard/loans/view"}
+                                                                            className={cn(
+                                                                                "block rounded-md px-2 py-1 text-sm hover:bg-accent",
+                                                                                collapsed && "hidden",
+                                                                                active &&
+                                                                                "bg-accent text-accent-foreground font-medium"
+                                                                            )}
+                                                                            activeClassName="bg-accent text-accent-foreground font-medium"
+                                                                        >
+                                                                            {child.title}
+                                                                        </NavLink>
+                                                                    </div>
+                                                                );
+                                                            })}
                                                     </div>
                                                 </CollapsibleContent>
                                             </Collapsible>

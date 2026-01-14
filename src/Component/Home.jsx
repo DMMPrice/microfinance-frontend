@@ -17,11 +17,8 @@ import GroupsPage from "@/Component/Groups/Page.jsx";
 import MembersPage from "@/Component/Members/Page.jsx";
 import UsersPage from "@/Pages/UsersPage.jsx";
 import BranchExpensesPage from "@/Component/Branch/Expenses/Page.jsx";
-
-// ✅ Loans pages
 import LoansPage from "@/Component/Loan/Loan Dashboard/LoansPage.jsx";
 import CollectionEntryPage from "@/Component/Loan/Collection Entry/CollectionEntryPage.jsx";
-import StatementDownloadPage from "@/Component/Loan/Statement Download/StatementDownloadPage.jsx";
 import LoanViewPage from "@/Component/Loan/Loan View/LoanViewPage.jsx";
 import LoanViewLandingPage from "@/Component/Loan/Loan View/LoanViewLandingPage.jsx";
 
@@ -324,14 +321,6 @@ export default function Home() {
                                 element={
                                     <Guard role={role} allowedRoles={ALL_BUSINESS_ROLES}>
                                         <CollectionEntryPage/>
-                                    </Guard>
-                                }
-                            />
-                            <Route
-                                path="loans/statement-download"
-                                element={
-                                    <Guard role={role} allowedRoles={ALL_BUSINESS_ROLES}>
-                                        <StatementDownloadPage/>
                                     </Guard>
                                 }
                             />
