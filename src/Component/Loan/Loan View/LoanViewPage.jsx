@@ -1,13 +1,16 @@
 // src/pages/LoanViewPage.jsx
-import React, {useMemo} from "react";
-import {useParams} from "react-router-dom";
+import React, {useMemo, useState} from "react";
+import {useNavigate, useParams} from "react-router-dom";
 
 import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card.tsx";
 import {Skeleton} from "@/components/ui/skeleton.tsx";
 import {Badge} from "@/components/ui/badge.tsx";
 import {Tabs, TabsContent, TabsList, TabsTrigger} from "@/components/ui/tabs.tsx";
+import {Input} from "@/components/ui/input.tsx";
+import {Button} from "@/components/ui/button.tsx";
 
-import {useLoanSummary, useLoanSchedule, useLoanStatement} from "@/hooks/useLoans.js";
+import {useLoanSummary, useLoanSchedule, useLoanStatement, useLoanMaster} from "@/hooks/useLoans.js";
+import {useLoanOfficerById} from "@/hooks/useLoanOfficers.js";
 
 function money(v) {
     const n = Number(v || 0);
@@ -21,7 +24,6 @@ function fmtDate(v) {
 
 function fmtDateTime(v) {
     if (!v) return "-";
-    // backend gives txn_date, not created_at
     try {
         return new Date(v).toLocaleString();
     } catch {
@@ -29,31 +31,112 @@ function fmtDateTime(v) {
     }
 }
 
+function isNumericId(v) {
+    return /^\d+$/.test(String(v || "").trim());
+}
+
+function readLoanAccountSuggestions() {
+    try {
+        const raw = localStorage.getItem("mf.loanAccountNos.v1");
+        const list = raw ? JSON.parse(raw) : [];
+        return Array.isArray(list) ? list : [];
+    } catch {
+        return [];
+    }
+}
+
 export default function LoanViewPage() {
-    const {loan_id} = useParams();
+    // Route param still :loan_id, but can be "123" or "LN-0001"
+    const {loan_id: loanRef} = useParams();
+    const navigate = useNavigate();
+
+    const suggestions = useMemo(() => readLoanAccountSuggestions(), []);
+    const [searchRef, setSearchRef] = useState(loanRef || "");
+
+    // ---- Step 1: if param is numeric => use directly, else resolve loan_id via /loans/master ----
+    const cleanedRef = useMemo(() => String(loanRef || "").trim(), [loanRef]);
+    const isId = useMemo(() => isNumericId(cleanedRef), [cleanedRef]);
+
+    const masterFilters = useMemo(() => {
+        if (!cleanedRef || isId) return null;
+        return {
+            search: cleanedRef,
+            limit: 50,
+            offset: 0,
+        };
+    }, [cleanedRef, isId]);
 
     const {
-        data: summary,
-        isLoading: summaryLoading,
-        isError: summaryError,
-    } = useLoanSummary(loan_id);
+        data: masterData,
+        isLoading: masterLoading,
+        isError: masterError,
+    } = useLoanMaster(masterFilters || {limit: 0, offset: 0, search: ""});
 
-    const {
-        data: schedule,
-        isLoading: scheduleLoading,
-        isError: scheduleError,
-    } = useLoanSchedule(loan_id);
+    const resolvedLoanId = useMemo(() => {
+        if (isId) return Number(cleanedRef);
+        if (!cleanedRef) return null;
 
-    const {
-        data: statement,
-        isLoading: statementLoading,
-        isError: statementError,
-    } = useLoanStatement(loan_id);
+        const rows = Array.isArray(masterData)
+            ? masterData
+            : (masterData?.rows ?? masterData?.items ?? []);
+
+        const hit = rows.find(
+            (x) =>
+                String(x?.loan_account_no || "")
+                    .trim()
+                    .toLowerCase() === cleanedRef.toLowerCase()
+        );
+
+        return hit?.loan_id ?? null;
+    }, [masterData, cleanedRef, isId]);
+
+    // ✅ FINAL identifier: always loan_id only
+    const identifier = useMemo(() => {
+        if (!resolvedLoanId) return null;
+        return {loan_id: Number(resolvedLoanId)};
+    }, [resolvedLoanId]);
+
+    // ---- Step 2: use resolved loan_id for all backend calls ----
+    const {data: summary, isLoading: summaryLoading, isError: summaryError} = useLoanSummary(identifier);
+    const {data: schedule, isLoading: scheduleLoading, isError: scheduleError} = useLoanSchedule(identifier);
+    const {data: statement, isLoading: statementLoading, isError: statementError} = useLoanStatement(identifier);
 
     const paymentTxns = useMemo(() => {
         const list = statement || [];
         return list.filter((x) => x.txn_type === "PAYMENT");
     }, [statement]);
+
+    const headerRefLabel = useMemo(() => {
+        if (!cleanedRef) return "-";
+        if (isId) return `Loan ID: ${cleanedRef}`;
+        if (resolvedLoanId) return `Loan ID: ${resolvedLoanId} (from Loan A/C: ${cleanedRef})`;
+        return `Loan A/C: ${cleanedRef}`;
+    }, [cleanedRef, isId, resolvedLoanId]);
+
+    function goToLoan(ref) {
+        const clean = String(ref || "").trim();
+        if (!clean) return;
+        navigate(`/dashboard/loans/view/${encodeURIComponent(clean)}`);
+    }
+
+    const resolvingFromAccountNo = !!cleanedRef && !isId && !resolvedLoanId;
+
+    // ✅ Loan Officer Name lookup using your new hook
+    const loId = summary?.lo_id ?? null;
+    const {
+        data: loanOfficer,
+        isLoading: loLoading,
+        isError: loError,
+    } = useLoanOfficerById(loId, {enabled: !!loId});
+
+    const loanOfficerName = useMemo(() => {
+        if (!loId) return "-";
+        return (
+            loanOfficer?.employee?.full_name ||
+            loanOfficer?.employee?.user?.username ||
+            `LO-${loId}`
+        );
+    }, [loanOfficer, loId]);
 
     return (
         <div className="space-y-4">
@@ -61,10 +144,30 @@ export default function LoanViewPage() {
             <Card>
                 <CardHeader className="pb-2">
                     <div className="flex items-start justify-between gap-4">
-                        <div>
+                        <div className="space-y-2">
                             <CardTitle className="text-xl">Loan View</CardTitle>
+
                             <div className="text-sm text-muted-foreground">
-                                Loan ID: <span className="font-medium">{loan_id}</span>
+                                <span className="font-medium">{headerRefLabel}</span>
+                            </div>
+
+                            {/* ✅ Search with Suggestions */}
+                            <div className="flex items-center gap-2">
+                                <div className="w-[320px]">
+                                    <Input
+                                        value={searchRef}
+                                        onChange={(e) => setSearchRef(e.target.value)}
+                                        placeholder="Enter Loan ID (123) or Loan Account No (LN-0001)"
+                                        list="loanAccountSuggestions"
+                                    />
+                                    <datalist id="loanAccountSuggestions">
+                                        {suggestions.map((x) => (
+                                            <option key={x} value={x}/>
+                                        ))}
+                                    </datalist>
+                                </div>
+
+                                <Button onClick={() => goToLoan(searchRef)}>Open</Button>
                             </div>
                         </div>
 
@@ -77,10 +180,35 @@ export default function LoanViewPage() {
                         )}
                     </div>
                 </CardHeader>
+
                 <CardContent className="text-sm text-muted-foreground">
                     View Summary, Repayment Schedule and Ledger Statement.
                 </CardContent>
             </Card>
+
+            {/* ✅ Resolve status when user opened using Loan Account No */}
+            {resolvingFromAccountNo ? (
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-base">Resolving Loan Account No…</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        {masterLoading ? (
+                            <div className="space-y-2">
+                                <Skeleton className="h-6 w-1/3"/>
+                                <Skeleton className="h-10 w-full"/>
+                            </div>
+                        ) : masterError ? (
+                            <p className="text-sm text-destructive">Failed to resolve Loan Account No.</p>
+                        ) : (
+                            <p className="text-sm text-destructive">
+                                Loan not found for account no:{" "}
+                                <span className="font-medium">{cleanedRef}</span>
+                            </p>
+                        )}
+                    </CardContent>
+                </Card>
+            ) : null}
 
             {/* ✅ SUMMARY CARD */}
             <Card>
@@ -100,63 +228,72 @@ export default function LoanViewPage() {
                         <p className="text-sm text-muted-foreground">No summary found.</p>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                            <div className="rounded-md border p-3">
-                                <div className="text-xs text-muted-foreground">Loan Account No</div>
+                            {/* ✅ all cells centered */}
+                            <div className="rounded-md border p-3 text-center flex flex-col items-center">
+                                <div className="text-m text-muted-foreground mb-2">Loan Account No</div>
                                 <div className="font-medium">{summary.loan_account_no || "-"}</div>
                             </div>
 
-                            <div className="rounded-md border p-3">
-                                <div className="text-xs text-muted-foreground">Member</div>
-                                <div className="font-medium">{summary.member_name}</div>
-                                <div className="text-xs text-muted-foreground">Member ID: {summary.member_id}</div>
+                            <div className="rounded-md border p-3 text-center flex flex-col items-center">
+                                <div className="text-m text-muted-foreground mb-2">Member Name</div>
+                                <div className="font-medium">{summary.member_name || "-"}</div>
                             </div>
 
-                            <div className="rounded-md border p-3">
-                                <div className="text-xs text-muted-foreground">Group</div>
-                                <div className="font-medium">{summary.group_name}</div>
-                                <div className="text-xs text-muted-foreground">Group ID: {summary.group_id}</div>
+                            <div className="rounded-md border p-3 text-center flex flex-col items-center">
+                                <div className="text-m text-muted-foreground mb-2">Group Name</div>
+                                <div className="font-medium">{summary.group_name || "-"}</div>
                             </div>
 
-                            <div className="rounded-md border p-3">
-                                <div className="text-xs text-muted-foreground">Loan Officer ID</div>
-                                <div className="font-medium">{summary.lo_id ?? "-"}</div>
+                            {/* ✅ Loan Officer shows Name + LO ID small */}
+                            <div className="rounded-md border p-3 text-center flex flex-col items-center">
+                                <div className="text-m text-muted-foreground mb-2">Loan Officer Name</div>
+
+                                {loLoading ? (
+                                    <Skeleton className="h-5 w-28"/>
+                                ) : loError ? (
+                                    <div className="font-medium">{loId != null ? `LO-${loId}` : "-"}</div>
+                                ) : (
+                                    <div className="font-medium">{loanOfficerName}</div>
+                                )}
                             </div>
 
-                            <div className="rounded-md border p-3">
-                                <div className="text-xs text-muted-foreground">Principal</div>
+                            <div className="rounded-md border p-3 text-center flex flex-col items-center">
+                                <div className="text-m text-muted-foreground mb-2">Principal Amount</div>
                                 <div className="font-medium">₹ {money(summary.principal_amount)}</div>
                             </div>
 
-                            <div className="rounded-md border p-3">
-                                <div className="text-xs text-muted-foreground">Interest (Total)</div>
+                            <div className="rounded-md border p-3 text-center flex flex-col items-center">
+                                <div className="text-m text-muted-foreground mb-2">Total Interest Amount</div>
                                 <div className="font-medium">₹ {money(summary.interest_amount_total)}</div>
                             </div>
 
-                            <div className="rounded-md border p-3">
-                                <div className="text-xs text-muted-foreground">Total Disbursed</div>
+                            <div className="rounded-md border p-3 text-center flex flex-col items-center">
+                                <div className="text-m text-muted-foreground mb-2">Total Amount Disbursed</div>
                                 <div className="font-medium">₹ {money(summary.total_disbursed_amount)}</div>
                             </div>
 
-                            <div className="rounded-md border p-3">
-                                <div className="text-xs text-muted-foreground">Total Paid</div>
+                            <div className="rounded-md border p-3 text-center flex flex-col items-center">
+                                <div className="text-m text-muted-foreground mb-2">Total Amount Paid</div>
                                 <div className="font-medium">₹ {money(summary.total_paid)}</div>
                             </div>
 
-                            <div className="rounded-md border p-3">
-                                <div className="text-xs text-muted-foreground">Outstanding</div>
+                            <div className="rounded-md border p-3 text-center flex flex-col items-center">
+                                <div className="text-m text-muted-foreground mb-2">Outstanding Balance</div>
                                 <div className="font-medium">₹ {money(summary.outstanding)}</div>
                             </div>
 
-                            <div className="rounded-md border p-3">
-                                <div className="text-xs text-muted-foreground">Advance Balance</div>
+                            <div className="rounded-md border p-3 text-center flex flex-col items-center">
+                                <div className="text-m text-muted-foreground mb-2">Advance Balance</div>
                                 <div className="font-medium">₹ {money(summary.advance_balance)}</div>
                             </div>
 
-                            <div className="rounded-md border p-3 md:col-span-2">
-                                <div className="text-xs text-muted-foreground">Next Due</div>
+                            <div className="rounded-md border p-3 text-center flex flex-col items-center md:col-span-2">
+                                <div className="text-m text-muted-foreground mb-2">Next Due Date & Amount</div>
                                 <div className="font-medium">
                                     {fmtDate(summary.next_due_date)}{" "}
-                                    {summary.next_due_amount != null ? `(₹ ${money(summary.next_due_amount)})` : ""}
+                                    {summary.next_due_amount != null
+                                        ? `(₹ ${money(summary.next_due_amount)})`
+                                        : ""}
                                 </div>
                             </div>
                         </div>
@@ -164,10 +301,10 @@ export default function LoanViewPage() {
                 </CardContent>
             </Card>
 
-            {/* ✅ TABS: Schedule + Statement */}
+            {/* ✅ TABS */}
             <Card>
                 <CardHeader className="pb-2">
-                    <CardTitle className="text-base">Details</CardTitle>
+                    <CardTitle className="text-base">Loan Details</CardTitle>
                 </CardHeader>
 
                 <CardContent>
@@ -175,10 +312,10 @@ export default function LoanViewPage() {
                         <TabsList>
                             <TabsTrigger value="schedule">Schedule</TabsTrigger>
                             <TabsTrigger value="statement">Statement</TabsTrigger>
-                            <TabsTrigger value="payments">Payments Only</TabsTrigger>
+                            <TabsTrigger value="payments">Paid Installments</TabsTrigger>
                         </TabsList>
 
-                        {/* ✅ SCHEDULE */}
+                        {/* Schedule */}
                         <TabsContent value="schedule" className="mt-4">
                             {scheduleLoading ? (
                                 <div className="space-y-2">
@@ -225,7 +362,7 @@ export default function LoanViewPage() {
                             )}
                         </TabsContent>
 
-                        {/* ✅ STATEMENT */}
+                        {/* Statement */}
                         <TabsContent value="statement" className="mt-4">
                             {statementLoading ? (
                                 <div className="space-y-2">
@@ -270,7 +407,7 @@ export default function LoanViewPage() {
                             )}
                         </TabsContent>
 
-                        {/* ✅ PAYMENTS ONLY */}
+                        {/* Payments */}
                         <TabsContent value="payments" className="mt-4">
                             {statementLoading ? (
                                 <div className="space-y-2">

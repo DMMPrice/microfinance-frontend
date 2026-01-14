@@ -33,6 +33,33 @@ function normalizeSearch(search) {
     return s;
 }
 
+function isNumericId(v) {
+    return /^\d+$/.test(String(v || "").trim());
+}
+
+function resolveLoanIdentifier(input) {
+    // input can be:
+    // - { loan_id: 123 } OR { loan_account_no: "LN-0001" }
+    // - "123" OR "LN-0001"
+    if (!input) return null;
+
+    if (typeof input === "object") {
+        if (input.loan_id != null && String(input.loan_id).trim() !== "") {
+            return {type: "id", value: Number(input.loan_id)};
+        }
+        if (input.loan_account_no) {
+            return {type: "acc", value: String(input.loan_account_no).trim()};
+        }
+        return null;
+    }
+
+    const ref = String(input).trim();
+    if (!ref) return null;
+    if (isNumericId(ref)) return {type: "id", value: Number(ref)};
+    return {type: "acc", value: ref};
+}
+
+
 /* -------------------- STATS -------------------- */
 export function useLoanStats() {
     return useQuery({
@@ -145,37 +172,54 @@ export function useLoanMaster(filters = {}) {
 }
 
 /* -------------------- LOAN SUMMARY -------------------- */
-export function useLoanSummary(loan_id) {
-    const loanId = normalizeId(loan_id);
+export function useLoanSummary(loanRef) {
+    const ident = resolveLoanIdentifier(loanRef);
 
     return useQuery({
-        queryKey: ["loans", "summary", loanId],
-        enabled: !!loanId,
-        queryFn: async () => (await apiClient.get(`/loans/${loanId}/summary`)).data,
+        queryKey: ["loans", "summary", ident?.type, ident?.value],
+        enabled: !!ident?.value,
+        queryFn: async () => {
+            if (ident.type === "id") {
+                return (await apiClient.get(`/loans/${ident.value}/summary`)).data;
+            }
+            // ✅ backend endpoint (recommended)
+            return (await apiClient.get(`/loans/${encodeURIComponent(ident.value)}/summary`)).data;
+        },
         refetchOnWindowFocus: false,
     });
 }
 
+
 /* -------------------- LOAN SCHEDULE -------------------- */
-export function useLoanSchedule(loan_id) {
-    const loanId = normalizeId(loan_id);
+export function useLoanSchedule(loanRef) {
+    const ident = resolveLoanIdentifier(loanRef);
 
     return useQuery({
-        queryKey: ["loans", "schedule", loanId],
-        enabled: !!loanId,
-        queryFn: async () => (await apiClient.get(`/loans/${loanId}/schedule`)).data,
+        queryKey: ["loans", "schedule", ident?.type, ident?.value],
+        enabled: !!ident?.value,
+        queryFn: async () => {
+            if (ident.type === "id") {
+                return (await apiClient.get(`/loans/${ident.value}/schedule`)).data;
+            }
+            return (await apiClient.get(`/loans/${encodeURIComponent(ident.value)}/schedule`)).data;
+        },
         refetchOnWindowFocus: false,
     });
 }
 
 /* -------------------- LOAN STATEMENT -------------------- */
-export function useLoanStatement(loan_id) {
-    const loanId = normalizeId(loan_id);
+export function useLoanStatement(loanRef) {
+    const ident = resolveLoanIdentifier(loanRef);
 
     return useQuery({
-        queryKey: ["loans", "statement", loanId],
-        enabled: !!loanId,
-        queryFn: async () => (await apiClient.get(`/loans/${loanId}/statement`)).data,
+        queryKey: ["loans", "statement", ident?.type, ident?.value],
+        enabled: !!ident?.value,
+        queryFn: async () => {
+            if (ident.type === "id") {
+                return (await apiClient.get(`/loans/${ident.value}/statement`)).data;
+            }
+            return (await apiClient.get(`/loans/${encodeURIComponent(ident.value)}/statement`)).data;
+        },
         refetchOnWindowFocus: false,
     });
 }

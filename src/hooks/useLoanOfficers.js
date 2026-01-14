@@ -3,11 +3,23 @@ import {useQuery, useMutation, useQueryClient} from "@tanstack/react-query";
 import {api} from "@/lib/http.js";
 
 const LOAN_OFFICERS_KEY = ["loan-officers"];
-const LOAN_OFFICER_SUMMARY_KEY = (loId) => [
-    "loan-officers",
-    "group-summary",
-    loId ?? "all",
-];
+const LOAN_OFFICER_SUMMARY_KEY = (loId) => ["loan-officers", "group-summary", loId ?? "all"];
+
+// ✅ NEW: single LO details hook (must be top-level export)
+export function useLoanOfficerById(loId, options = {}) {
+    const enabled = options.enabled ?? true;
+
+    return useQuery({
+        queryKey: ["loan-officer", loId],
+        enabled: enabled && loId != null && loId !== "" && !Number.isNaN(Number(loId)),
+        queryFn: async () => {
+            const res = await api.get(`/loan-officers/${loId}`);
+            return res.data;
+        },
+        staleTime: 5 * 60 * 1000,
+        refetchOnWindowFocus: false,
+    });
+}
 
 /**
  * Loan Officer CRUD + list hook
@@ -15,26 +27,6 @@ const LOAN_OFFICER_SUMMARY_KEY = (loId) => [
  *  - GET    /loan-officers
  *  - POST   /loan-officers
  *  - DELETE /loan-officers/{lo_id}
- *
- * GET /loan-officers returns List[LoanOfficerWithEmployeeOut]:
- * {
- *   lo_id,
- *   employee_id,
- *   employee: {
- *     employee_id,
- *     full_name,
- *     phone,
- *     role_id,
- *     region_id,
- *     branch_id,
- *     user: {
- *       user_id,
- *       username,
- *       email,
- *       is_active
- *     }
- *   }
- * }
  */
 export function useLoanOfficers() {
     const queryClient = useQueryClient();
@@ -52,10 +44,10 @@ export function useLoanOfficers() {
             const res = await api.get("/loan-officers/");
             return res.data;
         },
+        refetchOnWindowFocus: false,
     });
 
     // 🔹 POST /loan-officers
-    // payload should match LoanOfficerCreate → { employee_id: number }
     const createLoanOfficerMutation = useMutation({
         mutationFn: async (payload) => {
             const res = await api.post("/loan-officers", payload);
@@ -90,13 +82,7 @@ export function useLoanOfficers() {
 }
 
 /**
- * Optional helper for:
- *  - GET /loan-officers/groups/summary
- *  - GET /loan-officers/groups/summary?lo_id={lo_id}
- *
- * Usage:
- *   const {data, isLoading} = useLoanOfficerGroupSummary();        // all LOs in scope
- *   const {data, isLoading} = useLoanOfficerGroupSummary(loId);    // single LO summary
+ * Optional helper for group summary
  */
 export function useLoanOfficerGroupSummary(loId = null, options = {}) {
     const {enabled = true} = options;
@@ -110,5 +96,6 @@ export function useLoanOfficerGroupSummary(loId = null, options = {}) {
             });
             return res.data;
         },
+        refetchOnWindowFocus: false,
     });
 }
