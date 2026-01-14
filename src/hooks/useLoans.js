@@ -251,23 +251,27 @@ export function useApplyLoanAdvance() {
  * Initial load: GET /loans/collections/by-lo (NO params)
  * After selecting LO/date: GET /loans/collections/by-lo?lo_id=..&as_on=..
  */
-export function useCollectionsByLOManual(lo_id, as_on) {
-    const loId = normalizeId(lo_id);
-    const asOn = normalizeDate(as_on);
-
+export function useCollectionsByLOManual(loId, asOn, enabled = false) {
     return useQuery({
-        queryKey: ["loans", "collectionsByLO", "manual", loId || "ALL", asOn || "ALL"],
-        enabled: true,
+        queryKey: ["collectionsByLOManual", loId, asOn],
         queryFn: async () => {
-            const params = {};
-            if (loId) params.lo_id = Number(loId);
-            if (asOn) params.as_on = asOn;
+            const params = new URLSearchParams();
+            if (loId) params.set("lo_id", loId);
+            if (asOn) params.set("as_on", asOn);
 
-            const {data} = await apiClient.get("/loans/collections/by-lo", {params});
-            return data;
+            const res = await apiClient.get(`/loans/collections/by-lo?${params.toString()}`);
+
+            // ✅ normalize API response to array
+            const payload = res?.data;
+            const rows =
+                Array.isArray(payload) ? payload :
+                    Array.isArray(payload?.rows) ? payload.rows :
+                        Array.isArray(payload?.data) ? payload.data :
+                            [];
+
+            return rows;
         },
-        keepPreviousData: true,
-        refetchOnWindowFocus: false,
+        enabled: !!enabled && !!loId && !!asOn,
     });
 }
 
@@ -294,7 +298,7 @@ export function useUpdateLoan() {
     const qc = useQueryClient();
 
     return useMutation({
-        mutationFn: async ({ loan_id, payload }) => {
+        mutationFn: async ({loan_id, payload}) => {
             const loanId = normalizeId(loan_id);
             if (!loanId) throw new Error("loan_id is required");
             if (!payload || typeof payload !== "object") throw new Error("payload is required");
@@ -303,15 +307,15 @@ export function useUpdateLoan() {
         onSuccess: (_data, vars) => {
             const loanId = normalizeId(vars?.loan_id);
 
-            qc.invalidateQueries({ queryKey: ["loans", "stats"] });
-            qc.invalidateQueries({ queryKey: ["loans", "installmentsDue"] });
-            qc.invalidateQueries({ queryKey: ["loans", "collectionsByLO"] });
-            qc.invalidateQueries({ queryKey: ["loans", "master"] });
+            qc.invalidateQueries({queryKey: ["loans", "stats"]});
+            qc.invalidateQueries({queryKey: ["loans", "installmentsDue"]});
+            qc.invalidateQueries({queryKey: ["loans", "collectionsByLO"]});
+            qc.invalidateQueries({queryKey: ["loans", "master"]});
 
             if (loanId) {
-                qc.invalidateQueries({ queryKey: ["loans", "summary", loanId] });
-                qc.invalidateQueries({ queryKey: ["loans", "schedule", loanId] });
-                qc.invalidateQueries({ queryKey: ["loans", "statement", loanId] });
+                qc.invalidateQueries({queryKey: ["loans", "summary", loanId]});
+                qc.invalidateQueries({queryKey: ["loans", "schedule", loanId]});
+                qc.invalidateQueries({queryKey: ["loans", "statement", loanId]});
             }
         },
     });
@@ -323,7 +327,7 @@ export function useDeactivateLoan() {
     const qc = useQueryClient();
 
     return useMutation({
-        mutationFn: async ({ loan_id }) => {
+        mutationFn: async ({loan_id}) => {
             const loanId = normalizeId(loan_id);
             if (!loanId) throw new Error("loan_id is required");
             return (await apiClient.patch(`/loans/${loanId}/deactivate`)).data;
@@ -331,15 +335,15 @@ export function useDeactivateLoan() {
         onSuccess: (_data, vars) => {
             const loanId = normalizeId(vars?.loan_id);
 
-            qc.invalidateQueries({ queryKey: ["loans", "stats"] });
-            qc.invalidateQueries({ queryKey: ["loans", "installmentsDue"] });
-            qc.invalidateQueries({ queryKey: ["loans", "collectionsByLO"] });
-            qc.invalidateQueries({ queryKey: ["loans", "master"] });
+            qc.invalidateQueries({queryKey: ["loans", "stats"]});
+            qc.invalidateQueries({queryKey: ["loans", "installmentsDue"]});
+            qc.invalidateQueries({queryKey: ["loans", "collectionsByLO"]});
+            qc.invalidateQueries({queryKey: ["loans", "master"]});
 
             if (loanId) {
-                qc.invalidateQueries({ queryKey: ["loans", "summary", loanId] });
-                qc.invalidateQueries({ queryKey: ["loans", "schedule", loanId] });
-                qc.invalidateQueries({ queryKey: ["loans", "statement", loanId] });
+                qc.invalidateQueries({queryKey: ["loans", "summary", loanId]});
+                qc.invalidateQueries({queryKey: ["loans", "schedule", loanId]});
+                qc.invalidateQueries({queryKey: ["loans", "statement", loanId]});
             }
         },
     });

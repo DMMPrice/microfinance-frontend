@@ -1,3 +1,10 @@
+// ✅ UPDATED: CollectionEntryPage.jsx
+// Requirement:
+// 1) NOTHING shows until user clicks "Load Due"
+// 2) After Load Due -> show group-wise accordion in MAIN window
+// 3) Each group has an "Open" button -> opens that group's rows in a MODAL
+// 4) If user tries Open/View before Load Due -> show WARNING modal
+
 import React, {useEffect, useMemo, useState} from "react";
 import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card.tsx";
 import {Button} from "@/components/ui/button.tsx";
@@ -17,7 +24,7 @@ import {
     AccordionTrigger,
 } from "@/components/ui/accordion.tsx";
 import {Skeleton} from "@/components/ui/skeleton.tsx";
-import {CheckCircle2, Eye, Loader2, RotateCw, Download} from "lucide-react";
+import {CheckCircle2, Eye, Loader2, RotateCw, Download, ExternalLink} from "lucide-react";
 
 import {
     Dialog,
@@ -65,29 +72,33 @@ function downloadCSV(filename, rows) {
     document.body.appendChild(a);
     a.click();
     a.remove();
-
     URL.revokeObjectURL(url);
 }
 
 export default function CollectionEntryPage() {
-    // ✅ UI date can show today
     const [asOn, setAsOn] = useState(todayYYYYMMDD());
 
     const [branchId, setBranchId] = useState("");
     const [loId, setLoId] = useState("");
     const [groupId, setGroupId] = useState("ALL");
 
-    // ✅ IMPORTANT: filters are NOT applied initially
+    // ✅ MUST click Load Due first
     const [applyFilters, setApplyFilters] = useState(false);
 
-    // per-row form states
     const [rowForm, setRowForm] = useState({});
     const [posting, setPosting] = useState({});
     const [posted, setPosted] = useState({});
 
-    // ✅ View Payments modal state
+    // ✅ warning modal
+    const [warnOpen, setWarnOpen] = useState(false);
+
+    // ✅ View Payments modal
     const [openPayments, setOpenPayments] = useState(false);
     const [selectedLoanId, setSelectedLoanId] = useState(null);
+
+    // ✅ Group-wise modal
+    const [openGroupModal, setOpenGroupModal] = useState(false);
+    const [selectedGroupKey, setSelectedGroupKey] = useState(null);
 
     /* -------------------- MASTER DROPDOWNS -------------------- */
     const {branches, isLoading: branchesLoading} = useBranches();
@@ -112,29 +123,25 @@ export default function CollectionEntryPage() {
             .filter((g) => (lId ? g.lo_id === lId : true));
     }, [groups, branchId, loId]);
 
-    /* -------------------- DUE COLLECTIONS -------------------- */
-    // ✅ Initial load: send "" "" -> hook will call /by-lo with NO params
-    // ✅ After Load Due: send loId & asOn
-    const effectiveLoId = applyFilters ? loId : "";
-    const effectiveAsOn = applyFilters ? asOn : "";
+    /* -------------------- DUE COLLECTIONS (NO AUTO FETCH) -------------------- */
+    const effectiveLoId = applyFilters ? loId : null;
+    const effectiveAsOn = applyFilters ? asOn : null;
 
     const {
         data: rows = [],
         isLoading: rowsLoading,
         isFetching: rowsFetching,
         refetch: refetchDue,
-    } = useCollectionsByLOManual(effectiveLoId, effectiveAsOn);
+    } = useCollectionsByLOManual(effectiveLoId, effectiveAsOn, applyFilters);
 
     const isLoadingDue = rowsLoading || rowsFetching;
 
-    /* -------------------- CREATE PAYMENT MUTATION -------------------- */
     const createPayment = useCreateLoanPayment();
 
-    /* -------------------- PAYMENTS MODAL HOOK -------------------- */
-    const {
-        data: paymentRows = [],
-        isLoading: paymentsLoading,
-    } = useLoanPayments(selectedLoanId, openPayments && !!selectedLoanId);
+    const {data: paymentRows = [], isLoading: paymentsLoading} = useLoanPayments(
+        selectedLoanId,
+        openPayments && !!selectedLoanId
+    );
 
     /* -------------------- Helpers -------------------- */
     function updateForm(key, patch) {
@@ -145,11 +152,12 @@ export default function CollectionEntryPage() {
     }
 
     function resetTableState() {
-        // ✅ When user changes filters, go back to initial mode
         setApplyFilters(false);
         setRowForm({});
         setPosted({});
         setPosting({});
+        setSelectedGroupKey(null);
+        setOpenGroupModal(false);
     }
 
     function onBranchChange(v) {
@@ -170,15 +178,39 @@ export default function CollectionEntryPage() {
         resetTableState();
     }
 
+    function requireLoadOrWarn() {
+        if (!applyFilters) {
+            setWarnOpen(true);
+            return false;
+        }
+        return true;
+    }
+
     async function loadDue() {
-        // ✅ Only now we apply filters and send params
         setPosted({});
         setApplyFilters(true);
         await refetchDue();
     }
 
-    /* -------------------- Initialize rowForm when rows arrive -------------------- */
+    /* ✅ helper: loan account no */
+    const loanAccountById = useMemo(() => {
+        const m = new Map();
+        (rows || []).forEach((r) => {
+            if (r?.loan_id != null) m.set(r.loan_id, r.loan_account_no);
+        });
+        return m;
+    }, [rows]);
+
+    const selectedLoanAccountNo = useMemo(() => {
+        if (!selectedLoanId) return "";
+        return loanAccountById.get(selectedLoanId) || "";
+    }, [selectedLoanId, loanAccountById]);
+
+    /* -------------------- init row form -------------------- */
     useEffect(() => {
+        // ✅ only init after data arrives (after Load Due)
+        if (!applyFilters) return;
+
         const init = {};
         (rows || []).forEach((r) => {
             const key = `${r.installment_no}:${r.loan_id}`;
@@ -191,14 +223,15 @@ export default function CollectionEntryPage() {
             };
         });
         setRowForm(init);
-    }, [rows]);
+    }, [rows, applyFilters]);
 
-    /* -------------------- Filtering / Grouping -------------------- */
+    /* -------------------- filtering / grouping -------------------- */
     const displayRows = useMemo(() => {
+        if (!applyFilters) return []; // ✅ nothing before Load Due
         if (groupId === "ALL") return rows;
         const gId = Number(groupId);
         return (rows || []).filter((r) => r.group_id === gId);
-    }, [rows, groupId]);
+    }, [rows, groupId, applyFilters]);
 
     const grouped = useMemo(() => {
         const map = new Map();
@@ -213,8 +246,15 @@ export default function CollectionEntryPage() {
         });
     }, [displayRows]);
 
-    /* -------------------- Submit Row -------------------- */
+    const selectedGroup = useMemo(() => {
+        if (!selectedGroupKey) return null;
+        return grouped.find((g) => g.key === selectedGroupKey) || null;
+    }, [grouped, selectedGroupKey]);
+
+    /* -------------------- submit row -------------------- */
     async function submitRow(r) {
+        if (!requireLoadOrWarn()) return;
+
         const key = `${r.installment_no}:${r.loan_id}`;
         const f = rowForm[key] || {};
 
@@ -243,17 +283,159 @@ export default function CollectionEntryPage() {
     function downloadStatementCSV() {
         if (!selectedLoanId) return;
 
-        const header = ["Loan ID", "Txn Date", "Paid Amount (Credit)", "Outstanding After", "Narration"];
+        const accNo = selectedLoanAccountNo || `#${selectedLoanId}`;
+        const header = ["Loan A/c No", "Txn Date", "Paid Amount (Credit)", "Outstanding After", "Narration"];
+
         const data = (paymentRows || []).map((x) => ([
-            selectedLoanId,
+            accNo,
             x.txn_date ? new Date(x.txn_date).toLocaleString() : "-",
             Number(x.credit || 0).toFixed(2),
             Number(x.balance_outstanding || 0).toFixed(2),
             x.narration || "-",
         ]));
 
-        const filename = `loan_${selectedLoanId}_statement_${todayYYYYMMDD()}.csv`;
+        const filename = `loan_${accNo}_statement_${todayYYYYMMDD()}.csv`;
         downloadCSV(filename, [header, ...data]);
+    }
+
+    /* -------------------- table renderer (re-used) -------------------- */
+    function RenderGroupTable({items}) {
+        return (
+            <div className="w-full overflow-x-auto">
+                <table className="w-full text-sm border rounded-md">
+                    <thead className="bg-muted">
+                    <tr>
+                        <th className="p-2 border text-left">Member</th>
+                        <th className="p-2 border">Due Date</th>
+                        <th className="p-2 border">Inst</th>
+                        <th className="p-2 border">Due Left</th>
+                        <th className="p-2 border">Amount</th>
+                        <th className="p-2 border">Mode</th>
+                        <th className="p-2 border">Receipt</th>
+                        <th className="p-2 border">DateTime</th>
+                        <th className="p-2 border">Remarks</th>
+                        <th className="p-2 border">Action</th>
+                    </tr>
+                    </thead>
+
+                    <tbody>
+                    {items.map((r) => {
+                        const key = `${r.installment_no}:${r.loan_id}`;
+                        const f = rowForm[key] || {};
+                        const isPosting = !!posting[key];
+                        const isDone = !!posted[key];
+
+                        return (
+                            <tr key={key} className={isDone ? "opacity-70" : ""}>
+                                <td className="p-2 border">
+                                    <div className="font-medium">{r.member_name}</div>
+                                    <div className="text-xs text-muted-foreground">
+                                        Loan A/c:{" "}
+                                        <span className="font-medium">
+                        {r.loan_account_no || `#${r.loan_id}`}
+                      </span>{" "}
+                                        • Advance: {Number(r.advance_balance || 0).toFixed(2)}
+                                    </div>
+                                </td>
+
+                                <td className="p-2 border text-center">{String(r.due_date || "").slice(0, 10)}</td>
+                                <td className="p-2 border text-center">{r.installment_no}</td>
+                                <td className="p-2 border text-center">{Number(r.due_left || 0).toFixed(2)}</td>
+
+                                <td className="p-2 border">
+                                    <Input
+                                        value={f.amount_received ?? ""}
+                                        onChange={(e) => updateForm(key, {amount_received: e.target.value})}
+                                        placeholder="0.00"
+                                        disabled={isDone}
+                                    />
+                                </td>
+
+                                <td className="p-2 border">
+                                    <Select
+                                        value={f.payment_mode || "CASH"}
+                                        onValueChange={(v) => updateForm(key, {payment_mode: v})}
+                                        disabled={isDone}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Mode"/>
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {MODE_OPTIONS.map((m) => (
+                                                <SelectItem key={m} value={m}>
+                                                    {m}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </td>
+
+                                <td className="p-2 border">
+                                    <Input
+                                        value={f.receipt_no ?? ""}
+                                        onChange={(e) => updateForm(key, {receipt_no: e.target.value})}
+                                        placeholder="Receipt"
+                                        disabled={isDone}
+                                    />
+                                </td>
+
+                                <td className="p-2 border">
+                                    <Input
+                                        type="datetime-local"
+                                        value={f.payment_date ?? ""}
+                                        onChange={(e) => updateForm(key, {payment_date: e.target.value})}
+                                        disabled={isDone}
+                                    />
+                                </td>
+
+                                <td className="p-2 border">
+                                    <Input
+                                        value={f.remarks ?? ""}
+                                        onChange={(e) => updateForm(key, {remarks: e.target.value})}
+                                        placeholder="Remarks"
+                                        disabled={isDone}
+                                    />
+                                </td>
+
+                                <td className="p-2 border text-center">
+                                    <div className="flex items-center justify-center gap-2">
+                                        <Button size="sm" onClick={() => submitRow(r)} disabled={isPosting || isDone}>
+                                            {isDone ? (
+                                                <>
+                                                    <CheckCircle2 className="h-4 w-4"/>
+                                                    <span className="ml-2">Done</span>
+                                                </>
+                                            ) : isPosting ? (
+                                                <>
+                                                    <Loader2 className="h-4 w-4 animate-spin"/>
+                                                    <span className="ml-2">Saving</span>
+                                                </>
+                                            ) : (
+                                                "Submit"
+                                            )}
+                                        </Button>
+
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => {
+                                                if (!requireLoadOrWarn()) return;
+                                                setSelectedLoanId(r.loan_id);
+                                                setOpenPayments(true);
+                                            }}
+                                        >
+                                            <Eye className="h-4 w-4 mr-2"/>
+                                            View
+                                        </Button>
+                                    </div>
+                                </td>
+                            </tr>
+                        );
+                    })}
+                    </tbody>
+                </table>
+            </div>
+        );
     }
 
     return (
@@ -263,8 +445,7 @@ export default function CollectionEntryPage() {
                     <CardTitle>Collection Entry</CardTitle>
                 </CardHeader>
                 <CardContent className="text-sm text-muted-foreground">
-                    Initial load shows all due collections (no filters sent). Select Branch + Loan Officer and click
-                    Load Due to filter.
+                    <span className="font-medium">Loan Installment Dues</span> to fetch and view due collections.
                 </CardContent>
             </Card>
 
@@ -272,15 +453,12 @@ export default function CollectionEntryPage() {
                 <CardHeader className="pb-2">
                     <CardTitle className="text-base">Filters</CardTitle>
                 </CardHeader>
+
                 <CardContent>
                     <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
                         <div className="space-y-1">
                             <Label>As On Date</Label>
-                            <Input
-                                type="date"
-                                value={asOn}
-                                onChange={(e) => onAsOnChange(e.target.value)}
-                            />
+                            <Input type="date" value={asOn} onChange={(e) => onAsOnChange(e.target.value)}/>
                         </div>
 
                         <div className="space-y-1">
@@ -292,7 +470,7 @@ export default function CollectionEntryPage() {
                                 <SelectContent>
                                     {(branches || []).map((b) => (
                                         <SelectItem key={b.branch_id} value={String(b.branch_id)}>
-                                            {b.branch_name} (#{b.branch_id})
+                                            {b.branch_name}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
@@ -314,7 +492,7 @@ export default function CollectionEntryPage() {
                                     ) : (
                                         filteredLOs.map((lo) => (
                                             <SelectItem key={lo.lo_id} value={String(lo.lo_id)}>
-                                                {lo?.employee?.full_name || "Loan Officer"} (LO #{lo.lo_id})
+                                                {lo?.employee?.full_name || "Loan Officer"}
                                             </SelectItem>
                                         ))
                                     )}
@@ -332,7 +510,7 @@ export default function CollectionEntryPage() {
                                     <SelectItem value="ALL">All Groups</SelectItem>
                                     {filteredGroups.map((g) => (
                                         <SelectItem key={g.group_id} value={String(g.group_id)}>
-                                            {g.group_name} (#{g.group_id})
+                                            {g.group_name}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
@@ -340,9 +518,12 @@ export default function CollectionEntryPage() {
                         </div>
 
                         <div className="flex items-end gap-2">
-                            <Button onClick={loadDue} disabled={isLoadingDue} className="w-full">
-                                {isLoadingDue ? <Loader2 className="h-4 w-4 animate-spin"/> :
-                                    <RotateCw className="h-4 w-4"/>}
+                            <Button onClick={loadDue} disabled={isLoadingDue || !branchId || !loId} className="w-full">
+                                {isLoadingDue ? (
+                                    <Loader2 className="h-4 w-4 animate-spin"/>
+                                ) : (
+                                    <RotateCw className="h-4 w-4"/>
+                                )}
                                 <span className="ml-2">Load Due</span>
                             </Button>
                         </div>
@@ -350,12 +531,18 @@ export default function CollectionEntryPage() {
                 </CardContent>
             </Card>
 
+            {/* ✅ MAIN WINDOW GROUP-WISE VIEW */}
             <Card>
                 <CardHeader className="pb-2">
                     <CardTitle className="text-base">Due Collections</CardTitle>
                 </CardHeader>
+
                 <CardContent>
-                    {isLoadingDue ? (
+                    {!applyFilters ? (
+                        <div className="text-sm text-muted-foreground">
+                            Please click <span className="font-medium">Load Due</span> to view due collections.
+                        </div>
+                    ) : isLoadingDue ? (
                         <div className="space-y-2">
                             <Skeleton className="h-10 w-full"/>
                             <Skeleton className="h-24 w-full"/>
@@ -369,149 +556,34 @@ export default function CollectionEntryPage() {
                                 <AccordionItem key={g.key} value={g.key}>
                                     <AccordionTrigger>
                                         <div className="flex items-center justify-between w-full pr-3">
-                                            <span className="font-medium">{g.groupName}</span>
-                                            <span
-                                                className="text-xs text-muted-foreground">Rows: {g.items.length}</span>
+                                            <div className="flex items-center gap-3">
+                                                <span className="font-medium">{g.groupName}</span>
+                                                <span className="text-xs text-muted-foreground">
+                          Rows: {g.items.length}
+                        </span>
+                                            </div>
+
+                                            {/* ✅ Open group in modal */}
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    if (!requireLoadOrWarn()) return;
+
+                                                    setSelectedGroupKey(g.key);
+                                                    setOpenGroupModal(true);
+                                                }}
+                                            >
+                                                <ExternalLink className="h-4 w-4 mr-2"/>
+                                                Open
+                                            </Button>
                                         </div>
                                     </AccordionTrigger>
 
                                     <AccordionContent>
-                                        <div className="w-full overflow-x-auto">
-                                            <table className="w-full text-sm border rounded-md">
-                                                <thead className="bg-muted">
-                                                <tr>
-                                                    <th className="p-2 border text-left">Member</th>
-                                                    <th className="p-2 border">Due Date</th>
-                                                    <th className="p-2 border">Inst</th>
-                                                    <th className="p-2 border">Due Left</th>
-                                                    <th className="p-2 border">Amount</th>
-                                                    <th className="p-2 border">Mode</th>
-                                                    <th className="p-2 border">Receipt</th>
-                                                    <th className="p-2 border">DateTime</th>
-                                                    <th className="p-2 border">Remarks</th>
-                                                    <th className="p-2 border">Action</th>
-                                                </tr>
-                                                </thead>
-
-                                                <tbody>
-                                                {g.items.map((r) => {
-                                                    const key = `${r.installment_no}:${r.loan_id}`;
-                                                    const f = rowForm[key] || {};
-                                                    const isPosting = !!posting[key];
-                                                    const isDone = !!posted[key];
-
-                                                    return (
-                                                        <tr key={key} className={isDone ? "opacity-70" : ""}>
-                                                            <td className="p-2 border">
-                                                                <div className="font-medium">{r.member_name}</div>
-                                                                <div className="text-xs text-muted-foreground">
-                                                                    Loan #{r.loan_id} •
-                                                                    Advance: {Number(r.advance_balance || 0).toFixed(2)}
-                                                                </div>
-                                                            </td>
-
-                                                            <td className="p-2 border text-center">
-                                                                {String(r.due_date || "").slice(0, 10)}
-                                                            </td>
-                                                            <td className="p-2 border text-center">{r.installment_no}</td>
-                                                            <td className="p-2 border text-center">{Number(r.due_left || 0).toFixed(2)}</td>
-
-                                                            <td className="p-2 border">
-                                                                <Input
-                                                                    value={f.amount_received ?? ""}
-                                                                    onChange={(e) => updateForm(key, {amount_received: e.target.value})}
-                                                                    placeholder="0.00"
-                                                                    disabled={isDone}
-                                                                />
-                                                            </td>
-
-                                                            <td className="p-2 border">
-                                                                <Select
-                                                                    value={f.payment_mode || "CASH"}
-                                                                    onValueChange={(v) => updateForm(key, {payment_mode: v})}
-                                                                    disabled={isDone}
-                                                                >
-                                                                    <SelectTrigger>
-                                                                        <SelectValue placeholder="Mode"/>
-                                                                    </SelectTrigger>
-                                                                    <SelectContent>
-                                                                        {MODE_OPTIONS.map((m) => (
-                                                                            <SelectItem key={m}
-                                                                                        value={m}>{m}</SelectItem>
-                                                                        ))}
-                                                                    </SelectContent>
-                                                                </Select>
-                                                            </td>
-
-                                                            <td className="p-2 border">
-                                                                <Input
-                                                                    value={f.receipt_no ?? ""}
-                                                                    onChange={(e) => updateForm(key, {receipt_no: e.target.value})}
-                                                                    placeholder="Receipt"
-                                                                    disabled={isDone}
-                                                                />
-                                                            </td>
-
-                                                            <td className="p-2 border">
-                                                                <Input
-                                                                    type="datetime-local"
-                                                                    value={f.payment_date ?? ""}
-                                                                    onChange={(e) => updateForm(key, {payment_date: e.target.value})}
-                                                                    disabled={isDone}
-                                                                />
-                                                            </td>
-
-                                                            <td className="p-2 border">
-                                                                <Input
-                                                                    value={f.remarks ?? ""}
-                                                                    onChange={(e) => updateForm(key, {remarks: e.target.value})}
-                                                                    placeholder="Remarks"
-                                                                    disabled={isDone}
-                                                                />
-                                                            </td>
-
-                                                            <td className="p-2 border text-center">
-                                                                <div className="flex items-center justify-center gap-2">
-                                                                    <Button
-                                                                        size="sm"
-                                                                        onClick={() => submitRow(r)}
-                                                                        disabled={isPosting || isDone}
-                                                                    >
-                                                                        {isDone ? (
-                                                                            <>
-                                                                                <CheckCircle2 className="h-4 w-4"/>
-                                                                                <span className="ml-2">Done</span>
-                                                                            </>
-                                                                        ) : isPosting ? (
-                                                                            <>
-                                                                                <Loader2
-                                                                                    className="h-4 w-4 animate-spin"/>
-                                                                                <span className="ml-2">Saving</span>
-                                                                            </>
-                                                                        ) : (
-                                                                            "Submit"
-                                                                        )}
-                                                                    </Button>
-
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        onClick={() => {
-                                                                            setSelectedLoanId(r.loan_id);
-                                                                            setOpenPayments(true);
-                                                                        }}
-                                                                    >
-                                                                        <Eye className="h-4 w-4 mr-2"/>
-                                                                        View
-                                                                    </Button>
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                                </tbody>
-                                            </table>
-                                        </div>
+                                        <RenderGroupTable items={g.items}/>
                                     </AccordionContent>
                                 </AccordionItem>
                             ))}
@@ -520,12 +592,62 @@ export default function CollectionEntryPage() {
                 </CardContent>
             </Card>
 
+            {/* ✅ GROUP MODAL (selected group only) */}
+            <Dialog open={openGroupModal} onOpenChange={setOpenGroupModal}>
+                <DialogContent className="max-w-7xl">
+                    <DialogHeader>
+                        <DialogTitle>
+                            Due Collections - {selectedGroup?.groupName || "Group"}
+                        </DialogTitle>
+                    </DialogHeader>
+
+                    <div className="max-h-[75vh] overflow-auto pr-1">
+                        {selectedGroup ? (
+                            <RenderGroupTable items={selectedGroup.items}/>
+                        ) : (
+                            <p className="text-sm text-muted-foreground">No group selected.</p>
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* ✅ WARNING MODAL */}
+            <Dialog open={warnOpen} onOpenChange={setWarnOpen}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Load Due Required</DialogTitle>
+                    </DialogHeader>
+
+                    <div className="text-sm text-muted-foreground">
+                        Please click <span className="font-medium text-foreground">“Load Due”</span> first to fetch
+                        data.
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-3">
+                        <Button variant="outline" onClick={() => setWarnOpen(false)}>Close</Button>
+                        <Button
+                            onClick={async () => {
+                                setWarnOpen(false);
+                                await loadDue();
+                            }}
+                            disabled={!branchId || !loId}
+                        >
+                            Load Due Now
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* ✅ PAYMENTS MODAL */}
             <Dialog open={openPayments} onOpenChange={setOpenPayments}>
                 <DialogContent className="max-w-4xl">
                     <DialogHeader>
                         <div className="flex items-center justify-between gap-3">
                             <DialogTitle>
-                                Previous Payments {selectedLoanId ? `(Loan #${selectedLoanId})` : ""}
+                                Previous Payments{" "}
+                                {selectedLoanId
+                                    ? `(Loan A/c: ${selectedLoanAccountNo || `#${selectedLoanId}`})`
+                                    : ""}
                             </DialogTitle>
 
                             <Button
@@ -564,8 +686,12 @@ export default function CollectionEntryPage() {
                                         <td className="p-2 border">
                                             {x.txn_date ? new Date(x.txn_date).toLocaleString() : "-"}
                                         </td>
-                                        <td className="p-2 border text-right">{Number(x.credit || 0).toFixed(2)}</td>
-                                        <td className="p-2 border text-right">{Number(x.balance_outstanding || 0).toFixed(2)}</td>
+                                        <td className="p-2 border text-right">
+                                            {Number(x.credit || 0).toFixed(2)}
+                                        </td>
+                                        <td className="p-2 border text-right">
+                                            {Number(x.balance_outstanding || 0).toFixed(2)}
+                                        </td>
                                         <td className="p-2 border">{x.narration || "-"}</td>
                                     </tr>
                                 ))}

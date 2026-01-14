@@ -190,8 +190,9 @@ export default function LoanCollectionsSection({onView}) {
                         </Badge>
                         <Badge variant="outline">
                             LO:{" "}
-                            <span
-                                className="ml-1 font-semibold">{loApplied === "ALL" ? "ALL" : `LO-${loApplied}`}</span>
+                            <span className="ml-1 font-semibold">
+                                {loApplied === "ALL" ? "ALL" : `LO-${loApplied}`}
+                            </span>
                         </Badge>
                     </div>
                 </div>
@@ -211,30 +212,42 @@ export default function LoanCollectionsSection({onView}) {
                     <DataTable
                         columns={["Group", "Member", "Due Date", "Due Left", "Advance", "Status", ""]}
                         rows={rows.map((r) => ({
-                            key: `${r.loan_id}-${r.installment_no}-${r.member_id}`,
+                            // ✅ keep key stable; prefer account no if available
+                            key: `${r.loan_account_no || r.loan_id}-${r.installment_no}-${r.member_id}`,
                             cells: [
                                 <div key="g">
                                     <div className="font-medium">{r.group_name}</div>
                                     <div className="text-xs text-muted-foreground">#{r.group_id}</div>
                                 </div>,
+
+                                // ✅ UPDATED: show loan_account_no instead of loan_id
                                 <div key="m">
                                     <div className="font-medium">{r.member_name}</div>
                                     <div className="text-xs text-muted-foreground">#{r.member_id}</div>
+                                    <div className="text-xs text-muted-foreground">
+                                        Loan A/c: <span className="font-medium">{r.loan_account_no || "-"}</span>
+                                    </div>
                                 </div>,
+
                                 <div key="d">
                                     <div className="font-medium">{r.due_date}</div>
                                     <div className="text-xs text-muted-foreground">Inst #{r.installment_no}</div>
                                 </div>,
+
                                 <div key="dl" className="text-right font-semibold">
                                     {fmtMoney(r.due_left)}
                                 </div>,
+
                                 <div key="adv" className="text-right">
                                     {fmtMoney(r.advance_balance)}
                                 </div>,
+
                                 <Badge key="s" variant="secondary">
                                     {r.status}
                                 </Badge>,
+
                                 <div key="a" className="text-right">
+                                    {/* ✅ keep loan_id for API/view logic */}
                                     <Button variant="ghost" size="sm" onClick={() => onView?.(r.loan_id)}>
                                         <Eye className="h-4 w-4 mr-2"/>
                                         View
