@@ -45,16 +45,14 @@ export default function ExpenseMasterSection() {
     const categories = categoriesQ.data || [];
     const subcategories = subCatsQ.data || [];
 
-    // ✅ same style as SystemSettings: one "loading" flag + one refresh handler
     const loading = categoriesQ.isLoading || subCatsQ.isLoading;
 
     const refetchExpenseMaster = () => {
-        // no toast, no Promise.all – just call refetch like SystemSettings
         categoriesQ.refetch?.();
         subCatsQ.refetch?.();
     };
 
-    // Map category_id -> category_name (for nicer display)
+    // Map category_id -> category_name
     const categoryMap = useMemo(() => {
         const m = {};
         categories.forEach((c) => (m[String(c.category_id)] = c.category_name));
@@ -64,7 +62,11 @@ export default function ExpenseMasterSection() {
     // ---------------- Category dialog ----------------
     const [catOpen, setCatOpen] = useState(false);
     const [catMode, setCatMode] = useState("create"); // create | edit
-    const [catForm, setCatForm] = useState({category_id: null, category_name: "", is_active: true});
+    const [catForm, setCatForm] = useState({
+        category_id: null,
+        category_name: "",
+        is_active: true,
+    });
 
     const createCat = useCreateExpenseCategory();
     const updateCat = useUpdateExpenseCategory();
@@ -107,8 +109,6 @@ export default function ExpenseMasterSection() {
                 toast({title: "Category updated"});
             }
             setCatOpen(false);
-
-            // ✅ just call refresh like SystemSettings
             refetchExpenseMaster();
         } catch (e) {
             toast({
@@ -127,6 +127,7 @@ export default function ExpenseMasterSection() {
         category_id: "",
         subcategory_name: "",
         is_active: true,
+        payment_type: "DEBIT", // ✅ NEW
     });
 
     const createSub = useCreateExpenseSubCategory();
@@ -135,7 +136,13 @@ export default function ExpenseMasterSection() {
 
     const openCreateSub = () => {
         setSubMode("create");
-        setSubForm({subcategory_id: null, category_id: "", subcategory_name: "", is_active: true});
+        setSubForm({
+            subcategory_id: null,
+            category_id: "",
+            subcategory_name: "",
+            is_active: true,
+            payment_type: "DEBIT",
+        });
         setSubOpen(true);
     };
 
@@ -146,6 +153,7 @@ export default function ExpenseMasterSection() {
             category_id: String(row.category_id || ""),
             subcategory_name: row.subcategory_name || "",
             is_active: !!row.is_active,
+            payment_type: row.payment_type || "DEBIT",
         });
         setSubOpen(true);
     };
@@ -171,6 +179,7 @@ export default function ExpenseMasterSection() {
                     category_id: Number(cid),
                     subcategory_name: name,
                     is_active: !!subForm.is_active,
+                    payment_type: subForm.payment_type, // ✅ NEW
                 });
                 toast({title: "Subcategory created"});
             } else {
@@ -180,13 +189,13 @@ export default function ExpenseMasterSection() {
                         category_id: Number(cid),
                         subcategory_name: name,
                         is_active: !!subForm.is_active,
+                        payment_type: subForm.payment_type, // ✅ NEW
                     },
                 });
                 toast({title: "Subcategory updated"});
             }
-            setSubOpen(false);
 
-            // ✅ just call refresh like SystemSettings
+            setSubOpen(false);
             refetchExpenseMaster();
         } catch (e) {
             toast({
@@ -219,7 +228,6 @@ export default function ExpenseMasterSection() {
                 toast({title: "Subcategory deleted"});
             }
 
-            // ✅ just call refresh like SystemSettings
             refetchExpenseMaster();
         } catch (e) {
             toast({
@@ -235,7 +243,6 @@ export default function ExpenseMasterSection() {
 
     return (
         <Card className="rounded-2xl">
-            {/* ✅ Make header behave like SystemSettings */}
             <CardHeader className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                 <div>
                     <CardTitle>Expense Master</CardTitle>
@@ -357,6 +364,19 @@ export default function ExpenseMasterSection() {
                                         </div>
 
                                         <div className="flex items-center gap-2">
+                                            {/* ✅ Payment Type Badge */}
+                                            <Badge
+                                                className={`uppercase font-semibold
+        ${s.payment_type === "CREDIT"
+                                                    ? "bg-blue-100 text-blue-700 border border-blue-300"
+                                                    : "bg-red-100 text-red-700 border border-red-300"
+                                                }`}
+                                                title="Payment Type"
+                                            >
+                                                {s.payment_type || "DEBIT"}
+                                            </Badge>
+
+
                                             <Badge variant={s.is_active ? "secondary" : "outline"}>
                                                 {s.is_active ? "Active" : "Inactive"}
                                             </Badge>
@@ -468,6 +488,24 @@ export default function ExpenseMasterSection() {
                                 onChange={(e) => setSubForm((p) => ({...p, subcategory_name: e.target.value}))}
                                 disabled={!isAdminOnly}
                             />
+                        </div>
+
+                        {/* ===== Payment Type ===== */}
+                        <div className="space-y-2">
+                            <div className="text-sm text-muted-foreground">Payment Type</div>
+                            <Select
+                                value={subForm.payment_type}
+                                onValueChange={(v) => setSubForm((p) => ({...p, payment_type: v}))}
+                                disabled={!isAdminOnly}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select payment type"/>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="DEBIT">Debit (Expense)</SelectItem>
+                                    <SelectItem value="CREDIT">Credit (Income / Refund)</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
 
                         <div className="flex items-center justify-between border rounded-xl p-3">

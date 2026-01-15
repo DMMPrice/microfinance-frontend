@@ -64,11 +64,14 @@ export function useDeleteExpenseCategory() {
 ========================= */
 
 export function useExpenseSubCategories(params = {}) {
-    // params: { category_id?: number, is_active?: boolean }
+    // params: { category_id?: number, is_active?: boolean, payment_type?: "DEBIT" | "CREDIT" }
     return useQuery({
         queryKey: ["expenseSubCategories", params],
         queryFn: async () => {
-            const res = await apiClient.get("/expenses/master/subcategories", {params});
+            const res = await apiClient.get(
+                "/expenses/master/subcategories",
+                {params}
+            );
             return res.data;
         },
         staleTime: 60_000,

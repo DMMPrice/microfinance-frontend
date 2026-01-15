@@ -6,9 +6,8 @@ import {Button} from "@/components/ui/button";
 import {Badge} from "@/components/ui/badge";
 import {toast} from "@/components/ui/use-toast";
 import {ConfirmDialog} from "@/Utils/ConfirmDialog.jsx";
-import AdvancedTable from "@/Utils/AdvancedTable.jsx"; // ✅ your util table
+import AdvancedTable from "@/Utils/AdvancedTable.jsx";
 import {apiClient} from "@/hooks/useApi.js";
-
 import {ExpenseFormDialog} from "./ExpenseFormDialog.jsx";
 
 // hooks
@@ -205,7 +204,6 @@ export default function Page() {
 
     // ✅ AdvancedTable columns
     const columns = useMemo(() => ([
-        {key: "expense_id", header: "ID", sortValue: (r) => r.expense_id},
         {
             key: "expense_date",
             header: "Date",
@@ -261,7 +259,7 @@ export default function Page() {
                 isLoading={loading}
                 emptyText="No expenses found."
                 searchPlaceholder="Search by branch/category/subcategory/desc/ref..."
-                searchKeys={["expense_id", "branch_name", "category_name", "subcategory_name", "reference_no", "description"]}
+                searchKeys={["branch_name", "category_name", "subcategory_name", "reference_no", "description"]}
                 headerRight={
                     <>
                         <Button variant="outline" onClick={() => expensesQ.refetch()} disabled={loading}>
