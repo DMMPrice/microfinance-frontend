@@ -1,12 +1,50 @@
-// src/Utils/StatCard.jsx  (as you shared, keep same)
+// src/Utils/StatCard.jsx
 import React from "react";
 import {useNavigate} from "react-router-dom";
 import {Card, CardContent} from "@/components/ui/card";
 import {cn} from "@/lib/utils";
 
-export default function StatCard({title, value, subtitle, Icon, to, className}) {
+const VARIANTS = {
+    blue: {
+        card: "bg-gradient-to-br from-blue-50 to-white dark:from-blue-950/40 dark:to-background border-blue-200/60 dark:border-blue-900/60",
+        iconWrap: "bg-blue-100 dark:bg-blue-900/40",
+        icon: "text-blue-700 dark:text-blue-300",
+    },
+    green: {
+        card: "bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/40 dark:to-background border-emerald-200/60 dark:border-emerald-900/60",
+        iconWrap: "bg-emerald-100 dark:bg-emerald-900/40",
+        icon: "text-emerald-700 dark:text-emerald-300",
+    },
+    amber: {
+        card: "bg-gradient-to-br from-amber-50 to-white dark:from-amber-950/40 dark:to-background border-amber-200/60 dark:border-amber-900/60",
+        iconWrap: "bg-amber-100 dark:bg-amber-900/40",
+        icon: "text-amber-700 dark:text-amber-300",
+    },
+    purple: {
+        card: "bg-gradient-to-br from-violet-50 to-white dark:from-violet-950/40 dark:to-background border-violet-200/60 dark:border-violet-900/60",
+        iconWrap: "bg-violet-100 dark:bg-violet-900/40",
+        icon: "text-violet-700 dark:text-violet-300",
+    },
+    red: {
+        card: "bg-gradient-to-br from-rose-50 to-white dark:from-rose-950/40 dark:to-background border-rose-200/60 dark:border-rose-900/60",
+        iconWrap: "bg-rose-100 dark:bg-rose-900/40",
+        icon: "text-rose-700 dark:text-rose-300",
+    },
+};
+
+export default function StatCard({
+                                     title,
+                                     value,
+                                     subtitle,
+                                     Icon,
+                                     to,
+                                     className,
+                                     variant = "blue", // ✅ NEW
+                                 }) {
     const navigate = useNavigate();
     const clickable = Boolean(to);
+
+    const v = VARIANTS[variant] || VARIANTS.blue;
 
     const onClick = () => {
         if (to) navigate(to);
@@ -27,7 +65,8 @@ export default function StatCard({title, value, subtitle, Icon, to, className}) 
             onClick={clickable ? onClick : undefined}
             onKeyDown={clickable ? onKeyDown : undefined}
             className={cn(
-                "transition",
+                "transition border",
+                v.card,
                 clickable && "cursor-pointer hover:shadow-md active:scale-[0.99]",
                 className
             )}
@@ -43,8 +82,8 @@ export default function StatCard({title, value, subtitle, Icon, to, className}) 
                     </div>
 
                     {Icon ? (
-                        <div className="rounded-lg p-2 bg-secondary">
-                            <Icon className="h-5 w-5 text-primary"/>
+                        <div className={cn("rounded-lg p-2", v.iconWrap)}>
+                            <Icon className={cn("h-5 w-5", v.icon)}/>
                         </div>
                     ) : null}
                 </div>

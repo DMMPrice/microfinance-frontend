@@ -11,6 +11,7 @@ import {
     Layers,
     ChevronDown,
     Settings,
+    FileText, // ✅ NEW
 } from "lucide-react";
 
 import {NavLink} from "@/Utils/NavLink.jsx";
@@ -66,11 +67,7 @@ const navigationItems = [
             {
                 title: "Branch List",
                 url: "/dashboard/branches/home",
-                allowedRoles: [
-                    ROLES.ADMIN,
-                    ROLES.SUPER_ADMIN,
-                    ROLES.REGIONAL_MANAGER,
-                ],
+                allowedRoles: [ROLES.ADMIN, ROLES.SUPER_ADMIN, ROLES.REGIONAL_MANAGER],
             },
             {
                 title: "Expenses",
@@ -170,6 +167,40 @@ const navigationItems = [
         ],
     },
 
+    // ✅ NEW: Reports (with submenu)
+    {
+        title: "Reports",
+        icon: FileText,
+        allowedRoles: [
+            ROLES.ADMIN,
+            ROLES.SUPER_ADMIN,
+            ROLES.REGIONAL_MANAGER,
+            ROLES.BRANCH_MANAGER,
+        ],
+        children: [
+            {
+                title: "Branch Reports",
+                url: "/dashboard/reports/branches",
+                allowedRoles: [
+                    ROLES.ADMIN,
+                    ROLES.SUPER_ADMIN,
+                    ROLES.REGIONAL_MANAGER,
+                    ROLES.BRANCH_MANAGER,
+                ],
+            },
+            {
+                title: "Group Reports",
+                url: "/dashboard/reports/groups",
+                allowedRoles: [
+                    ROLES.ADMIN,
+                    ROLES.SUPER_ADMIN,
+                    ROLES.REGIONAL_MANAGER,
+                    ROLES.BRANCH_MANAGER,
+                ],
+            },
+        ],
+    },
+
     {
         title: "Users Management",
         url: "/dashboard/users",
@@ -215,9 +246,7 @@ export function AppSidebar() {
     const [openMap, setOpenMap] = useState(() => {
         const initial = {};
         navigationItems.forEach((item) => {
-            if (item.children?.length) {
-                initial[item.title] = isOnParentRoute(item);
-            }
+            if (item.children?.length) initial[item.title] = isOnParentRoute(item);
         });
         return initial;
     });
@@ -227,9 +256,7 @@ export function AppSidebar() {
         setOpenMap((prev) => {
             const next = {...prev};
             navigationItems.forEach((item) => {
-                if (item.children?.length) {
-                    next[item.title] = isOnParentRoute(item);
-                }
+                if (item.children?.length) next[item.title] = isOnParentRoute(item);
             });
             return next;
         });
@@ -266,9 +293,7 @@ export function AppSidebar() {
                     {!collapsed && (
                         <div className="leading-tight">
                             <p className="text-sm font-semibold">Akota Society</p>
-                            <p className="text-xs text-muted-foreground">
-                                Microfinance System
-                            </p>
+                            <p className="text-xs text-muted-foreground">Microfinance System</p>
                         </div>
                     )}
                 </div>
@@ -301,7 +326,7 @@ export function AppSidebar() {
                                         );
                                     }
 
-                                    // ----------- Parent Item (Branches / Loans) -----------
+                                    // ----------- Parent Item -----------
                                     const parentOpen = !!openMap[item.title];
                                     const parentActive = isOnParentRoute(item);
 
@@ -349,7 +374,6 @@ export function AppSidebar() {
                                                                     <div key={child.title} className="py-0.5">
                                                                         <NavLink
                                                                             to={child.url}
-                                                                            // ✅ exact for all, except loan view should stay active for /view/:loan_id
                                                                             end={child.url !== "/dashboard/loans/view"}
                                                                             className={cn(
                                                                                 "block rounded-md px-2 py-1 text-sm hover:bg-accent",

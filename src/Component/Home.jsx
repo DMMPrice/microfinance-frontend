@@ -21,8 +21,11 @@ import LoansPage from "@/Component/Loan/Loan Dashboard/LoansPage.jsx";
 import CollectionEntryPage from "@/Component/Loan/Collection Entry/CollectionEntryPage.jsx";
 import LoanViewPage from "@/Component/Loan/Loan View/LoanViewPage.jsx";
 import LoanViewLandingPage from "@/Component/Loan/Loan View/LoanViewLandingPage.jsx";
-
 import SettingPage from "@/Component/Settings/Page.jsx";
+
+// ✅ NEW: Reports Pages (create placeholders now)
+import BranchReportsPage from "@/Component/Reports/Branch/Page.jsx";
+import GroupReportsPage from "@/Component/Reports/Group/Page.jsx";
 
 /* -------------------- Route meta for header -------------------- */
 const ROUTE_META = [
@@ -45,7 +48,7 @@ const ROUTE_META = [
         breadcrumbs: [{label: "Home", to: "/dashboard"}, {label: "Branches"}],
     },
 
-    // ✅ NEW: Branch Expenses header meta
+    // ✅ Branch Expenses header meta
     {
         pattern: "/dashboard/branches/expenses",
         title: "Branch Expenses",
@@ -128,12 +131,35 @@ const ROUTE_META = [
             {label: "Details"},
         ],
     },
+
+    // ✅ NEW: Reports header meta
+    {
+        pattern: "/dashboard/reports/branches",
+        title: "Branch Reports",
+        subtitle: "Branch-wise reporting & exports",
+        breadcrumbs: [
+            {label: "Home", to: "/dashboard"},
+            {label: "Reports"},
+            {label: "Branch Reports"},
+        ],
+    },
+    {
+        pattern: "/dashboard/reports/groups",
+        title: "Group Reports",
+        subtitle: "Group-wise reporting & exports",
+        breadcrumbs: [
+            {label: "Home", to: "/dashboard"},
+            {label: "Reports"},
+            {label: "Group Reports"},
+        ],
+    },
+
     {
         pattern: "/dashboard/settings",
         title: "System Settings",
         subtitle: "Manage system settings",
         breadcrumbs: [{label: "Home", to: "/dashboard"}, {label: "System Settings"}],
-    }
+    },
 ];
 
 function getRouteMeta(pathname) {
@@ -178,6 +204,9 @@ const NON_LOAN_OFFICER_ROLES = [
 ];
 
 const SYSTEM_ROLES = [ROLES.ADMIN, ROLES.SUPER_ADMIN];
+
+// ✅ NEW: Reports roles (same as Branch Mgmt for now)
+const REPORTS_ROLES = BRANCH_MGMT_ROLES;
 
 function Guard({allowedRoles, role, children}) {
     if (!role) return <Navigate to="/login" replace/>;
@@ -241,9 +270,11 @@ export default function Home() {
                             <Route
                                 index
                                 element={
-                                    ADMIN_DASH_ROLES.includes(role)
-                                        ? <OverviewPage/>
-                                        : <Navigate to="loans" replace/>
+                                    ADMIN_DASH_ROLES.includes(role) ? (
+                                        <OverviewPage/>
+                                    ) : (
+                                        <Navigate to="loans" replace/>
+                                    )
                                 }
                             />
 
@@ -267,7 +298,7 @@ export default function Home() {
                                 }
                             />
 
-                            {/* ✅ NEW: Branch Expenses route */}
+                            {/* Branch Expenses */}
                             <Route
                                 path="branches/expenses"
                                 element={
@@ -297,7 +328,7 @@ export default function Home() {
                                 }
                             />
 
-                            {/* Borrowers: allowed for loan_officer */}
+                            {/* Borrowers */}
                             <Route
                                 path="borrowers"
                                 element={
@@ -307,7 +338,7 @@ export default function Home() {
                                 }
                             />
 
-                            {/* Loans: allowed for loan_officer */}
+                            {/* Loans */}
                             <Route
                                 path="loans"
                                 element={
@@ -337,6 +368,24 @@ export default function Home() {
                                 element={
                                     <Guard role={role} allowedRoles={ALL_BUSINESS_ROLES}>
                                         <LoanViewPage/>
+                                    </Guard>
+                                }
+                            />
+
+                            {/* ✅ NEW: Reports routes */}
+                            <Route
+                                path="reports/branches"
+                                element={
+                                    <Guard role={role} allowedRoles={REPORTS_ROLES}>
+                                        <BranchReportsPage/>
+                                    </Guard>
+                                }
+                            />
+                            <Route
+                                path="reports/groups"
+                                element={
+                                    <Guard role={role} allowedRoles={REPORTS_ROLES}>
+                                        <GroupReportsPage/>
                                     </Guard>
                                 }
                             />
