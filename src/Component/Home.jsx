@@ -15,7 +15,7 @@ import BranchesPage from "@/Component/Branch/Home/Page.jsx";
 import LoanOfficerPage from "@/Component/Loan Officer/Page.jsx";
 import GroupsPage from "@/Component/Groups/Page.jsx";
 import MembersPage from "@/Component/Members/Page.jsx";
-import UsersPage from "@/Pages/UsersPage.jsx";
+import Page from "@/Component/User Management/Page.jsx";
 import BranchExpensesPage from "@/Component/Branch/Expenses/Page.jsx";
 import LoansPage from "@/Component/Loan/Loan Dashboard/LoansPage.jsx";
 import CollectionEntryPage from "@/Component/Loan/Collection Entry/CollectionEntryPage.jsx";
@@ -395,7 +395,7 @@ export default function Home() {
                                 path="users"
                                 element={
                                     <Guard role={role} allowedRoles={USERS_MGMT_ROLES}>
-                                        <UsersPage/>
+                                        <Page/>
                                     </Guard>
                                 }
                             />

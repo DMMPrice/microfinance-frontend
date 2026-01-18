@@ -7,7 +7,7 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "dev:vite": "vite --port 4000",
+    "dev:vite": "vite --port 8080",
     "electron:dev": "wait-on http://localhost:5173 && electron .",
     "dev": "concurrently \"npm run dev:vite\" \"npm run electron:dev\"",
     "build": "vite build",

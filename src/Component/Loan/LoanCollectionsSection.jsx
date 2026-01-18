@@ -1,4 +1,4 @@
-// src/pages/loans/LoanCollectionsSection.jsx
+// src/Component/Loan/LoanCollectionsSection.jsx
 import React, {useMemo, useState} from "react";
 import {Card, CardContent, CardHeader, CardTitle, CardDescription} from "@/components/ui/card";
 import {Button} from "@/components/ui/button";
@@ -26,7 +26,7 @@ function safeNum(v) {
     return Number.isFinite(n) ? n : 0;
 }
 
-export default function LoanCollectionsSection({onView}) {
+export default function LoanCollectionsSection({onOpenSummary}) {
     const today = useMemo(() => todayISO(), []);
 
     // Draft controls (user edits here)
@@ -87,11 +87,8 @@ export default function LoanCollectionsSection({onView}) {
         <Card className="rounded-xl">
             <CardHeader>
                 <CardTitle>Collections</CardTitle>
-                <CardDescription>
-                    Due list up to selected date. (Optional: filter by Loan Officer)
-                </CardDescription>
+                <CardDescription>Due list up to selected date. (Optional: filter by Loan Officer)</CardDescription>
 
-                {/* Filters (match LoanDueSection style) */}
                 <div className="mt-3 flex flex-col gap-3">
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-12 xl:items-end">
                         {/* Date */}
@@ -132,9 +129,8 @@ export default function LoanCollectionsSection({onView}) {
                                             <Skeleton className="h-4 w-full"/>
                                         </div>
                                     ) : loQ.isError ? (
-                                        <div className="px-3 py-2 text-sm text-destructive">
-                                            Failed to load Loan Officers
-                                        </div>
+                                        <div className="px-3 py-2 text-sm text-destructive">Failed to load Loan
+                                            Officers</div>
                                     ) : (
                                         loOptions.map((o) => (
                                             <SelectItem key={o.lo_id} value={String(o.lo_id)}>
@@ -152,18 +148,11 @@ export default function LoanCollectionsSection({onView}) {
                                 <Button onClick={applyFilters} className="w-full sm:w-auto">
                                     Apply
                                 </Button>
-                                <Button
-                                    variant="outline"
-                                    className="w-full sm:w-auto"
-                                    onClick={resetFilters}
-                                >
+                                <Button variant="outline" className="w-full sm:w-auto" onClick={resetFilters}>
                                     Reset
                                 </Button>
-                                <Button
-                                    variant="outline"
-                                    className="w-full sm:w-auto"
-                                    onClick={() => collectionsQ.refetch()}
-                                >
+                                <Button variant="outline" className="w-full sm:w-auto"
+                                        onClick={() => collectionsQ.refetch()}>
                                     <RefreshCw className="h-4 w-4 mr-2"/>
                                     Refresh
                                 </Button>
@@ -177,22 +166,18 @@ export default function LoanCollectionsSection({onView}) {
                             Rows: <span className="ml-1 font-semibold">{summary.total}</span>
                         </Badge>
                         <Badge variant="secondary">
-                            Total Due Left:{" "}
-                            <span className="ml-1 font-semibold">{fmtMoney(summary.totalDueLeft)}</span>
+                            Total Due Left: <span className="ml-1 font-semibold">{fmtMoney(summary.totalDueLeft)}</span>
                         </Badge>
                         <Badge variant="secondary">
-                            Total Advance:{" "}
-                            <span className="ml-1 font-semibold">{fmtMoney(summary.totalAdvance)}</span>
+                            Total Advance: <span className="ml-1 font-semibold">{fmtMoney(summary.totalAdvance)}</span>
                         </Badge>
                         <Badge variant="outline">
-                            As On:{" "}
-                            <span className="ml-1 font-semibold">{asOnApplied ? asOnApplied : "ALL"}</span>
+                            As On: <span className="ml-1 font-semibold">{asOnApplied ? asOnApplied : "ALL"}</span>
                         </Badge>
                         <Badge variant="outline">
                             LO:{" "}
-                            <span className="ml-1 font-semibold">
-                                {loApplied === "ALL" ? "ALL" : `LO-${loApplied}`}
-                            </span>
+                            <span
+                                className="ml-1 font-semibold">{loApplied === "ALL" ? "ALL" : `LO-${loApplied}`}</span>
                         </Badge>
                     </div>
                 </div>
@@ -204,15 +189,12 @@ export default function LoanCollectionsSection({onView}) {
                 ) : collectionsQ.isError ? (
                     <ErrBox err={collectionsQ.error}/>
                 ) : !rows.length ? (
-                    <EmptyHint
-                        title="No collection rows found."
-                        desc="Try changing the date or choose a specific Loan Officer."
-                    />
+                    <EmptyHint title="No collection rows found."
+                               desc="Try changing the date or choose a specific Loan Officer."/>
                 ) : (
                     <DataTable
                         columns={["Group", "Member", "Due Date", "Due Left", "Advance", "Status", ""]}
                         rows={rows.map((r) => ({
-                            // ✅ keep key stable; prefer account no if available
                             key: `${r.loan_account_no || r.loan_id}-${r.installment_no}-${r.member_id}`,
                             cells: [
                                 <div key="g">
@@ -220,7 +202,6 @@ export default function LoanCollectionsSection({onView}) {
                                     <div className="text-xs text-muted-foreground">#{r.group_id}</div>
                                 </div>,
 
-                                // ✅ UPDATED: show loan_account_no instead of loan_id
                                 <div key="m">
                                     <div className="font-medium">{r.member_name}</div>
                                     <div className="text-xs text-muted-foreground">#{r.member_id}</div>
@@ -247,10 +228,14 @@ export default function LoanCollectionsSection({onView}) {
                                 </Badge>,
 
                                 <div key="a" className="text-right">
-                                    {/* ✅ keep loan_id for API/view logic */}
-                                    <Button variant="ghost" size="sm" onClick={() => onView?.(r.loan_id)}>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => (r.loan_id ? onOpenSummary?.(r.loan_id) : null)}
+                                        disabled={!r.loan_id}
+                                    >
                                         <Eye className="h-4 w-4 mr-2"/>
-                                        View
+                                        Summary
                                     </Button>
                                 </div>,
                             ],

@@ -1,11 +1,9 @@
 // src/pages/LoansPage.jsx
-import {useMemo, useState} from "react";
+import {useState} from "react";
 import {useSearchParams} from "react-router-dom";
 
-import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card.tsx";
 import {Button} from "@/components/ui/button.tsx";
 import {Tabs, TabsList, TabsTrigger} from "@/components/ui/tabs.tsx";
-import {Skeleton} from "@/components/ui/skeleton.tsx";
 import {Plus, RefreshCw} from "lucide-react";
 
 import CreateLoanDialog from "@/Component/Loan/CreateLoanDialog.jsx";
@@ -19,15 +17,15 @@ import {
 
 import {toast} from "@/components/ui/use-toast";
 import {ConfirmDialog} from "@/Utils/ConfirmDialog.jsx";
-import EditLoanDialog from "@/Component/Loan/EditLoanDialog.jsx"; // ✅ create this
+import EditLoanDialog from "@/Component/Loan/EditLoanDialog.jsx";
 
 // ✅ sections
 import LoansAllSection from "@/Component/Loan/LoansAllSection.jsx";
 import LoanDueSection from "@/Component/Loan/LoanDueSection.jsx";
-import LoanCollectionsSection from "@/Component/Loan/LoanCollectionsSection.jsx";
+import LoansKpiRow from "./LoansKpiRow.jsx";
 
 const TAB_DEFAULT = "due";
-const TAB_KEYS = ["all", "due", "collections"];
+const TAB_KEYS = ["all", "due"]; // ✅ removed collections
 
 function safeTab(value) {
     if (!value) return TAB_DEFAULT;
@@ -74,7 +72,6 @@ export default function LoansPage() {
         setSummaryOpen(true);
     };
 
-    // ✅ REQUIRED: openEdit + openDelete
     const openEdit = (row) => {
         setEditRow(row || null);
         setEditOpen(true);
@@ -84,23 +81,6 @@ export default function LoansPage() {
         setDeleteLoanId(loanId ?? null);
         setDeleteOpen(true);
     };
-
-    // ✅ KPI keys should follow API response (show only those present)
-    const statsCards = useMemo(() => {
-        const d = statsQ.data || {};
-
-        const preferred = ["DISBURSED", "ACTIVE", "CLOSED", "CANCELLED", "OTHER"];
-        const available = preferred.filter((k) =>
-            Object.prototype.hasOwnProperty.call(d, k)
-        );
-        const extras = Object.keys(d).filter((k) => !preferred.includes(k));
-        const keys = [...available, ...extras];
-
-        const finalKeys = keys.length ? keys : ["DISBURSED", "ACTIVE", "CLOSED", "OTHER"];
-        return finalKeys.map((k) => ({k, v: Number(d[k] ?? 0)}));
-    }, [statsQ.data]);
-
-    const kpiCols = Math.min(statsCards.length || 4, 5);
 
     return (
         <div className="space-y-4">
@@ -126,41 +106,13 @@ export default function LoansPage() {
             </div>
 
             {/* KPI row */}
-            <div
-                className="grid gap-4 sm:grid-cols-2"
-                style={{gridTemplateColumns: `repeat(${kpiCols}, minmax(0, 1fr))`}}
-            >
-                {statsQ.isLoading
-                    ? Array.from({length: statsCards.length || 4}).map((_, i) => (
-                        <Card key={i} className="rounded-xl">
-                            <CardHeader className="pb-2">
-                                <Skeleton className="h-4 w-20"/>
-                            </CardHeader>
-                            <CardContent>
-                                <Skeleton className="h-8 w-10"/>
-                            </CardContent>
-                        </Card>
-                    ))
-                    : statsCards.map((x) => (
-                        <Card key={x.k} className="rounded-xl">
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-xs text-muted-foreground">
-                                    {x.k}
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">{x.v}</div>
-                            </CardContent>
-                        </Card>
-                    ))}
-            </div>
+            <LoansKpiRow statsQ={statsQ}/>
 
             {/* Tabs */}
             <Tabs value={tab} onValueChange={setTab} className="w-full">
                 <TabsList className="w-full md:w-auto overflow-x-auto">
                     <TabsTrigger value="all">All Loans</TabsTrigger>
                     <TabsTrigger value="due">Installments Due</TabsTrigger>
-                    <TabsTrigger value="collections">Collections (by LO)</TabsTrigger>
                 </TabsList>
             </Tabs>
 
@@ -169,15 +121,15 @@ export default function LoansPage() {
                 <LoansAllSection
                     onCreate={() => setCreateOpen(true)}
                     onOpenSummary={openSummary}
-                    onEditLoan={openEdit}       // ✅ added
-                    onDeleteLoan={openDelete}   // ✅ added
+                    onEditLoan={openEdit}
+                    onDeleteLoan={openDelete}
                 />
             )}
 
-            {tab === "due" && <LoanDueSection onOpenSummary={openSummary}/>}
-
-            {tab === "collections" && (
-                <LoanCollectionsSection onOpenSummary={openSummary}/>
+            {tab === "due" && (
+                <LoanDueSection
+                    onOpenSummary={openSummary}
+                />
             )}
 
             {/* Dialogs */}
@@ -189,7 +141,6 @@ export default function LoansPage() {
                 loanId={selectedLoanId}
             />
 
-            {/* ✅ Edit dialog (PUT /loans/{loan_id}) */}
             <EditLoanDialog
                 open={editOpen}
                 onOpenChange={(v) => {
@@ -214,7 +165,6 @@ export default function LoansPage() {
                 }}
             />
 
-            {/* ✅ Delete confirm (Option A Cancel) */}
             <ConfirmDialog
                 open={deleteOpen}
                 onOpenChange={(v) => {

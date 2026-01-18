@@ -7,7 +7,6 @@ const USERS_KEY = ["users"];
 export function useUsersManagement() {
     const qc = useQueryClient();
 
-    // ✅ Requires GET /auth/users (see backend snippet below)
     const usersQuery = useQuery({
         queryKey: USERS_KEY,
         queryFn: async () => {
@@ -31,7 +30,6 @@ export function useUsersManagement() {
 
     const updateUser = useMutation({
         mutationFn: async ({user_id, payload}) => {
-            // If password is blank, do not send it (so backend doesn't overwrite)
             const finalPayload = {...payload};
             if (!finalPayload.password) delete finalPayload.password;
 
@@ -59,6 +57,21 @@ export function useUsersManagement() {
             toast.error(err?.response?.data?.detail || err?.message || "Delete failed"),
     });
 
+    // ✅ NEW: assign groups to a LO using your router
+    const assignGroupsToLO = useMutation({
+        mutationFn: async ({lo_id, group_ids}) => {
+            const res = await api.post("/groups/assign-lo", {lo_id, group_ids});
+            return res.data;
+        },
+        onSuccess: () => {
+            toast.success("Groups assigned");
+            qc.invalidateQueries({queryKey: USERS_KEY});
+            qc.invalidateQueries({queryKey: ["groups"]});
+        },
+        onError: (err) =>
+            toast.error(err?.response?.data?.detail || err?.message || "Assign failed"),
+    });
+
     return {
         users: usersQuery.data || [],
         isLoading: usersQuery.isLoading,
@@ -69,5 +82,8 @@ export function useUsersManagement() {
         createUser,
         updateUser,
         deleteUser,
+
+        // ✅ NEW
+        assignGroupsToLO,
     };
 }
