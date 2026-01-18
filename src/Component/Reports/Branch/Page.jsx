@@ -2,6 +2,7 @@
 import React, {useMemo, useState} from "react";
 import {useBranchCashbookPassbook} from "@/hooks/useReports";
 import {useBranches} from "@/hooks/useBranches";
+import AdvancedTable from "@/Utils/AdvancedTable.jsx";
 
 import {Card, CardContent, CardHeader, CardTitle, CardDescription} from "@/components/ui/card";
 import {Button} from "@/components/ui/button";
@@ -18,6 +19,8 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 
+import {getUserRole, getUserBranchId} from "@/hooks/useApi";
+
 /* ✅ helpers */
 function pad2(n) {
     return String(n).padStart(2, "0");
@@ -25,6 +28,28 @@ function pad2(n) {
 
 function toYmd(d) {
     return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+function parseYmd(s) {
+    if (!s) return null;
+    const [y, m, d] = String(s).split("-").map(Number);
+    if (!y || !m || !d) return null;
+    return new Date(y, m - 1, d);
+}
+
+function addDaysYmd(ymd, days) {
+    const dt = parseYmd(ymd);
+    if (!dt) return "";
+    dt.setDate(dt.getDate() + days);
+    return toYmd(dt);
+}
+
+function diffDays(aYmd, bYmd) {
+    const a = parseYmd(aYmd);
+    const b = parseYmd(bYmd);
+    if (!a || !b) return 0;
+    const ms = b.getTime() - a.getTime();
+    return Math.floor(ms / (24 * 60 * 60 * 1000));
 }
 
 function getMonthRange(d = new Date()) {
@@ -38,11 +63,21 @@ function formatINR(n) {
     return x.toLocaleString("en-IN", {maximumFractionDigits: 2});
 }
 
+function isPrivilegedBranchPicker(role) {
+    const r = (role || "").toString().trim().toLowerCase();
+    return ["super_admin", "admin", "region_manager", "regional_manager"].includes(r);
+}
+
 export default function BranchReportsPage() {
-    // ✅ default month range from system date
     const {from: defaultFrom, to: defaultTo} = useMemo(() => getMonthRange(), []);
 
-    const [branchId, setBranchId] = useState("");
+    const role = useMemo(() => getUserRole(), []);
+    const myBranchId = useMemo(() => getUserBranchId(), []);
+
+    const canPickAnyBranch = isPrivilegedBranchPicker(role);
+    const isBranchManager = (role || "").toLowerCase() === "branch_manager";
+
+    const [branchId, setBranchId] = useState(isBranchManager && myBranchId ? String(myBranchId) : "");
     const [fromDate, setFromDate] = useState(defaultFrom);
     const [toDate, setToDate] = useState(defaultTo);
     const [load, setLoad] = useState(false);
@@ -50,12 +85,59 @@ export default function BranchReportsPage() {
     const {branches, isLoading: branchesLoading} = useBranches(null);
 
     const branchOptions = useMemo(() => {
-        return (branches || []).map((b) => {
+        const opts = (branches || []).map((b) => {
             const id = b.branch_id ?? b.id;
             const name = b.branch_name ?? b.name ?? `Branch ${id}`;
             return {id: String(id), name};
         });
-    }, [branches]);
+
+        // ✅ branch_manager: only their branch
+        if (isBranchManager && myBranchId) {
+            return opts.filter((x) => x.id === String(myBranchId));
+        }
+
+        // ✅ super_admin / region_manager: any branch
+        if (canPickAnyBranch) return opts;
+
+        // ✅ fallback: if user has branch_id, restrict
+        if (myBranchId) return opts.filter((x) => x.id === String(myBranchId));
+        return opts;
+    }, [branches, isBranchManager, myBranchId, canPickAnyBranch]);
+
+    // ✅ auto-select if only one branch, or force for branch manager
+    React.useEffect(() => {
+        if (isBranchManager && myBranchId) {
+            setBranchId(String(myBranchId));
+            return;
+        }
+        if (!branchId && branchOptions.length === 1) {
+            setBranchId(branchOptions[0].id);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [branchOptions.length, isBranchManager, myBranchId]);
+
+    // ✅ enforce max 1 year range (365 days)
+    React.useEffect(() => {
+        if (!fromDate || !toDate) return;
+
+        // if to < from, fix it
+        if (diffDays(fromDate, toDate) < 0) {
+            setToDate(fromDate);
+            setLoad(false);
+            return;
+        }
+
+        const days = diffDays(fromDate, toDate);
+        if (days > 365) {
+            setToDate(addDaysYmd(fromDate, 365));
+            setLoad(false);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [fromDate, toDate]);
+
+    const maxToDate = fromDate ? addDaysYmd(fromDate, 365) : "";
+
+    const canLoad = !!branchId && !!fromDate && !!toDate;
 
     const {data, isLoading: reportLoading, isFetching: reportFetching, error} =
         useBranchCashbookPassbook({
@@ -65,15 +147,16 @@ export default function BranchReportsPage() {
             enabled: load,
         });
 
-    const canLoad = !!branchId && !!fromDate && !!toDate;
+    const summary = useMemo(() => {
+        const tx = data?.transactions || [];
+        const totalCredit = tx.reduce((s, r) => s + Number(r.credit || 0), 0);
+        const totalDebit = tx.reduce((s, r) => s + Number(r.debit || 0), 0);
 
-    // ✅ BM: auto-select if only one branch
-    React.useEffect(() => {
-        if (!branchId && branchOptions.length === 1) {
-            setBranchId(branchOptions[0].id);
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [branchOptions.length]);
+        const opening = Number(data?.opening_balance || 0);
+        const closing = opening + (totalCredit - totalDebit);
+
+        return {opening, totalCredit, totalDebit, closing};
+    }, [data]);
 
     const setThisMonth = () => {
         const {from, to} = getMonthRange(new Date());
@@ -81,6 +164,68 @@ export default function BranchReportsPage() {
         setToDate(to);
         setLoad(false);
     };
+
+    const columns = useMemo(() => ([
+        {
+            key: "txn_date",
+            header: "Date",
+            cell: (r) => String(r.txn_date).slice(0, 10),
+            exportValue: (r) => String(r.txn_date).slice(0, 10),
+            sortValue: (r) => String(r.txn_date).slice(0, 10),
+        },
+        {
+            key: "source",
+            header: "Source",
+            cell: (r) => r.source,
+            exportValue: (r) => r.source,
+            sortValue: (r) => r.source,
+        },
+        {
+            key: "credit",
+            header: "Credit",
+            className: "text-right",
+            tdClassName: "px-3 py-3 align-middle whitespace-nowrap text-right",
+            cell: (r) => `₹${formatINR(r.credit)}`,
+            exportValue: (r) => Number(r.credit || 0),
+            sortValue: (r) => Number(r.credit || 0),
+        },
+        {
+            key: "debit",
+            header: "Debit",
+            className: "text-right",
+            tdClassName: "px-3 py-3 align-middle whitespace-nowrap text-right",
+            cell: (r) => `₹${formatINR(r.debit)}`,
+            exportValue: (r) => Number(r.debit || 0),
+            sortValue: (r) => Number(r.debit || 0),
+        },
+        {
+            key: "net",
+            header: "Net",
+            className: "text-right",
+            tdClassName: "px-3 py-3 align-middle whitespace-nowrap text-right",
+            cell: (r) => `₹${formatINR(r.net)}`,
+            exportValue: (r) => Number(r.net || 0),
+            sortValue: (r) => Number(r.net || 0),
+        },
+        {
+            key: "running_balance",
+            header: "Running",
+            className: "text-right",
+            tdClassName: "px-3 py-3 align-middle whitespace-nowrap text-right",
+            cell: (r) => `₹${formatINR(r.running_balance)}`,
+            exportValue: (r) => Number(r.running_balance || 0),
+            sortValue: (r) => Number(r.running_balance || 0),
+        },
+        {
+            key: "remark",
+            header: "Remark",
+            cell: (r) => r.remark,
+            exportValue: (r) => r.remark,
+            sortValue: (r) => r.remark,
+        },
+    ]), []);
+
+    const txCount = Array.isArray(data?.transactions) ? data.transactions.length : 0;
 
     return (
         <Card>
@@ -105,6 +250,7 @@ export default function BranchReportsPage() {
                                     setBranchId(v);
                                     setLoad(false);
                                 }}
+                                disabled={isBranchManager || (!canPickAnyBranch && !!myBranchId)} // ✅ lock for branch_manager
                             >
                                 <SelectTrigger className="h-10">
                                     <SelectValue placeholder="Select branch"/>
@@ -118,6 +264,12 @@ export default function BranchReportsPage() {
                                 </SelectContent>
                             </Select>
                         )}
+
+                        {isBranchManager ? (
+                            <div className="text-xs text-muted-foreground">
+                                Branch is locked for Branch Manager role.
+                            </div>
+                        ) : null}
                     </div>
 
                     {/* From date */}
@@ -126,6 +278,7 @@ export default function BranchReportsPage() {
                         <Input
                             type="date"
                             value={fromDate}
+                            max={toDate || undefined}
                             onChange={(e) => {
                                 setFromDate(e.target.value);
                                 setLoad(false);
@@ -139,11 +292,16 @@ export default function BranchReportsPage() {
                         <Input
                             type="date"
                             value={toDate}
+                            min={fromDate || undefined}
+                            max={maxToDate || undefined} // ✅ 1 year limit
                             onChange={(e) => {
                                 setToDate(e.target.value);
                                 setLoad(false);
                             }}
                         />
+                        <div className="text-xs text-muted-foreground">
+                            Max range: 1 year (365 days)
+                        </div>
                     </div>
 
                     {/* Buttons */}
@@ -171,64 +329,57 @@ export default function BranchReportsPage() {
                 {data && (
                     <div className="flex flex-wrap gap-2">
                         <Badge variant="secondary">
-                            Opening Balance: ₹{formatINR(data.opening_balance)}
+                            Opening Balance: ₹{formatINR(summary.opening)}
                         </Badge>
                         <Badge variant="outline">
-                            Transactions: {Array.isArray(data.transactions) ? data.transactions.length : 0}
+                            Total Credit: ₹{formatINR(summary.totalCredit)}
+                        </Badge>
+                        <Badge variant="outline">
+                            Total Debit: ₹{formatINR(summary.totalDebit)}
+                        </Badge>
+                        <Badge variant="secondary">
+                            Closing Balance: ₹{formatINR(summary.closing)}
+                        </Badge>
+                        <Badge variant="outline">
+                            Transactions: {txCount}
                         </Badge>
                     </div>
                 )}
 
-                {/* ================= Errors / Loading ================= */}
-                {(reportLoading || reportFetching) && (
-                    <div className="space-y-2">
-                        <Skeleton className="h-10 w-full"/>
-                        <Skeleton className="h-10 w-full"/>
-                        <Skeleton className="h-10 w-full"/>
-                    </div>
-                )}
+                {/* ================= Table (AdvancedTable) ================= */}
+                <AdvancedTable
+                    title="Cashbook / Passbook"
+                    description={`Branch ${branchId || "-"} | ${fromDate} to ${toDate}`}
+                    data={data?.transactions || []}
+                    columns={columns}
+                    isLoading={reportLoading || reportFetching}
+                    errorText={error ? "Failed to load report. Check branch/date filters." : ""}
+                    emptyText="No transactions found for this date range."
+                    initialPageSize={10}
+                    enableSearch
+                    enablePagination
+                    enableColumnToggle
 
-                {error && (
-                    <div className="text-sm text-destructive">
-                        Failed to load report. Check branch/date filters.
-                    </div>
-                )}
+                    // ✅ Excel Export
+                    enableExport
+                    exportFileName={`branch_cashbook_passbook_${branchId || "NA"}_${fromDate}_to_${toDate}.xlsx`}
+                    exportSheetName="CashbookPassbook"
+                    exportScope="all"
+                    exportVisibleOnly={true}
+                    exportTitleRow={`Branch Cashbook/Passbook (${fromDate} to ${toDate})`}
 
-                {/* ================= Table ================= */}
-                {data?.transactions?.length > 0 && (
-                    <div className="rounded-md border overflow-x-auto">
-                        <table className="w-full text-sm">
-                            <thead className="bg-muted/50">
-                            <tr className="text-left">
-                                <th className="p-3 whitespace-nowrap">Date</th>
-                                <th className="p-3 whitespace-nowrap">Source</th>
-                                <th className="p-3 whitespace-nowrap text-right">Credit</th>
-                                <th className="p-3 whitespace-nowrap text-right">Debit</th>
-                                <th className="p-3 whitespace-nowrap text-right">Net</th>
-                                <th className="p-3 whitespace-nowrap text-right">Running</th>
-                                <th className="p-3 min-w-[420px]">Remark</th>
-                            </tr>
-                            </thead>
-                            <tbody>
-                            {data.transactions.map((r, idx) => (
-                                <tr key={idx} className="border-t">
-                                    <td className="p-3 whitespace-nowrap">{String(r.txn_date).slice(0, 10)}</td>
-                                    <td className="p-3 whitespace-nowrap">{r.source}</td>
-                                    <td className="p-3 whitespace-nowrap text-right">₹{formatINR(r.credit)}</td>
-                                    <td className="p-3 whitespace-nowrap text-right">₹{formatINR(r.debit)}</td>
-                                    <td className="p-3 whitespace-nowrap text-right">₹{formatINR(r.net)}</td>
-                                    <td className="p-3 whitespace-nowrap text-right">₹{formatINR(r.running_balance)}</td>
-                                    <td className="p-3">{r.remark}</td>
-                                </tr>
-                            ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-
-                {data && (!data.transactions || data.transactions.length === 0) && (
-                    <div className="text-sm text-muted-foreground">No transactions found for this date range.</div>
-                )}
+                    // ✅ put opening + totals inside excel
+                    exportMetaRows={[
+                        ["Branch ID", branchId || ""],
+                        ["From", fromDate],
+                        ["To", toDate],
+                        ["Opening Balance", summary.opening],
+                        ["Total Credit", summary.totalCredit],
+                        ["Total Debit", summary.totalDebit],
+                        ["Closing Balance", summary.closing],
+                        ["Transactions", txCount],
+                    ]}
+                />
             </CardContent>
         </Card>
     );

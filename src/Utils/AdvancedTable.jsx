@@ -1,3 +1,4 @@
+// src/Utils/AdvancedTable.jsx
 import React, {useMemo, useState} from "react";
 import {Card} from "@/components/ui/card";
 import {Button} from "@/components/ui/button";
@@ -12,7 +13,15 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-import {ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ArrowUpDown, Columns3} from "lucide-react";
+import {
+    ChevronLeft,
+    ChevronRight,
+    ChevronsLeft,
+    ChevronsRight,
+    ArrowUpDown,
+    Columns3,
+    Download,
+} from "lucide-react";
 
 const TH = "px-3 py-3 text-center align-middle whitespace-nowrap";
 const TD = "px-3 py-3 align-middle whitespace-nowrap";
@@ -27,16 +36,28 @@ function defaultTextSort(a, b) {
     return safeText(a).localeCompare(safeText(b), undefined, {numeric: true, sensitivity: "base"});
 }
 
+function downloadBlob(bytes, filename, mime) {
+    const blob = new Blob([bytes], {type: mime});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+}
+
 export default function AdvancedTable({
                                           title,
                                           description,
                                           data = [],
-                                          columns = [], // [{ key, header, cell, sortValue?, className?, hideable? }]
+                                          columns = [], // [{ key, header, cell, sortValue?, exportValue?, className?, tdClassName?, hideable? }]
                                           isLoading = false,
                                           errorText = "",
                                           emptyText = "No data found.",
                                           initialPageSize = 5,
-                                          pageSizeOptions = [5,10, 20, 50, 100],
+                                          pageSizeOptions = [5, 10, 20, 50, 100],
                                           enableSearch = true,
                                           searchPlaceholder = "Search...",
                                           searchKeys = [], // array of column keys to search, fallback to all columns
@@ -46,6 +67,17 @@ export default function AdvancedTable({
                                           headerRight = null, // custom actions (refresh, export etc)
                                           rowKey = (row, idx) => idx,
                                           onRowClick = null,
+
+                                          // ✅ Export options
+                                          enableExport = false,
+                                          exportFileName = "export.xlsx",
+                                          exportSheetName = "Sheet1",
+                                          exportScope = "all", // "all" | "page"
+                                          exportVisibleOnly = true,
+                                          exportTitleRow = null, // optional string title at top
+
+                                          // ✅ NEW: extra rows before header in excel (Opening balance etc.)
+                                          exportMetaRows = [], // array of arrays (AOA)
                                       }) {
     const [q, setQ] = useState("");
     const [pageSize, setPageSize] = useState(initialPageSize);
@@ -75,9 +107,15 @@ export default function AdvancedTable({
         });
     }, [defaultVisible, columns]);
 
-    const visibleColumns = useMemo(() => {
+    const visibleColumnsForUI = useMemo(() => {
         return columns.filter((c) => visible[c.key] !== false);
     }, [columns, visible]);
+
+    const visibleColumnsForExport = useMemo(() => {
+        return columns
+            .filter((c) => (exportVisibleOnly ? visible[c.key] !== false : true))
+            .filter((c) => c?.key);
+    }, [columns, visible, exportVisibleOnly]);
 
     // Search filter
     const filtered = useMemo(() => {
@@ -92,7 +130,7 @@ export default function AdvancedTable({
                 const col = columns.find((c) => c.key === k);
                 if (!col) return false;
 
-                // Try to search the rendered cell value if possible, else raw field
+                // search by sortValue (if provided) else raw field
                 const raw =
                     typeof col.sortValue === "function"
                         ? col.sortValue(row)
@@ -153,11 +191,73 @@ export default function AdvancedTable({
         });
     };
 
-    const resetPaging = () => setPage(1);
-
     React.useEffect(() => {
-        resetPaging();
+        setPage(1);
     }, [q, pageSize]);
+
+    const exportRows = exportScope === "page" ? paged : sorted;
+
+    const onExportExcel = async () => {
+        try {
+            const XLSX = await import("xlsx");
+
+            const headers = visibleColumnsForExport.map((c) => safeText(c.header ?? c.key));
+
+            const rows = exportRows.map((row, idx) => {
+                return visibleColumnsForExport.map((c) => {
+                    // priority: exportValue -> sortValue -> raw field
+                    const v =
+                        typeof c.exportValue === "function"
+                            ? c.exportValue(row, idx)
+                            : typeof c.sortValue === "function"
+                                ? c.sortValue(row, idx)
+                                : row?.[c.key];
+
+                    return v ?? "";
+                });
+            });
+
+            const aoa = [];
+
+            // title row
+            if (exportTitleRow) aoa.push([exportTitleRow]);
+
+            // meta rows (Opening, totals etc.)
+            if (Array.isArray(exportMetaRows) && exportMetaRows.length > 0) {
+                exportMetaRows.forEach((r) => aoa.push(Array.isArray(r) ? r : [safeText(r)]));
+                aoa.push([]); // blank line after meta
+            }
+
+            // header + data
+            aoa.push(headers);
+            aoa.push(...rows);
+
+            const ws = XLSX.utils.aoa_to_sheet(aoa);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, exportSheetName);
+
+            // ✅ some usability: freeze top rows (title/meta/header)
+            const freezeRows =
+                (exportTitleRow ? 1 : 0) +
+                (Array.isArray(exportMetaRows) ? exportMetaRows.length : 0) +
+                (Array.isArray(exportMetaRows) && exportMetaRows.length > 0 ? 1 : 0) + // blank line
+                1; // header
+
+            ws["!freeze"] = {xSplit: 0, ySplit: freezeRows};
+
+            // ✅ set column widths a bit (auto-ish)
+            ws["!cols"] = visibleColumnsForExport.map((c) => {
+                const h = safeText(c.header ?? c.key);
+                const w = Math.min(60, Math.max(12, h.length + 4));
+                return {wch: w};
+            });
+
+            const out = XLSX.write(wb, {bookType: "xlsx", type: "array"});
+            downloadBlob(out, exportFileName, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        } catch (e) {
+            console.error("Excel export failed:", e);
+        }
+    };
 
     return (
         <Card className="rounded-xl">
@@ -192,6 +292,15 @@ export default function AdvancedTable({
                     </div>
 
                     <div className="flex items-center gap-2">
+                        {/* ✅ Export */}
+                        {enableExport ? (
+                            <Button variant="outline" size="sm" onClick={onExportExcel}
+                                    disabled={isLoading || total === 0}>
+                                <Download className="h-4 w-4 mr-2"/>
+                                Export
+                            </Button>
+                        ) : null}
+
                         {enableColumnToggle ? (
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
@@ -202,7 +311,7 @@ export default function AdvancedTable({
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" className="w-56">
                                     {columns
-                                        .filter((c) => c.hideable !== false) // default hideable
+                                        .filter((c) => c.hideable !== false)
                                         .map((c) => (
                                             <DropdownMenuCheckboxItem
                                                 key={c.key}
@@ -241,11 +350,8 @@ export default function AdvancedTable({
                     <table className="w-full text-sm">
                         <thead className={`bg-muted/40 ${stickyHeader ? "sticky top-0 z-10" : ""}`}>
                         <tr>
-                            {visibleColumns.map((c) => (
-                                <th
-                                    key={c.key}
-                                    className={`${TH} ${c.className || ""}`}
-                                >
+                            {visibleColumnsForUI.map((c) => (
+                                <th key={c.key} className={`${TH} ${c.className || ""}`}>
                                     <button
                                         type="button"
                                         className="inline-flex items-center gap-1 hover:underline"
@@ -264,7 +370,7 @@ export default function AdvancedTable({
                         {isLoading ? (
                             Array.from({length: 8}).map((_, i) => (
                                 <tr key={i} className="border-t">
-                                    {visibleColumns.map((c) => (
+                                    {visibleColumnsForUI.map((c) => (
                                         <td key={c.key} className={TD}>
                                             <Skeleton className="h-4 w-24 mx-auto"/>
                                         </td>
@@ -273,13 +379,14 @@ export default function AdvancedTable({
                             ))
                         ) : errorText ? (
                             <tr className="border-t">
-                                <td colSpan={visibleColumns.length} className="p-6 text-center text-destructive">
+                                <td colSpan={visibleColumnsForUI.length} className="p-6 text-center text-destructive">
                                     {errorText}
                                 </td>
                             </tr>
                         ) : paged.length === 0 ? (
                             <tr className="border-t">
-                                <td colSpan={visibleColumns.length} className="p-6 text-center text-muted-foreground">
+                                <td colSpan={visibleColumnsForUI.length}
+                                    className="p-6 text-center text-muted-foreground">
                                     {emptyText}
                                 </td>
                             </tr>
@@ -290,7 +397,7 @@ export default function AdvancedTable({
                                     className={`border-t hover:bg-muted/20 ${onRowClick ? "cursor-pointer" : ""}`}
                                     onClick={() => onRowClick?.(row)}
                                 >
-                                    {visibleColumns.map((c) => (
+                                    {visibleColumnsForUI.map((c) => (
                                         <td key={c.key} className={c.tdClassName || TD_LEFT}>
                                             {typeof c.cell === "function" ? c.cell(row, idx) : safeText(row?.[c.key])}
                                         </td>
