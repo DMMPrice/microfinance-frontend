@@ -32,28 +32,23 @@ export default function ProfileModal({open, onOpenChange}) {
         return safeParseJSON(localStorage.getItem("profileData"));
     }, [open]);
 
-    // ✅ fetch regions + branches so we can show names
     const {getRegionName} = useRegions();
 
-    // pass profile region_id to fetch only that region's branches (faster + safer)
     const regionId = profileData?.region_id ?? null;
     const {getBranchName} = useBranches(regionId);
 
     // ❌ keys to hide
     const HIDE_KEYS = new Set(["user_id", "exp", "region_id", "branch_id"]);
 
-    // ✅ build rows we want to show
     const rows = useMemo(() => {
         if (!profileData || typeof profileData !== "object") return [];
 
-        const base = Object.entries(profileData)
-            .filter(([key]) => !HIDE_KEYS.has(key));
+        const base = Object.entries(profileData).filter(([key]) => !HIDE_KEYS.has(key));
 
-        // add Region + Branch (names)
-        const regionName = getRegionName(profileData?.region_id) || (profileData?.region_id != null ? `#${profileData.region_id}` : "-");
-        const branchName = getBranchName(profileData?.branch_id) || (profileData?.branch_id != null ? `#${profileData.branch_id}` : "-");
+        // ✅ names only (no #id fallback)
+        const regionName = getRegionName(profileData?.region_id) || "-";
+        const branchName = getBranchName(profileData?.branch_id) || "-";
 
-        // Insert Region/Branch after role (if role exists), else append
         const out = [];
         for (const [k, v] of base) {
             out.push([k, v]);
@@ -108,7 +103,6 @@ export default function ProfileModal({open, onOpenChange}) {
                                         ? JSON.stringify(val)
                                         : String(val);
 
-                            // custom labels
                             const label =
                                 key === "region_name"
                                     ? "Region"

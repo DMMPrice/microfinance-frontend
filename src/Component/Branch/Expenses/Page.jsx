@@ -1,5 +1,5 @@
 // src/Component/Branches/Expenses/Page.jsx
-import React, {useEffect, useMemo, useState} from "react";
+import React, {useEffect, useMemo, useState, useCallback} from "react";
 import {Download, Plus, Pencil, Trash2, RefreshCcw} from "lucide-react";
 
 import {Button} from "@/components/ui/button";
@@ -7,7 +7,14 @@ import {Badge} from "@/components/ui/badge";
 import {toast} from "@/components/ui/use-toast";
 import {ConfirmDialog} from "@/Utils/ConfirmDialog.jsx";
 import AdvancedTable from "@/Utils/AdvancedTable.jsx";
-import {apiClient} from "@/hooks/useApi.js";
+import {
+    apiClient,
+    getUserRole,
+    getUserRegionId,
+    getUserBranchId,
+    isRegionalManagerRole,
+    isBranchManagerRole
+} from "@/hooks/useApi.js";
 import {ExpenseFormDialog} from "./ExpenseFormDialog.jsx";
 
 // hooks
@@ -31,7 +38,9 @@ function formatINR(n) {
 }
 
 function downloadCSV(filename, rows) {
-    const csv = rows.map((r) => r.map((v) => `"${String(v ?? "").replaceAll('"', '""')}"`).join(",")).join("\n");
+    const csv = rows
+        .map((r) => r.map((v) => `"${String(v ?? "").replaceAll('"', '""')}"`).join(","))
+        .join("\n");
     const blob = new Blob([csv], {type: "text/csv;charset=utf-8;"});
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -49,6 +58,18 @@ async function fetchBranches() {
 export default function Page() {
     // dropdowns
     const [branches, setBranches] = useState([]);
+
+    /* =========================================================
+       ✅ Role based access
+       - Regional Manager -> only branches of own region
+       - Branch Manager   -> only own branch
+    ========================================================= */
+    const role = getUserRole();
+    const myRegionId = getUserRegionId();
+    const myBranchId = getUserBranchId();
+
+    const isRegionalManager = isRegionalManagerRole(role);
+    const isBranchManager = isBranchManagerRole(role);
 
     // modal
     const [open, setOpen] = useState(false);
@@ -74,15 +95,46 @@ export default function Page() {
             .catch(() => setBranches([]));
     }, []);
 
+    // ✅ Filter branches (RM -> region, BM -> own branch)
+    const visibleBranches = useMemo(() => {
+        if (!Array.isArray(branches)) return [];
+
+        if (isBranchManager) {
+            if (myBranchId == null) return [];
+            return branches.filter((b) => String(b.branch_id) === String(myBranchId));
+        }
+
+        if (isRegionalManager) {
+            if (myRegionId == null) return [];
+            return branches.filter((b) => String(b.region_id) === String(myRegionId));
+        }
+
+        return branches;
+    }, [branches, isRegionalManager, isBranchManager, myRegionId, myBranchId]);
+
+    const allowedBranchIds = useMemo(() => {
+        return new Set(visibleBranches.map((b) => String(b.branch_id)));
+    }, [visibleBranches]);
+
     // master data
     const categoriesQ = useExpenseCategories({is_active: true});
     const subCatsQ = useExpenseSubCategories({is_active: true});
     const categories = Array.isArray(categoriesQ.data) ? categoriesQ.data : [];
     const subcategories = Array.isArray(subCatsQ.data) ? subCatsQ.data : [];
 
-    // expenses list (no filters here; AdvancedTable handles search/sort/page)
+    // expenses list
     const expensesQ = useBranchExpenses({});
     const rows = Array.isArray(expensesQ.data) ? expensesQ.data : [];
+
+    // ✅ Filter expense rows for RM/BM
+    const visibleRows = useMemo(() => {
+        if (!Array.isArray(rows)) return [];
+        if (isRegionalManager || isBranchManager) {
+            if (!allowedBranchIds.size) return [];
+            return rows.filter((r) => allowedBranchIds.has(String(r.branch_id)));
+        }
+        return rows;
+    }, [rows, isRegionalManager, isBranchManager, allowedBranchIds]);
 
     // mutations
     const createM = useCreateBranchExpense();
@@ -93,9 +145,12 @@ export default function Page() {
     const deleting = deleteM.isPending;
     const loading = expensesQ.isLoading || categoriesQ.isLoading || subCatsQ.isLoading;
 
-    const totalAmount = useMemo(() => rows.reduce((sum, r) => sum + Number(r.amount || 0), 0), [rows]);
+    const totalAmount = useMemo(
+        () => visibleRows.reduce((sum, r) => sum + Number(r.amount || 0), 0),
+        [visibleRows]
+    );
 
-    const openCreate = () => {
+    const openCreate = useCallback(() => {
         setMode("create");
         setForm({
             expense_id: null,
@@ -108,9 +163,9 @@ export default function Page() {
             reference_no: "",
         });
         setOpen(true);
-    };
+    }, []);
 
-    const openEdit = (row) => {
+    const openEdit = useCallback((row) => {
         setMode("edit");
         setForm({
             expense_id: row.expense_id,
@@ -123,20 +178,33 @@ export default function Page() {
             reference_no: row.reference_no ?? "",
         });
         setOpen(true);
-    };
+    }, []);
 
-    const validate = () => {
+    const validate = useCallback(() => {
         if (!form.branch_id) return "Branch is required";
         if (!form.category_id) return "Category is required";
         if (!form.subcategory_id) return "Subcategory is required";
         if (!form.expense_date) return "Expense date is required";
         if (!form.amount || Number(form.amount) <= 0) return "Amount must be > 0";
         return null;
-    };
+    }, [form]);
 
-    const handleSave = async () => {
+    const handleSave = useCallback(async () => {
         const err = validate();
-        if (err) return toast({title: "Validation error", description: err, variant: "destructive"});
+        if (err) {
+            return toast({title: "Validation error", description: err, variant: "destructive"});
+        }
+
+        // ✅ extra safety: RM/BM can only save for allowed branches
+        if ((isRegionalManager || isBranchManager) && allowedBranchIds.size) {
+            if (!allowedBranchIds.has(String(form.branch_id))) {
+                return toast({
+                    title: "Not allowed",
+                    description: "You can only add expenses for your assigned branch/region.",
+                    variant: "destructive",
+                });
+            }
+        }
 
         const payload = {
             branch_id: Number(form.branch_id),
@@ -164,14 +232,23 @@ export default function Page() {
                 variant: "destructive",
             });
         }
-    };
+    }, [
+        validate,
+        isRegionalManager,
+        isBranchManager,
+        allowedBranchIds,
+        form,
+        mode,
+        createM,
+        updateM,
+    ]);
 
-    const askDelete = (row) => {
+    const askDelete = useCallback((row) => {
         setDeleteRow(row);
         setConfirmOpen(true);
-    };
+    }, []);
 
-    const confirmDelete = async () => {
+    const confirmDelete = useCallback(async () => {
         if (!deleteRow?.expense_id) return;
         try {
             await deleteM.mutateAsync(deleteRow.expense_id);
@@ -185,11 +262,11 @@ export default function Page() {
                 variant: "destructive",
             });
         }
-    };
+    }, [deleteRow, deleteM]);
 
-    const exportCSV = () => {
+    const exportCSV = useCallback(() => {
         const header = ["Expense ID", "Date", "Branch", "Category", "Subcategory", "Amount", "Reference No", "Description"];
-        const data = rows.map((r) => [
+        const data = visibleRows.map((r) => [
             r.expense_id ?? "",
             yyyyMmDd(r.expense_date),
             r.branch_name ?? r.branch_id ?? "",
@@ -200,7 +277,7 @@ export default function Page() {
             r.description ?? "",
         ]);
         downloadCSV(`branch_expenses_${new Date().toISOString().slice(0, 10)}.csv`, [header, ...data]);
-    };
+    }, [visibleRows]);
 
     // ✅ AdvancedTable columns
     const columns = useMemo(() => ([
@@ -243,18 +320,27 @@ export default function Page() {
             sortValue: () => "",
             tdClassName: "px-3 py-3 align-middle whitespace-nowrap text-center",
         },
-    ]), [rows]);
+    ]), [openEdit, askDelete]);
 
     return (
         <div className="p-4 md:p-6 space-y-4">
             <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="secondary">Total Amount: {formatINR(totalAmount)}</Badge>
+
+                {isBranchManager ? (
+                    <Badge variant="outline">Branch Filter: {myBranchId ?? "N/A"}</Badge>
+                ) : null}
+
+                {!isBranchManager && isRegionalManager ? (
+                    <Badge variant="outline">Region Filter: {myRegionId ?? "N/A"}</Badge>
+                ) : null}
             </div>
 
+            {/* ✅ filtered rows are used in table */}
             <AdvancedTable
                 title="Branch Expenses"
                 description="Track and manage branch-wise expenses (add, edit, delete, export)."
-                data={rows}
+                data={visibleRows}
                 columns={columns}
                 isLoading={loading}
                 emptyText="No expenses found."
@@ -266,7 +352,7 @@ export default function Page() {
                             <RefreshCcw className="h-4 w-4 mr-2"/>
                             Refresh
                         </Button>
-                        <Button variant="outline" onClick={exportCSV} disabled={loading || rows.length === 0}>
+                        <Button variant="outline" onClick={exportCSV} disabled={loading || visibleRows.length === 0}>
                             <Download className="h-4 w-4 mr-2"/>
                             Export CSV
                         </Button>
@@ -287,7 +373,7 @@ export default function Page() {
                 saving={saving}
                 form={form}
                 setForm={setForm}
-                branches={branches}
+                branches={visibleBranches}
                 categories={categories}
                 subcategories={subcategories}
                 onSave={handleSave}

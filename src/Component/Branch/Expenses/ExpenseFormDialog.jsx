@@ -1,5 +1,5 @@
 // src/Component/Branches/Expenses/ExpenseFormDialog.jsx
-import React, {useMemo} from "react";
+import React, {useEffect, useMemo} from "react";
 import {
     Dialog,
     DialogContent,
@@ -12,6 +12,14 @@ import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {Label} from "@/components/ui/label";
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@/components/ui/select";
+
+import {
+    getUserRole,
+    getUserRegionId,
+    getUserBranchId,
+    isRegionalManagerRole,
+    isBranchManagerRole,
+} from "@/hooks/useApi.js";
 
 export function ExpenseFormDialog({
                                       open,
@@ -27,6 +35,46 @@ export function ExpenseFormDialog({
                                   }) {
     const title = mode === "create" ? "Add Expense" : "Edit Expense";
 
+    /* =========================================================
+       ✅ Role based branch filtering
+       - Regional Manager -> only branches of own region
+       - Branch Manager   -> only own branch
+    ========================================================= */
+    const role = getUserRole();
+    const myRegionId = getUserRegionId();
+    const myBranchId = getUserBranchId();
+
+    const isRegionalManager = isRegionalManagerRole(role);
+    const isBranchManager = isBranchManagerRole(role);
+
+    const visibleBranches = useMemo(() => {
+        if (!Array.isArray(branches)) return [];
+
+        if (isBranchManager) {
+            if (myBranchId == null) return [];
+            return branches.filter((b) => String(b.branch_id) === String(myBranchId));
+        }
+
+        if (isRegionalManager) {
+            if (myRegionId == null) return [];
+            return branches.filter((b) => String(b.region_id) === String(myRegionId));
+        }
+
+        return branches;
+    }, [branches, isRegionalManager, isBranchManager, myRegionId, myBranchId]);
+
+    // ✅ Auto-pick branch if only one option (Branch Manager, or Region with one branch)
+    useEffect(() => {
+        if (!open) return;
+        if (visibleBranches.length === 1) {
+            const onlyId = String(visibleBranches[0].branch_id);
+            if (String(form?.branch_id || "") !== onlyId) {
+                setForm((p) => ({...p, branch_id: onlyId}));
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open, visibleBranches]);
+
     const filteredSubcats = useMemo(() => {
         if (!form?.category_id) return [];
         return subcategories.filter((s) => String(s.category_id) === String(form.category_id));
@@ -37,24 +85,44 @@ export function ExpenseFormDialog({
             <DialogContent className="sm:max-w-[720px] rounded-2xl">
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
-                    <DialogDescription>Fill in details and save. </DialogDescription>
+                    <DialogDescription>Fill in details and save.</DialogDescription>
                 </DialogHeader>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Branch */}
                     <div className="space-y-1">
                         <Label>Branch</Label>
-                        <Select value={String(form.branch_id || "")}
-                                onValueChange={(v) => setForm((p) => ({...p, branch_id: v}))}>
+                        <Select
+                            value={String(form.branch_id || "")}
+                            onValueChange={(v) => setForm((p) => ({...p, branch_id: v}))}
+                            disabled={isBranchManager} // ✅ lock for branch manager
+                        >
                             <SelectTrigger><SelectValue placeholder="Select branch"/></SelectTrigger>
                             <SelectContent>
-                                {branches.map((b) => (
+                                {visibleBranches.map((b) => (
                                     <SelectItem key={b.branch_id} value={String(b.branch_id)}>
                                         {b.branch_name}
                                     </SelectItem>
                                 ))}
+                                {visibleBranches.length === 0 ? (
+                                    <SelectItem value="__none__" disabled>
+                                        {(isBranchManager || isRegionalManager)
+                                            ? "No branches available for your access"
+                                            : "No branches found"}
+                                    </SelectItem>
+                                ) : null}
                             </SelectContent>
                         </Select>
+
+                        {isBranchManager ? (
+                            <p className="text-xs text-muted-foreground">
+                                Branch is locked to your assigned branch.
+                            </p>
+                        ) : isRegionalManager ? (
+                            <p className="text-xs text-muted-foreground">
+                                Showing branches only from your region.
+                            </p>
+                        ) : null}
                     </div>
 
                     {/* Category */}
@@ -91,7 +159,8 @@ export function ExpenseFormDialog({
                         >
                             <SelectTrigger>
                                 <SelectValue
-                                    placeholder={form.category_id ? "Select subcategory" : "Select category first"}/>
+                                    placeholder={form.category_id ? "Select subcategory" : "Select category first"}
+                                />
                             </SelectTrigger>
                             <SelectContent>
                                 {filteredSubcats.length === 0 ? (

@@ -1,5 +1,5 @@
 // src/Component/Home/Main Components/BranchManagement.jsx
-import {useMemo, useState} from "react";
+import {useMemo, useState, useEffect} from "react";
 import {Button} from "@/components/ui/button.tsx";
 import {Badge} from "@/components/ui/badge.tsx";
 import {Card, CardContent} from "@/components/ui/card.tsx";
@@ -24,7 +24,7 @@ import {useToast} from "@/hooks/use-toast.ts";
 import {useBranches} from "@/hooks/useBranches.js";
 import {useRegions} from "@/hooks/useRegions.js";
 import {confirmDelete} from "@/Utils/confirmDelete.js";
-
+import {getUserRole, getUserRegionId, isRegionalManagerRole} from "@/hooks/useApi.js";
 import StatCard from "@/Utils/StatCard.jsx";
 
 /**
@@ -53,6 +53,13 @@ export default function BranchManagement({
 
     const {toast} = useToast();
 
+    /* =========================================================
+       ✅ Role based logic
+    ========================================================= */
+    const role = getUserRole();
+    const myRegionId = getUserRegionId();
+    const isRegionalManager = isRegionalManagerRole(role);
+
     const {
         regions,
         isLoading: isRegionsLoading,
@@ -72,8 +79,35 @@ export default function BranchManagement({
 
     const loading = isRegionsLoading || isBranchesLoading;
 
+    // ✅ Restrict regions list for Regional Manager
+    const visibleRegions = useMemo(() => {
+        if (!Array.isArray(regions)) return [];
+        if (isRegionalManager) {
+            if (myRegionId == null) return [];
+            return regions.filter((r) => (r.region_id ?? r.id) === myRegionId);
+        }
+        return regions;
+    }, [regions, isRegionalManager, myRegionId]);
+
+    // ✅ Restrict branches list for Regional Manager
+    const visibleBranches = useMemo(() => {
+        if (!Array.isArray(branches)) return [];
+        if (isRegionalManager) {
+            if (myRegionId == null) return [];
+            return branches.filter((b) => Number(b.region_id) === Number(myRegionId));
+        }
+        return branches;
+    }, [branches, isRegionalManager, myRegionId]);
+
+    // ✅ Auto-set region in Create modal for Regional Manager
+    useEffect(() => {
+        if (open && isRegionalManager) {
+            if (myRegionId != null) setRegionId(String(myRegionId));
+        }
+    }, [open, isRegionalManager, myRegionId]);
+
     // -------------------------
-    // Region name resolver
+    // Region name resolver (based on visibleRegions or full regions both ok)
     // -------------------------
     const regionMap = useMemo(() => {
         const m = new Map();
@@ -87,20 +121,22 @@ export default function BranchManagement({
     };
 
     // -------------------------
-    // KPIs
+    // KPIs (use visibleBranches + visibleRegions)
     // -------------------------
     const branchesCount = useMemo(
-        () => (Array.isArray(branches) ? branches.length : 0),
-        [branches]
+        () => (Array.isArray(visibleBranches) ? visibleBranches.length : 0),
+        [visibleBranches]
     );
+
     const regionsCount = useMemo(
-        () => (Array.isArray(regions) ? regions.length : 0),
-        [regions]
+        () => (Array.isArray(visibleRegions) ? visibleRegions.length : 0),
+        [visibleRegions]
     );
+
     const branchesWithRegion = useMemo(() => {
-        if (!branches?.length) return 0;
-        return branches.filter((b) => b.region_id !== null && b.region_id !== undefined).length;
-    }, [branches]);
+        if (!visibleBranches?.length) return 0;
+        return visibleBranches.filter((b) => b.region_id !== null && b.region_id !== undefined).length;
+    }, [visibleBranches]);
 
     // ======================
     // CREATE HANDLER
@@ -108,7 +144,10 @@ export default function BranchManagement({
     const handleSubmit = (e) => {
         e.preventDefault();
 
-        if (!regionId) {
+        // ✅ Force regional manager to use their own region only
+        const finalRegionId = isRegionalManager ? myRegionId : regionId;
+
+        if (!finalRegionId) {
             toast({
                 title: "Select region",
                 description: "Please select a region before creating a branch.",
@@ -120,13 +159,13 @@ export default function BranchManagement({
         createBranchMutation.mutate(
             {
                 branch_name: branchName.trim(),
-                region_id: Number(regionId),
+                region_id: Number(finalRegionId),
             },
             {
                 onSuccess: () => {
                     toast({title: "Branch created successfully"});
                     setBranchName("");
-                    setRegionId("");
+                    setRegionId(isRegionalManager && myRegionId != null ? String(myRegionId) : "");
                     setOpen(false);
                 },
                 onError: (err) => {
@@ -148,7 +187,14 @@ export default function BranchManagement({
     const openEditModal = (branch) => {
         setEditingBranch(branch);
         setEditBranchName(branch.branch_name || "");
-        setEditRegionId(String(branch.region_id || ""));
+
+        // ✅ Regional manager should always edit inside their region only
+        if (isRegionalManager && myRegionId != null) {
+            setEditRegionId(String(myRegionId));
+        } else {
+            setEditRegionId(String(branch.region_id || ""));
+        }
+
         setEditOpen(true);
     };
 
@@ -156,7 +202,9 @@ export default function BranchManagement({
         e.preventDefault();
         if (!editingBranch) return;
 
-        if (!editRegionId) {
+        const finalEditRegionId = isRegionalManager ? myRegionId : editRegionId;
+
+        if (!finalEditRegionId) {
             toast({
                 title: "Select region",
                 description: "Please select a region before updating the branch.",
@@ -169,7 +217,7 @@ export default function BranchManagement({
             {
                 branch_id: editingBranch.branch_id,
                 branch_name: editBranchName.trim(),
-                region_id: Number(editRegionId),
+                region_id: Number(finalEditRegionId),
             },
             {
                 onSuccess: () => {
@@ -264,13 +312,13 @@ export default function BranchManagement({
                 </div>
             ) : null}
 
-            {/* ✅ Action row (only button, no repeated title) */}
+            {/* ✅ Action row */}
             <div className="flex items-center justify-end">
                 <Dialog open={open} onOpenChange={setOpen}>
                     <DialogTrigger asChild>
                         <Button
                             className="rounded-lg"
-                            disabled={(regions?.length ?? 0) === 0 || loading}
+                            disabled={(visibleRegions?.length ?? 0) === 0 || loading}
                         >
                             <Plus className="mr-2 h-4 w-4"/>
                             Add Branch
@@ -285,12 +333,17 @@ export default function BranchManagement({
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <div className="space-y-2">
                                 <Label htmlFor="region">Region</Label>
-                                <Select value={regionId} onValueChange={setRegionId}>
+
+                                <Select
+                                    value={regionId}
+                                    onValueChange={setRegionId}
+                                    disabled={isRegionalManager} // ✅ lock for RM
+                                >
                                     <SelectTrigger>
                                         <SelectValue placeholder="Select region"/>
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {regions.map((region) => (
+                                        {visibleRegions.map((region) => (
                                             <SelectItem
                                                 key={region.region_id}
                                                 value={String(region.region_id)}
@@ -300,6 +353,12 @@ export default function BranchManagement({
                                         ))}
                                     </SelectContent>
                                 </Select>
+
+                                {isRegionalManager ? (
+                                    <p className="text-xs text-muted-foreground">
+                                        Region is locked to your assigned region.
+                                    </p>
+                                ) : null}
                             </div>
 
                             <div className="space-y-2">
@@ -325,7 +384,7 @@ export default function BranchManagement({
                 </Dialog>
             </div>
 
-            {/* ✅ Error states (boxy cards instead of red text lines) */}
+            {/* ✅ Error states */}
             {isRegionsError ? (
                 <Card className={boxCard}>
                     <CardContent className="py-6 text-sm text-destructive">
@@ -353,11 +412,11 @@ export default function BranchManagement({
                 </Card>
             ) : null}
 
-            {/* ✅ Branch cards */}
+            {/* ✅ Branch cards (uses visibleBranches) */}
             {!loading && !isBranchesError && !isRegionsError ? (
-                branches?.length ? (
+                visibleBranches?.length ? (
                     <div className={`grid gap-4 ${isPage ? "md:grid-cols-2 lg:grid-cols-3" : "sm:grid-cols-2"}`}>
-                        {branches.map((branch) => (
+                        {visibleBranches.map((branch) => (
                             <Card key={branch.branch_id} className={boxCard}>
                                 <CardContent className="p-4">
                                     <div className="flex items-start justify-between gap-3">
@@ -368,9 +427,12 @@ export default function BranchManagement({
                                             </p>
 
                                             <div className="mt-2 flex flex-wrap items-center gap-2">
-                                                <Badge variant="secondary" className="rounded-lg px-2.5 py-1 text-xs">
-                                                    ID: {branch.branch_id}
-                                                </Badge>
+                                                {/* ✅ Hide ID for Regional Manager */}
+                                                {!isRegionalManager ? (
+                                                    <Badge variant="secondary" className="rounded-lg px-2.5 py-1 text-xs">
+                                                        ID: {branch.branch_id}
+                                                    </Badge>
+                                                ) : null}
 
                                                 <Badge variant="outline" className="rounded-lg px-2.5 py-1 text-xs">
                                                     <MapPin className="mr-1 h-3.5 w-3.5"/>
@@ -412,8 +474,7 @@ export default function BranchManagement({
                     </div>
                 ) : (
                     <>
-                        {/* EMPTY STATES */}
-                        {(regions?.length ?? 0) > 0 ? (
+                        {(visibleRegions?.length ?? 0) > 0 ? (
                             <Card className={boxCard}>
                                 <CardContent className="flex flex-col items-center justify-center py-10">
                                     <p className="text-muted-foreground mb-4">No branches created yet</p>
@@ -427,7 +488,9 @@ export default function BranchManagement({
                             <Card className={boxCard}>
                                 <CardContent className="flex flex-col items-center justify-center py-10">
                                     <p className="text-muted-foreground">
-                                        Create a region first to add branches
+                                        {isRegionalManager
+                                            ? "No region is assigned to your account."
+                                            : "Create a region first to add branches"}
                                     </p>
                                 </CardContent>
                             </Card>
@@ -449,18 +512,29 @@ export default function BranchManagement({
                     <form onSubmit={handleEditSubmit} className="space-y-4">
                         <div className="space-y-2">
                             <Label htmlFor="edit-region">Region</Label>
-                            <Select value={editRegionId} onValueChange={setEditRegionId}>
+
+                            <Select
+                                value={editRegionId}
+                                onValueChange={setEditRegionId}
+                                disabled={isRegionalManager} // ✅ lock for RM
+                            >
                                 <SelectTrigger>
                                     <SelectValue placeholder="Select region"/>
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {regions.map((region) => (
+                                    {(isRegionalManager ? visibleRegions : regions).map((region) => (
                                         <SelectItem key={region.region_id} value={String(region.region_id)}>
                                             {region.region_name}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
+
+                            {isRegionalManager ? (
+                                <p className="text-xs text-muted-foreground">
+                                    Region is locked to your assigned region.
+                                </p>
+                            ) : null}
                         </div>
 
                         <div className="space-y-2">

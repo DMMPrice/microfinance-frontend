@@ -35,7 +35,7 @@ export default function DashboardStats({
                 title="Branches"
                 value={branches.length}
                 Icon={Building2}
-                to="/dashboard/branches"
+                to="/dashboard/branches/home"
                 variant="blue"
             />
 

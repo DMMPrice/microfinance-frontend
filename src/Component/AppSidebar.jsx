@@ -37,6 +37,8 @@ import {
 import {useLocation, matchPath} from "react-router-dom";
 import logo from "@/assets/logo.svg";
 import {ROLES, ROLE_LABEL, hasRole, normalizeRole} from "@/config/roles";
+import ProfileModal from "@/Utils/ProfileModal.jsx";
+import { User } from "lucide-react"; // (optional icon)
 
 /* -------------------- Navigation Config -------------------- */
 const navigationItems = [
@@ -220,6 +222,7 @@ export function AppSidebar() {
     const {user, profile} = useAuth();
     const {pathname} = useLocation();
     const collapsed = state === "collapsed";
+    const [profileOpen, setProfileOpen] = useState(false);
 
     /* -------------------- Role -------------------- */
     const role = normalizeRole(profile?.role || user?.role);
@@ -400,14 +403,38 @@ export function AppSidebar() {
 
                 {/* =================== USER FOOTER =================== */}
                 {!collapsed && (user || profile) && (
-                    <div className="mt-auto p-4 border-t">
-                        <div className="text-sm">
-                            <p className="font-medium">{user?.username || "-"}</p>
-                            <p className="text-xs text-muted-foreground">
-                                {ROLE_LABEL[role] || role || "-"}
+                    <>
+                        <button
+                            type="button"
+                            onClick={() => setProfileOpen(true)}
+                            className={cn(
+                                "mt-auto w-full p-4 border-t text-left",
+                                "hover:bg-accent/60 transition-colors",
+                                "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                            )}
+                        >
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="text-sm">
+                                    {/* show name (not id) */}
+                                    <p className="font-medium">
+                                        {profile?.full_name || profile?.name || user?.username || "-"}
+                                    </p>
+
+                                    <p className="text-xs text-muted-foreground">
+                                        {ROLE_LABEL[role] || role || "-"}
+                                    </p>
+                                </div>
+
+                                <User className="h-4 w-4 text-muted-foreground" />
+                            </div>
+
+                            <p className="mt-1 text-[11px] text-muted-foreground">
+                                Click to view profile
                             </p>
-                        </div>
-                    </div>
+                        </button>
+
+                        <ProfileModal open={profileOpen} onOpenChange={setProfileOpen} />
+                    </>
                 )}
                 {/* =================================================== */}
             </SidebarContent>

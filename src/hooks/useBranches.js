@@ -6,6 +6,7 @@ import {useMemo} from "react";
 const BRANCHES_KEY = ["branches"];
 
 const normalizeRole = (r) => String(r ?? "").trim().toLowerCase();
+const toKey = (v) => (v == null ? null : String(v)); // ✅ normalize ids
 
 function getProfileDataSafe() {
     try {
@@ -36,9 +37,9 @@ export function useBranches(regionId = null) {
 
     /**
      * ✅ Effective region filter rules:
-     * 1) If caller passes regionId -> use it (admin filters etc.)
+     * 1) If caller passes regionId -> use it
      * 2) Else if RM/BM -> force profileRegionId
-     * 3) Else -> no filter (admin sees all)
+     * 3) Else -> no filter
      */
     const effectiveRegionId =
         regionId ?? ((isRegionalManager || isBranchManager) ? profileRegionId : null);
@@ -53,13 +54,11 @@ export function useBranches(regionId = null) {
         queryKey: effectiveRegionId
             ? [...BRANCHES_KEY, {regionId: effectiveRegionId}]
             : BRANCHES_KEY,
-        enabled:
-        // RM/BM must have region_id for safe fetch
-            !(isRegionalManager || isBranchManager) || !!profileRegionId,
+        enabled: !(isRegionalManager || isBranchManager) || !!profileRegionId,
         queryFn: async () => {
             const params = effectiveRegionId ? {region_id: effectiveRegionId} : {};
             const res = await api.get("/branches/", {params});
-            return res.data; // list[BranchOut]
+            return res.data;
         },
         keepPreviousData: true,
         refetchOnWindowFocus: false,
@@ -69,26 +68,29 @@ export function useBranches(regionId = null) {
     const branches = useMemo(() => {
         // Branch Manager => only show their assigned branch
         if (isBranchManager && profileBranchId != null) {
-            return (rawBranches || []).filter(
-                (b) => (b.branch_id ?? b.id) === profileBranchId
-            );
+            const target = toKey(profileBranchId);
+            return (rawBranches || []).filter((b) => {
+                const id = toKey(b.branch_id ?? b.id);
+                return id != null && id === target;
+            });
         }
         return rawBranches || [];
     }, [rawBranches, isBranchManager, profileBranchId]);
 
-    // ✅ map for quick lookup
+    // ✅ map for quick lookup (string keys)
     const branchById = useMemo(() => {
         const map = {};
         for (const b of branches || []) {
-            const id = b.branch_id ?? b.id;
+            const id = toKey(b.branch_id ?? b.id);
             if (id != null) map[id] = b;
         }
         return map;
     }, [branches]);
 
     const getBranchName = (branchId) => {
-        if (branchId == null) return "";
-        const b = branchById[branchId];
+        const key = toKey(branchId);
+        if (!key) return "";
+        const b = branchById[key];
         return b?.branch_name || b?.name || "";
     };
 
@@ -116,7 +118,6 @@ export function useBranches(regionId = null) {
         mutationFn: async ({branch_id, ...payload}) => {
             if (!canMutate) throw new Error("Not allowed");
 
-            // RM cannot change region
             if (isRegionalManager) {
                 const {region_id, regionId, ...rest} = payload;
                 payload = rest;
@@ -142,8 +143,8 @@ export function useBranches(regionId = null) {
     });
 
     return {
-        branches,          // ✅ filtered list (BM sees only own)
-        rawBranches,       // optional (full list returned by API)
+        branches,
+        rawBranches,
         branchById,
         getBranchName,
 

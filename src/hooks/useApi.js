@@ -51,6 +51,21 @@ export function isAdminLikeRole(role) {
     return r === "super_admin" || r === "admin";
 }
 
+export function getUserRegionId() {
+    const p = getProfileData();
+    return p?.region_id ?? null;
+}
+
+export function isRegionalManagerRole(role) {
+    const r = (role || "").toString().trim().toLowerCase();
+    return r === "regional_manager";
+}
+
+export function isBranchManagerRole(role) {
+    const r = (role || "").toString().trim().toLowerCase();
+    return r === "branch_manager";
+}
+
 export function useApi() {
     const get = (url, config = {}) => apiClient.get(url, config);
     const post = (url, data, config = {}) => apiClient.post(url, data, config);
@@ -67,6 +82,9 @@ export function useApi() {
         getProfileData,
         getUserRole,
         getUserBranchId,
+        getUserRegionId,
+        isRegionalManagerRole,
+        isBranchManagerRole,
         isAdminLikeRole,
     };
 }
