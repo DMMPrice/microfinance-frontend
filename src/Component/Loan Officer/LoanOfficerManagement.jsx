@@ -2,18 +2,12 @@
 import React, {useMemo, useState} from "react";
 import {Button} from "@/components/ui/button.tsx";
 import {Badge} from "@/components/ui/badge.tsx";
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card.tsx";
+import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card.tsx";
 import {Trash2, Eye, Users2, MapPin, UserRound} from "lucide-react";
 import {useToast} from "@/hooks/use-toast.ts";
 
 import StatCard from "@/Utils/StatCard.jsx";
-import {ConfirmDialog} from "@/Utils/ConfirmDialog.jsx"; // ✅ ADD
+import {ConfirmDialog} from "@/Utils/ConfirmDialog.jsx";
 
 import {useLoanOfficers} from "@/hooks/useLoanOfficers.js";
 import {useBranches} from "@/hooks/useBranches.js";
@@ -21,6 +15,14 @@ import {useRegions} from "@/hooks/useRegions.js";
 import {useGroups} from "@/hooks/useGroups.js";
 
 import OfficerDetailsDialog from "./OfficerDetailsDialog.jsx";
+
+function getProfileDataSafe() {
+    try {
+        return JSON.parse(localStorage.getItem("profileData") || "{}");
+    } catch {
+        return {};
+    }
+}
 
 export default function LoanOfficerManagement({
                                                   variant = "compact",
@@ -32,14 +34,19 @@ export default function LoanOfficerManagement({
     const [viewOpen, setViewOpen] = useState(false);
     const [selectedOfficer, setSelectedOfficer] = useState(null);
 
-    // ✅ Confirm dialog state
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [pendingDelete, setPendingDelete] = useState({loId: null, label: ""});
 
     const {toast} = useToast();
 
+    // ✅ role scope from profileData
+    const profile = useMemo(() => getProfileDataSafe(), []);
+    const role = String(profile?.role ?? "").trim().toLowerCase();
+    const myBranchId = profile?.branch_id ?? profile?.branchId ?? null;
+    const myRegionId = profile?.region_id ?? profile?.regionId ?? null;
+
     const {
-        loanOfficers,
+        loanOfficers = [],
         isLoading,
         isError,
         error,
@@ -49,6 +56,8 @@ export default function LoanOfficerManagement({
 
     const {branches = []} = useBranches();
     const {regions = []} = useRegions();
+
+    // ✅ groups hook will auto-filter by branch/region based on role (as per your updated useGroups)
     const {groups = []} = useGroups();
 
     const regionMap = useMemo(() => {
@@ -82,20 +91,40 @@ export default function LoanOfficerManagement({
         const branchId = emp.branch_id;
         const regionId = emp.region_id;
 
-        if (!branchId && !regionId) return "No branch/region assigned";
-
         const branchName = branchId ? getBranchName(branchId) : "-";
         const regionName = regionId ? getRegionName(regionId) : "-";
 
+        // ✅ Only show names (no IDs)
         return `${branchName} • ${regionName}`;
     };
+
+    // ✅ Filter officers by scope:
+    // - branch_manager: only officers whose employee.branch_id == myBranchId
+    // - regional_manager: only officers whose employee.region_id == myRegionId
+    // - others: show all
+    const scopedLoanOfficers = useMemo(() => {
+        if (!Array.isArray(loanOfficers)) return [];
+
+        if (role === "branch_manager" && myBranchId != null) {
+            return loanOfficers.filter((o) => Number(o?.employee?.branch_id) === Number(myBranchId));
+        }
+
+        if (role === "regional_manager" && myRegionId != null) {
+            return loanOfficers.filter((o) => Number(o?.employee?.region_id) === Number(myRegionId));
+        }
+
+        return loanOfficers;
+    }, [loanOfficers, role, myBranchId, myRegionId]);
 
     const getGroupCountForOfficer = (loId) => {
         if (!groups || groups.length === 0) return 0;
         return groups.filter((g) => String(g.lo_id) === String(loId)).length;
     };
 
-    const groupsTotal = useMemo(() => (Array.isArray(groups) ? groups.length : 0), [groups]);
+    const groupsTotal = useMemo(
+        () => (Array.isArray(groups) ? groups.length : 0),
+        [groups]
+    );
 
     const assignedGroupsTotal = useMemo(() => {
         if (!groups || groups.length === 0) return 0;
@@ -123,9 +152,6 @@ export default function LoanOfficerManagement({
         };
     }, [selectedOfficer]);
 
-    // ------------------------------------------------------------
-    // Delete flow
-    // ------------------------------------------------------------
     const handleDelete = async (loId) => {
         try {
             await deleteLoanOfficerMutation.mutateAsync(loId);
@@ -148,10 +174,9 @@ export default function LoanOfficerManagement({
         }
     };
 
-    // ✅ open confirm dialog instead of deleting immediately
     const requestDelete = (officer) => {
         const loId = officer?.lo_id;
-        const name = officer?.employee?.full_name || `LO #${loId}`;
+        const name = officer?.employee?.full_name || `Loan Officer`;
 
         setPendingDelete({loId, label: name});
         setConfirmOpen(true);
@@ -199,8 +224,8 @@ export default function LoanOfficerManagement({
                 <div className={`grid gap-4 ${isPage ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-2"}`}>
                     <StatCard
                         title="Total Loan Officers"
-                        value={loanOfficers?.length ?? 0}
-                        subtitle="Registered in the system"
+                        value={scopedLoanOfficers?.length ?? 0}
+                        subtitle="Visible in your scope"
                         Icon={UserRound}
                         to={isPage ? undefined : "/dashboard/officers"}
                     />
@@ -230,7 +255,7 @@ export default function LoanOfficerManagement({
             {!isLoading && !isError && (
                 <>
                     <div className={`grid gap-4 ${isPage ? "sm:grid-cols-2 xl:grid-cols-3" : "sm:grid-cols-2"}`}>
-                        {loanOfficers.map((officer) => {
+                        {scopedLoanOfficers.map((officer) => {
                             const emp = officer.employee;
                             const fullName = emp?.full_name || "Unknown Employee";
                             const email = emp?.user?.email || emp?.user?.username || "No user linked";
@@ -251,10 +276,7 @@ export default function LoanOfficerManagement({
                                                 </CardDescription>
 
                                                 <div className="mt-2 flex flex-wrap items-center gap-2">
-                                                    <Badge variant="secondary"
-                                                           className="rounded-lg px-2.5 py-1 text-xs">
-                                                        LO ID: {officer.lo_id}
-                                                    </Badge>
+                                                    {/* ✅ Removed LO ID badge entirely */}
 
                                                     <Badge variant="outline" className="rounded-lg px-2.5 py-1 text-xs">
                                                         <MapPin className="mr-1 h-3.5 w-3.5"/>
@@ -290,18 +312,6 @@ export default function LoanOfficerManagement({
                                                 <Eye className="mr-2 h-4 w-4"/>
                                                 View
                                             </Button>
-
-                                            {/* ✅ now uses confirm */}
-                                            <Button
-                                                variant="destructive"
-                                                size="sm"
-                                                className="rounded-lg"
-                                                disabled={isDeleting}
-                                                onClick={() => requestDelete(officer)}
-                                            >
-                                                <Trash2 className="mr-2 h-4 w-4"/>
-                                                Delete
-                                            </Button>
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -309,11 +319,11 @@ export default function LoanOfficerManagement({
                         })}
                     </div>
 
-                    {loanOfficers.length === 0 && (
+                    {scopedLoanOfficers.length === 0 && (
                         <Card className={boxCard}>
                             <CardContent className="flex flex-col items-center justify-center py-12">
                                 <p className="text-muted-foreground">
-                                    No Loan Officers registered yet.
+                                    No Loan Officers found for your scope.
                                 </p>
                             </CardContent>
                         </Card>
@@ -321,7 +331,6 @@ export default function LoanOfficerManagement({
                 </>
             )}
 
-            {/* ✅ View Details Dialog */}
             <OfficerDetailsDialog
                 open={viewOpen}
                 onClose={(open) => {
@@ -329,13 +338,11 @@ export default function LoanOfficerManagement({
                     else setViewOpen(true);
                 }}
                 officer={officerDisplay}
-                // ✅ from modal, also confirm before deleting
                 onDelete={() => requestDelete(selectedOfficer)}
                 branchRegionLabel={selectedOfficer ? getBranchRegionLabelForOfficer(selectedOfficer) : ""}
                 groupCount={selectedOfficer ? getGroupCountForOfficer(selectedOfficer.lo_id) : 0}
             />
 
-            {/* ✅ Confirm Dialog */}
             <ConfirmDialog
                 open={confirmOpen}
                 onOpenChange={setConfirmOpen}

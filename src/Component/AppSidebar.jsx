@@ -105,6 +105,7 @@ const navigationItems = [
             ROLES.SUPER_ADMIN,
             ROLES.REGIONAL_MANAGER,
             ROLES.BRANCH_MANAGER,
+            ROLES.LOAN_OFFICER
         ],
     },
 

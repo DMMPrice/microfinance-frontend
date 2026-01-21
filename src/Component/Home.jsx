@@ -322,7 +322,7 @@ export default function Home() {
                             <Route
                                 path="groups"
                                 element={
-                                    <Guard role={role} allowedRoles={NON_LOAN_OFFICER_ROLES}>
+                                    <Guard role={role} allowedRoles={ALL_BUSINESS_ROLES}>
                                         <GroupsPage/>
                                     </Guard>
                                 }

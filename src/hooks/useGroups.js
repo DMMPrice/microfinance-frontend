@@ -13,48 +13,61 @@ function getProfileDataSafe() {
 }
 
 /**
- * 🔹 Main hook – list groups + create/delete/assign
- * ✅ Supports optional filters: lo_id, region_id, branch_id
- * ✅ Auto-applies region/branch for RM/BM from profileData if filters not provided
+ * useGroups(filters)
+ * ✅ Admin/Super Admin: no auto filter (can pass any filters)
+ * ✅ Regional Manager: auto region_id (unless explicitly passed)
+ * ✅ Branch Manager: auto branch_id (unless explicitly passed)
+ * ✅ Loan Officer: auto user_id (employee_id) (unless explicitly passed)
+ *
+ * Supported query params:
+ * - region_id
+ * - branch_id
+ * - lo_id
+ * - user_id   (NEW: employee_id -> mapped in backend to LO -> groups)
  */
 export function useGroups(filters = {}) {
     const queryClient = useQueryClient();
-
     const profile = getProfileDataSafe();
 
-    const role = String(profile?.role ?? "").trim(); // e.g. "regional_manager"
+    const role = String(profile?.role ?? "").trim().toLowerCase();
+
     const profileRegionId = profile?.region_id ?? profile?.regionId ?? null;
     const profileBranchId = profile?.branch_id ?? profile?.branchId ?? null;
+
+    // IMPORTANT: this should be employees.employee_id (your backend maps user_id -> loan_officers.employee_id)
     const profileUserId = profile?.user_id ?? profile?.userId ?? null;
 
     const isRM = role === "regional_manager";
     const isBM = role === "branch_manager";
     const isLO = role === "loan_officer";
 
-    // ✅ Caller can pass filters, otherwise auto-filter for RM/BM/LO
+    // caller filters (accept both snake_case and camelCase)
+    const fRegion = filters?.region_id ?? filters?.regionId ?? null;
+    const fBranch = filters?.branch_id ?? filters?.branchId ?? null;
+    const fLoId = filters?.lo_id ?? filters?.loId ?? null;
+    const fUserId = filters?.user_id ?? filters?.userId ?? null;
+
+    // ✅ Effective filters:
+    // - RM gets region_id by default
+    // - BM gets branch_id by default
+    // - LO gets user_id by default
+    // - Admin-like has no defaults (only whatever caller passes)
     const effectiveFilters = {
-        region_id:
-            filters?.region_id ??
-            filters?.regionId ??
-            (isRM ? profileRegionId : null),
+        region_id: fRegion ?? (isRM ? profileRegionId : null),
+        branch_id: fBranch ?? (isBM ? profileBranchId : null),
 
-        branch_id:
-            filters?.branch_id ??
-            filters?.branchId ??
-            (isBM ? profileBranchId : null),
+        // Admin/Manager can filter by lo_id when they want:
+        lo_id: fLoId ?? null,
 
-        lo_id:
-            filters?.lo_id ??
-            filters?.loId ??
-            (isLO ? profileUserId : null),
+        // LO should filter via user_id (employee_id)
+        user_id: fUserId ?? (isLO ? profileUserId : null),
     };
 
-    // remove null/undefined filters so request params remain clean
+    // remove null/undefined/"" filters so request params remain clean
     const params = Object.fromEntries(
         Object.entries(effectiveFilters).filter(([, v]) => v !== null && v !== undefined && v !== "")
     );
 
-    // GET /groups
     const {
         data: groups = [],
         isLoading,
@@ -62,12 +75,10 @@ export function useGroups(filters = {}) {
         error,
         refetch,
     } = useQuery({
-        queryKey: Object.keys(params).length
-            ? [...GROUPS_KEY, params]
-            : GROUPS_KEY,
+        queryKey: Object.keys(params).length ? [...GROUPS_KEY, params] : GROUPS_KEY,
         queryFn: async () => {
             const res = await api.get("/groups/", {params});
-            return res.data; // list[GroupOut]
+            return res.data;
         },
         keepPreviousData: true,
         refetchOnWindowFocus: false,
@@ -77,20 +88,20 @@ export function useGroups(filters = {}) {
     const createGroupMutation = useMutation({
         mutationFn: async (payload) => {
             // payload: { group_name, lo_id, region_id, branch_id, meeting_day }
-            // ✅ Optional safety: RM/BM cannot create outside their scope
+            // Frontend-controlled defaults:
             const finalPayload = {
                 ...payload,
                 region_id: isRM ? profileRegionId : payload?.region_id,
                 branch_id: isBM ? profileBranchId : payload?.branch_id,
-                // (LO usually shouldn't create groups; but if allowed, keep lo_id as payload)
+                // for LO, you can choose how you want to create:
+                // - either pass lo_id explicitly from UI selection
+                // - or map from employee_id on backend (if you implement it later)
             };
 
             const res = await api.post("/groups", finalPayload);
             return res.data;
         },
-        onSuccess: () => {
-            queryClient.invalidateQueries({queryKey: GROUPS_KEY});
-        },
+        onSuccess: () => queryClient.invalidateQueries({queryKey: GROUPS_KEY}),
     });
 
     // DELETE /groups/{group_id}
@@ -98,23 +109,16 @@ export function useGroups(filters = {}) {
         mutationFn: async (groupId) => {
             await api.delete(`/groups/${groupId}`);
         },
-        onSuccess: () => {
-            queryClient.invalidateQueries({queryKey: GROUPS_KEY});
-        },
+        onSuccess: () => queryClient.invalidateQueries({queryKey: GROUPS_KEY}),
     });
 
-    // POST /groups/assign-lo  (update LO for multiple groups)
+    // POST /groups/assign-lo
     const assignLoanOfficerMutation = useMutation({
         mutationFn: async ({lo_id, group_ids}) => {
-            const res = await api.post("/groups/assign-lo", {
-                lo_id,
-                group_ids,
-            });
-            return res.data; // updated groups
+            const res = await api.post("/groups/assign-lo", {lo_id, group_ids});
+            return res.data;
         },
-        onSuccess: () => {
-            queryClient.invalidateQueries({queryKey: GROUPS_KEY});
-        },
+        onSuccess: () => queryClient.invalidateQueries({queryKey: GROUPS_KEY}),
     });
 
     return {
@@ -123,27 +127,28 @@ export function useGroups(filters = {}) {
         isError,
         error,
         refetch,
+
         createGroupMutation,
         deleteGroupMutation,
         assignLoanOfficerMutation,
 
-        // helpful for UI/debug
         appliedParams: params,
         role,
     };
 }
 
 /**
- * 🔹 Get a single group by id
- *    GET /groups/{group_id}
+ * Get a single group by id
+ * GET /groups/{group_id}
  */
 export function useGroup(groupId, {enabled = true} = {}) {
     return useQuery({
         queryKey: [...GROUPS_KEY, groupId],
         enabled: enabled && !!groupId,
         queryFn: async () => {
-            const res = await api.get(`/groups/${groupId}/`);
-            return res.data; // GroupOut
+            // ✅ remove trailing slash to match FastAPI route
+            const res = await api.get(`/groups/${groupId}`);
+            return res.data;
         },
         keepPreviousData: true,
         refetchOnWindowFocus: false,
@@ -151,8 +156,8 @@ export function useGroup(groupId, {enabled = true} = {}) {
 }
 
 /**
- * 🔹 Get group summary (group + Members + counts)
- *    GET /groups/{group_id}/summary
+ * Get group summary (group + members + counts)
+ * GET /groups/{group_id}/summary
  */
 export function useGroupSummary(groupId, {enabled = true} = {}) {
     return useQuery({
@@ -160,7 +165,7 @@ export function useGroupSummary(groupId, {enabled = true} = {}) {
         enabled: enabled && !!groupId,
         queryFn: async () => {
             const res = await api.get(`/groups/${groupId}/summary`);
-            return res.data; // GroupSummaryOut
+            return res.data;
         },
         keepPreviousData: true,
         refetchOnWindowFocus: false,
