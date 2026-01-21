@@ -20,7 +20,15 @@ import {
 } from "@/components/ui/select";
 
 import {useCreateLoan} from "@/hooks/useLoans";
-import {apiClient} from "@/hooks/useApi.js";
+import {
+    apiClient,
+    getUserRole,
+    getUserBranchId,
+    getUserRegionId,
+    isAdminLikeRole,
+    isRegionalManagerRole,
+    isBranchManagerRole,
+} from "@/hooks/useApi.js";
 import {toast} from "@/components/ui/use-toast";
 import PreviewScheduleDialog from "./PreviewScheduleDialog";
 
@@ -28,7 +36,6 @@ import {
     todayISO,
     addDaysISO,
     safeNum,
-    round2,
     computeLoanNumbers,
 } from "./Loan Dashboard/loanCalc.js";
 
@@ -52,7 +59,8 @@ async function getLoanAccountNosOnce() {
                 return parsed;
             }
         }
-    } catch {}
+    } catch {
+    }
 
     const res = await apiClient.get("/loans/master", {params: {limit: 5000, offset: 0}});
     const list = Array.isArray(res.data) ? res.data : [];
@@ -69,7 +77,8 @@ async function getLoanAccountNosOnce() {
 
     try {
         localStorage.setItem(LOAN_ACCOUNTS_LS_KEY, JSON.stringify(uniq));
-    } catch {}
+    } catch {
+    }
 
     return uniq;
 }
@@ -113,6 +122,11 @@ const DEFAULT_BOOK_PRICE = 0;
 
 export default function CreateLoanDialog({open, onOpenChange}) {
     const createLoan = useCreateLoan();
+
+    // ✅ role/scope
+    const role = getUserRole();
+    const myBranchId = getUserBranchId();
+    const myRegionId = getUserRegionId();
 
     const defaults = useMemo(() => {
         const today = todayISO();
@@ -228,6 +242,42 @@ export default function CreateLoanDialog({open, onOpenChange}) {
         };
     }, [open]);
 
+    // Branches (for showing branch_name in group dropdown)
+    const [branches, setBranches] = useState([]);
+    const [bLoading, setBLoading] = useState(false);
+    const [bErr, setBErr] = useState("");
+
+    useEffect(() => {
+        if (!open) return;
+        let cancelled = false;
+
+        (async () => {
+            setBLoading(true);
+            setBErr("");
+            try {
+                const res = await apiClient.get("/branches/");
+                if (!cancelled) setBranches(Array.isArray(res.data) ? res.data : []);
+            } catch (e) {
+                if (!cancelled) setBErr(e?.response?.data?.detail || e?.message || "Failed to load branches");
+            } finally {
+                if (!cancelled) setBLoading(false);
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [open]);
+
+    const branchNameById = useMemo(() => {
+        const map = {};
+        (branches || []).forEach((b) => {
+            const id = b.branch_id ?? b.id;
+            if (id != null) map[String(id)] = b.branch_name || b.name || `Branch-${id}`;
+        });
+        return map;
+    }, [branches]);
+
     // Groups + Members
     const [groups, setGroups] = useState([]);
     const [members, setMembers] = useState([]);
@@ -279,6 +329,27 @@ export default function CreateLoanDialog({open, onOpenChange}) {
         };
     }, [open]);
 
+    // ✅ scope based visible groups
+    const visibleGroups = useMemo(() => {
+        const list = Array.isArray(groups) ? groups : [];
+
+        if (isAdminLikeRole(role)) return list;
+
+        if (isRegionalManagerRole(role)) {
+            if (myRegionId == null) return [];
+            return list.filter((g) => String(g.region_id ?? g.regionId ?? "") === String(myRegionId));
+        }
+
+        if (isBranchManagerRole(role)) {
+            if (myBranchId == null) return [];
+            return list.filter((g) => String(g.branch_id ?? g.branchId ?? "") === String(myBranchId));
+        }
+
+        // safe default
+        return [];
+    }, [groups, role, myRegionId, myBranchId]);
+
+    // used for member sort labels
     const groupNameById = useMemo(() => {
         const map = {};
         (groups || []).forEach((g) => {
@@ -302,10 +373,10 @@ export default function CreateLoanDialog({open, onOpenChange}) {
         return list.map((m) => {
             const gName = groupNameById[String(m.group_id)] || `Group-${m.group_id}`;
             const name = m.full_name || `Member-${m.member_id}`;
-            const phone = m.phone ? ` · ${m.phone}` : "";
+            const phone = m.phone ? `${m.phone}` : "";
             return {
                 value: String(m.member_id),
-                label: `${gName} — ${name} (MID-${m.member_id})${phone}`,
+                label: `${gName} — ${name} - ${phone}`,
             };
         });
     }, [members, form.group_id, groupNameById]);
@@ -394,7 +465,8 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                 setLoanAccountNos(next);
                 try {
                     localStorage.setItem(LOAN_ACCOUNTS_LS_KEY, JSON.stringify(next));
-                } catch {}
+                } catch {
+                }
             }
 
             setForm(defaults);
@@ -409,7 +481,8 @@ export default function CreateLoanDialog({open, onOpenChange}) {
     return (
         <>
             <Dialog open={open} onOpenChange={onOpenChange}>
-                <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+                {/* ✅ fixed header/footer + scroll body (prevents select overflow issues) */}
+                <DialogContent className="max-w-4xl h-[85vh] overflow-hidden flex flex-col">
                     <DialogHeader className="space-y-2">
                         <DialogTitle>Create Loan</DialogTitle>
 
@@ -417,10 +490,10 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                         <div className="rounded-xl border bg-muted/20 px-3 py-2">
                             {settingsLoading ? (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-                                    <Skeleton className="h-9 w-full" />
-                                    <Skeleton className="h-9 w-full" />
-                                    <Skeleton className="h-9 w-full" />
-                                    <Skeleton className="h-9 w-full" />
+                                    <Skeleton className="h-9 w-full"/>
+                                    <Skeleton className="h-9 w-full"/>
+                                    <Skeleton className="h-9 w-full"/>
+                                    <Skeleton className="h-9 w-full"/>
                                 </div>
                             ) : (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
@@ -447,7 +520,8 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                                     <div className="rounded-lg bg-background border px-3 py-2">
                                         <div className="text-[11px] text-muted-foreground">Fees (% + ₹)</div>
                                         <div className="text-sm font-medium">
-                                            {form.processing_fee_percent}% · {form.insurance_fee_percent}% · ₹{form.book_price_amount}
+                                            {form.processing_fee_percent}% · {form.insurance_fee_percent}% ·
+                                            ₹{form.book_price_amount}
                                         </div>
                                         <div className="text-[10px] text-muted-foreground">
                                             PROCESSING_FEES · INSURANCE_FEES · BOOK_PRICE
@@ -458,156 +532,182 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                         </div>
                     </DialogHeader>
 
-                    {settingsErr ? <div className="text-sm text-destructive">{settingsErr}</div> : null}
+                    {/* ✅ scrollable content area */}
+                    <div className="flex-1 overflow-y-auto pr-1">
+                        {settingsErr ? <div className="text-sm text-destructive">{settingsErr}</div> : null}
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
-                        <div className="space-y-2">
-                            <Label>Loan Account No</Label>
-                            {laLoading ? (
-                                <Skeleton className="h-10 w-full" />
-                            ) : laErr ? (
-                                <div className="text-sm text-destructive">{laErr}</div>
-                            ) : (
-                                <>
-                                    <Input
-                                        value={form.loan_account_no}
-                                        onChange={set("loan_account_no")}
-                                        placeholder="LN-0001"
-                                        list="loan-account-suggestions"
-                                        autoComplete="off"
-                                    />
-                                    <datalist id="loan-account-suggestions">
-                                        {(loanAccountNos || []).map((acc) => (
-                                            <option key={acc} value={acc} />
-                                        ))}
-                                    </datalist>
-                                </>
-                            )}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                            <div className="space-y-2">
+                                <Label>Loan Account No</Label>
+                                {laLoading ? (
+                                    <Skeleton className="h-10 w-full"/>
+                                ) : laErr ? (
+                                    <div className="text-sm text-destructive">{laErr}</div>
+                                ) : (
+                                    <>
+                                        <Input
+                                            value={form.loan_account_no}
+                                            onChange={set("loan_account_no")}
+                                            placeholder="LN-0001"
+                                            list="loan-account-suggestions"
+                                            autoComplete="off"
+                                        />
+                                        <datalist id="loan-account-suggestions">
+                                            {(loanAccountNos || []).map((acc) => (
+                                                <option key={acc} value={acc}/>
+                                            ))}
+                                        </datalist>
+                                    </>
+                                )}
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label>Group</Label>
+                                {(gLoading || bLoading) ? (
+                                    <Skeleton className="h-10 w-full"/>
+                                ) : (gErr || bErr) ? (
+                                    <div className="text-sm text-destructive">{gErr || bErr}</div>
+                                ) : (
+                                    <Select
+                                        value={form.group_id ? String(form.group_id) : ""}
+                                        onValueChange={(v) => setForm((p) => ({...p, group_id: v}))}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select Branch"/>
+                                        </SelectTrigger>
+
+                                        {/* ✅ prevent overflow / tall dropdown */}
+                                        <SelectContent className="max-h-72 overflow-y-auto" position="popper">
+                                            {visibleGroups.length === 0 ? (
+                                                <div className="px-3 py-2 text-sm text-muted-foreground">
+                                                    No groups available for your scope
+                                                </div>
+                                            ) : (
+                                                visibleGroups.map((g) => {
+                                                    const bid = g.branch_id ?? g.branchId;
+                                                    const bName =
+                                                        branchNameById[String(bid)] ||
+                                                        (bid ? `Branch-${bid}` : "Branch");
+                                                    return (
+                                                        <SelectItem key={g.group_id} value={String(g.group_id)}>
+                                                            {bName} — {g.group_name}
+                                                        </SelectItem>
+                                                    );
+                                                })
+                                            )}
+                                        </SelectContent>
+                                    </Select>
+                                )}
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label>Member</Label>
+                                {mLoading ? (
+                                    <Skeleton className="h-10 w-full"/>
+                                ) : mErr ? (
+                                    <div className="text-sm text-destructive">{mErr}</div>
+                                ) : (
+                                    <Select
+                                        value={form.member_id ? String(form.member_id) : ""}
+                                        onValueChange={(v) => setForm((p) => ({...p, member_id: v}))}
+                                        disabled={!form.group_id}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue
+                                                placeholder={form.group_id ? "Select Member" : "Select Group first"}/>
+                                        </SelectTrigger>
+
+                                        {/* ✅ prevent overflow / tall dropdown */}
+                                        <SelectContent className="max-h-72 overflow-y-auto" position="popper">
+                                            {memberOptions.length === 0 ? (
+                                                <div className="px-3 py-2 text-sm text-muted-foreground">
+                                                    No members found for this group
+                                                </div>
+                                            ) : (
+                                                memberOptions.map((o) => (
+                                                    <SelectItem key={o.value} value={o.value}>
+                                                        {o.label}
+                                                    </SelectItem>
+                                                ))
+                                            )}
+                                        </SelectContent>
+                                    </Select>
+                                )}
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label>Disburse Date</Label>
+                                <Input type="date" value={form.disburse_date} onChange={set("disburse_date")}/>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label>Principal Amount</Label>
+                                <Input value={form.principal_amount} onChange={set("principal_amount")}
+                                       placeholder="10000"/>
+                            </div>
+
+                            {/* Interest (not editable) */}
+                            <div className="space-y-2">
+                                <Label>Interest Rate (total %)</Label>
+                                {settingsLoading ? (
+                                    <Skeleton className="h-10 w-full"/>
+                                ) : (
+                                    <>
+                                        <Input value={form.annual_interest_percent} disabled/>
+                                        <div className="text-xs text-muted-foreground">
+                                            Weekly rate:{" "}
+                                            <span
+                                                className="font-medium text-foreground">{calc.weeklyInterestPercent || 0}%</span>{" "}
+                                            · Total Interest:{" "}
+                                            <span
+                                                className="font-medium text-foreground">{calc.totalInterestAmount || 0}</span>{" "}
+                                            · Weekly Installment:{" "}
+                                            <span
+                                                className="font-medium text-foreground">{calc.installmentPerWeek || 0}</span>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label>Processing Fee Amount</Label>
+                                <Input value={calc.processingFeeAmt} disabled/>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label>Insurance Fee Amount</Label>
+                                <Input value={calc.insuranceFeeAmt} disabled/>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label>Book Price (1st installment)</Label>
+                                <Input value={calc.bookPriceAmt} disabled/>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label>First Installment Extra Total</Label>
+                                <Input value={calc.firstInstallmentExtra} disabled/>
+                            </div>
                         </div>
 
-                        <div className="space-y-2">
-                            <Label>Group</Label>
-                            {gLoading ? (
-                                <Skeleton className="h-10 w-full" />
-                            ) : gErr ? (
-                                <div className="text-sm text-destructive">{gErr}</div>
-                            ) : (
-                                <Select
-                                    value={form.group_id ? String(form.group_id) : ""}
-                                    onValueChange={(v) => setForm((p) => ({...p, group_id: v}))}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select Group" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {(groups || []).map((g) => (
-                                            <SelectItem key={g.group_id} value={String(g.group_id)}>
-                                                {g.group_name} (G-{g.group_id})
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            )}
-                        </div>
+                        <div className="mt-4 flex items-center justify-between gap-2">
+                            <div className="text-sm text-muted-foreground">
+                                Preview schedule from{" "}
+                                <span
+                                    className="font-medium text-foreground">{form.first_installment_date || "-"}</span> ·
+                                1st installment extra:{" "}
+                                <span className="font-medium text-foreground">{calc.firstInstallmentExtra}</span>
+                            </div>
 
-                        <div className="space-y-2">
-                            <Label>Member</Label>
-                            {mLoading ? (
-                                <Skeleton className="h-10 w-full" />
-                            ) : mErr ? (
-                                <div className="text-sm text-destructive">{mErr}</div>
-                            ) : (
-                                <Select
-                                    value={form.member_id ? String(form.member_id) : ""}
-                                    onValueChange={(v) => setForm((p) => ({...p, member_id: v}))}
-                                    disabled={!form.group_id}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder={form.group_id ? "Select Member" : "Select Group first"} />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {memberOptions.length === 0 ? (
-                                            <div className="px-3 py-2 text-sm text-muted-foreground">
-                                                No members found for this group
-                                            </div>
-                                        ) : (
-                                            memberOptions.map((o) => (
-                                                <SelectItem key={o.value} value={o.value}>
-                                                    {o.label}
-                                                </SelectItem>
-                                            ))
-                                        )}
-                                    </SelectContent>
-                                </Select>
-                            )}
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setPreviewOpen(true)}
+                                disabled={!weeks || !principal || !form.first_installment_date}
+                            >
+                                Preview Schedule
+                            </Button>
                         </div>
-
-                        <div className="space-y-2">
-                            <Label>Disburse Date</Label>
-                            <Input type="date" value={form.disburse_date} onChange={set("disburse_date")} />
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label>Principal Amount</Label>
-                            <Input value={form.principal_amount} onChange={set("principal_amount")} placeholder="10000" />
-                        </div>
-
-                        {/* Interest (not editable) */}
-                        <div className="space-y-2">
-                            <Label>Interest Rate (total %)</Label>
-                            {settingsLoading ? (
-                                <Skeleton className="h-10 w-full" />
-                            ) : (
-                                <>
-                                    <Input value={form.annual_interest_percent} disabled />
-                                    <div className="text-xs text-muted-foreground">
-                                        Weekly rate: <span className="font-medium text-foreground">{calc.weeklyInterestPercent || 0}%</span>{" "}
-                                        · Total Interest:{" "}
-                                        <span className="font-medium text-foreground">{calc.totalInterestAmount || 0}</span>{" "}
-                                        · Weekly Installment:{" "}
-                                        <span className="font-medium text-foreground">{calc.installmentPerWeek || 0}</span>
-                                    </div>
-                                </>
-                            )}
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label>Processing Fee Amount</Label>
-                            <Input value={calc.processingFeeAmt} disabled />
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label>Insurance Fee Amount</Label>
-                            <Input value={calc.insuranceFeeAmt} disabled />
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label>Book Price (1st installment)</Label>
-                            <Input value={calc.bookPriceAmt} disabled />
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label>First Installment Extra Total</Label>
-                            <Input value={calc.firstInstallmentExtra} disabled />
-                        </div>
-                    </div>
-
-                    <div className="mt-4 flex items-center justify-between gap-2">
-                        <div className="text-sm text-muted-foreground">
-                            Preview schedule from{" "}
-                            <span className="font-medium text-foreground">{form.first_installment_date || "-"}</span> ·
-                            1st installment extra:{" "}
-                            <span className="font-medium text-foreground">{calc.firstInstallmentExtra}</span>
-                        </div>
-
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => setPreviewOpen(true)}
-                            disabled={!weeks || !principal || !form.first_installment_date}
-                        >
-                            Preview Schedule
-                        </Button>
                     </div>
 
                     <DialogFooter className="gap-2">
