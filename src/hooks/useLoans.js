@@ -5,8 +5,7 @@ import {apiClient} from "@/hooks/useApi.js";
 /* -------------------- Helpers -------------------- */
 function normalizeId(v) {
     if (v === null || v === undefined) return "";
-    const s = String(v).trim();
-    return s;
+    return String(v).trim();
 }
 
 /**
@@ -29,8 +28,7 @@ function normalizeStatus(status) {
 
 function normalizeSearch(search) {
     if (!search) return "";
-    const s = String(search).trim();
-    return s;
+    return String(search).trim();
 }
 
 function isNumericId(v) {
@@ -59,6 +57,44 @@ function resolveLoanIdentifier(input) {
     return {type: "acc", value: ref};
 }
 
+/**
+ * ✅ Common invalidation for loan screens
+ * - refresh KPIs + due lists + master list
+ * - refresh summary/schedule/statement for the specific loan (by id OR account)
+ */
+function invalidateLoanCommon(qc) {
+    qc.invalidateQueries({queryKey: ["loans", "stats"]});
+    qc.invalidateQueries({queryKey: ["loans", "installmentsDue"]});
+    qc.invalidateQueries({queryKey: ["loans", "collectionsByLO"]});
+    qc.invalidateQueries({queryKey: ["loans", "collectionsByLOManual"]});
+    qc.invalidateQueries({queryKey: ["loans", "master"]});
+}
+
+function invalidateLoanDetails(qc, loanRef) {
+    const ident = resolveLoanIdentifier(loanRef);
+    if (!ident?.value) return;
+
+    qc.invalidateQueries({queryKey: ["loans", "summary", ident.type, ident.value]});
+    qc.invalidateQueries({queryKey: ["loans", "schedule", ident.type, ident.value]});
+    qc.invalidateQueries({queryKey: ["loans", "statement", ident.type, ident.value]});
+
+    // ✅ If you have both id and account available, invalidate both to be safe
+    if (typeof loanRef === "object") {
+        const byId = resolveLoanIdentifier({loan_id: loanRef.loan_id});
+        const byAcc = resolveLoanIdentifier({loan_account_no: loanRef.loan_account_no});
+
+        if (byId?.value) {
+            qc.invalidateQueries({queryKey: ["loans", "summary", byId.type, byId.value]});
+            qc.invalidateQueries({queryKey: ["loans", "schedule", byId.type, byId.value]});
+            qc.invalidateQueries({queryKey: ["loans", "statement", byId.type, byId.value]});
+        }
+        if (byAcc?.value) {
+            qc.invalidateQueries({queryKey: ["loans", "summary", byAcc.type, byAcc.value]});
+            qc.invalidateQueries({queryKey: ["loans", "schedule", byAcc.type, byAcc.value]});
+            qc.invalidateQueries({queryKey: ["loans", "statement", byAcc.type, byAcc.value]});
+        }
+    }
+}
 
 /* -------------------- STATS -------------------- */
 export function useLoanStats() {
@@ -80,7 +116,6 @@ export function useDueInstallments(as_on) {
         queryFn: async () => {
             const params = {};
             if (asOn) params.as_on = asOn;
-
             const res = await apiClient.get("/loans/installments/due", {params});
             return res.data;
         },
@@ -97,17 +132,14 @@ export function useCollectionsByLO(lo_id, as_on) {
     return useQuery({
         queryKey: ["loans", "collectionsByLO", loId || "ALL", asOn || "ALL"],
         enabled: true,
-
         queryFn: async () => {
             const params = {};
-
             if (loId) params.lo_id = Number(loId);
             if (asOn) params.as_on = asOn;
 
             const {data} = await apiClient.get("/loans/collections/by-lo", {params});
             return data;
         },
-
         keepPreviousData: true,
         refetchOnWindowFocus: false,
     });
@@ -132,7 +164,7 @@ export function useLoansByGroup(group_id, status) {
     const st = normalizeStatus(status);
 
     return useQuery({
-        queryKey: ["loans", "byGroup", groupId, st],
+        queryKey: ["loans", "byGroup", groupId, st || "ALL"],
         enabled: !!groupId,
         queryFn: async () =>
             (
@@ -182,13 +214,11 @@ export function useLoanSummary(loanRef) {
             if (ident.type === "id") {
                 return (await apiClient.get(`/loans/${ident.value}/summary`)).data;
             }
-            // ✅ backend endpoint (recommended)
-            return (await apiClient.get(`/loans/${encodeURIComponent(ident.value)}/summary`)).data;
+            return (await apiClient.get(`/loans/by-account/${encodeURIComponent(ident.value)}/summary`)).data;
         },
         refetchOnWindowFocus: false,
     });
 }
-
 
 /* -------------------- LOAN SCHEDULE -------------------- */
 export function useLoanSchedule(loanRef) {
@@ -201,7 +231,7 @@ export function useLoanSchedule(loanRef) {
             if (ident.type === "id") {
                 return (await apiClient.get(`/loans/${ident.value}/schedule`)).data;
             }
-            return (await apiClient.get(`/loans/${encodeURIComponent(ident.value)}/schedule`)).data;
+            return (await apiClient.get(`/loans/by-account/${encodeURIComponent(ident.value)}/schedule`)).data;
         },
         refetchOnWindowFocus: false,
     });
@@ -218,7 +248,7 @@ export function useLoanStatement(loanRef) {
             if (ident.type === "id") {
                 return (await apiClient.get(`/loans/${ident.value}/statement`)).data;
             }
-            return (await apiClient.get(`/loans/${encodeURIComponent(ident.value)}/statement`)).data;
+            return (await apiClient.get(`/loans/by-account/${encodeURIComponent(ident.value)}/statement`)).data;
         },
         refetchOnWindowFocus: false,
     });
@@ -231,12 +261,19 @@ export function useCreateLoan() {
     return useMutation({
         mutationFn: async (payload) => (await apiClient.post("/loans", payload)).data,
         onSuccess: () => {
+            // new loan impacts master list + stats
             qc.invalidateQueries({queryKey: ["loans"]});
         },
     });
 }
 
 /* -------------------- CREATE PAYMENT -------------------- */
+/**
+ * vars can include:
+ * - loan_id (required)
+ * - loan_account_no (optional, for better cache invalidation)
+ * - payload
+ */
 export function useCreateLoanPayment() {
     const qc = useQueryClient();
 
@@ -247,18 +284,10 @@ export function useCreateLoanPayment() {
             return (await apiClient.post(`/loans/${loanId}/payments`, payload)).data;
         },
         onSuccess: (_data, vars) => {
-            const loanId = normalizeId(vars?.loan_id);
+            invalidateLoanCommon(qc);
 
-            qc.invalidateQueries({queryKey: ["loans", "stats"]});
-            qc.invalidateQueries({queryKey: ["loans", "installmentsDue"]});
-            qc.invalidateQueries({queryKey: ["loans", "collectionsByLO"]});
-            qc.invalidateQueries({queryKey: ["loans", "master"]});
-
-            if (loanId) {
-                qc.invalidateQueries({queryKey: ["loans", "summary", loanId]});
-                qc.invalidateQueries({queryKey: ["loans", "schedule", loanId]});
-                qc.invalidateQueries({queryKey: ["loans", "statement", loanId]});
-            }
+            // ✅ invalidate both id + account if provided
+            invalidateLoanDetails(qc, {loan_id: vars?.loan_id, loan_account_no: vars?.loan_account_no});
         },
     });
 }
@@ -274,38 +303,27 @@ export function useApplyLoanAdvance() {
             return (await apiClient.post(`/loans/${loanId}/apply-advance`)).data;
         },
         onSuccess: (_data, vars) => {
-            const loanId = normalizeId(vars?.loan_id);
-
-            qc.invalidateQueries({queryKey: ["loans", "stats"]});
-            qc.invalidateQueries({queryKey: ["loans", "installmentsDue"]});
-            qc.invalidateQueries({queryKey: ["loans", "collectionsByLO"]});
-            qc.invalidateQueries({queryKey: ["loans", "master"]});
-
-            if (loanId) {
-                qc.invalidateQueries({queryKey: ["loans", "summary", loanId]});
-                qc.invalidateQueries({queryKey: ["loans", "schedule", loanId]});
-                qc.invalidateQueries({queryKey: ["loans", "statement", loanId]});
-            }
+            invalidateLoanCommon(qc);
+            invalidateLoanDetails(qc, {loan_id: vars?.loan_id, loan_account_no: vars?.loan_account_no});
         },
     });
 }
 
-/* -------------------- COLLECTIONS BY LO (DEFAULT LOAD) -------------------- */
-/**
- * Initial load: GET /loans/collections/by-lo (NO params)
- * After selecting LO/date: GET /loans/collections/by-lo?lo_id=..&as_on=..
- */
+/* -------------------- COLLECTIONS BY LO (MANUAL LOAD) -------------------- */
 export function useCollectionsByLOManual(loId, asOn, enabled = false) {
+    const lo = normalizeId(loId);
+    const d = normalizeDate(asOn);
+
     return useQuery({
-        queryKey: ["collectionsByLOManual", loId, asOn],
+        queryKey: ["loans", "collectionsByLOManual", lo || "ALL", d || "ALL"],
+        enabled: !!enabled,
         queryFn: async () => {
-            const params = new URLSearchParams();
-            if (loId) params.set("lo_id", loId);
-            if (asOn) params.set("as_on", asOn);
+            const params = {};
+            if (lo) params.lo_id = Number(lo);
+            if (d) params.as_on = d;
 
-            const res = await apiClient.get(`/loans/collections/by-lo?${params.toString()}`);
+            const res = await apiClient.get("/loans/collections/by-lo", {params});
 
-            // ✅ normalize API response to array
             const payload = res?.data;
             const rows =
                 Array.isArray(payload) ? payload :
@@ -315,7 +333,8 @@ export function useCollectionsByLOManual(loId, asOn, enabled = false) {
 
             return rows;
         },
-        enabled: !!enabled && !!loId && !!asOn,
+        keepPreviousData: true,
+        refetchOnWindowFocus: false,
     });
 }
 
@@ -349,24 +368,13 @@ export function useUpdateLoan() {
             return (await apiClient.put(`/loans/${loanId}`, payload)).data;
         },
         onSuccess: (_data, vars) => {
-            const loanId = normalizeId(vars?.loan_id);
-
-            qc.invalidateQueries({queryKey: ["loans", "stats"]});
-            qc.invalidateQueries({queryKey: ["loans", "installmentsDue"]});
-            qc.invalidateQueries({queryKey: ["loans", "collectionsByLO"]});
-            qc.invalidateQueries({queryKey: ["loans", "master"]});
-
-            if (loanId) {
-                qc.invalidateQueries({queryKey: ["loans", "summary", loanId]});
-                qc.invalidateQueries({queryKey: ["loans", "schedule", loanId]});
-                qc.invalidateQueries({queryKey: ["loans", "statement", loanId]});
-            }
+            invalidateLoanCommon(qc);
+            invalidateLoanDetails(qc, {loan_id: vars?.loan_id, loan_account_no: vars?.loan_account_no});
         },
     });
 }
 
-/* -------------------- CANCEL LOAN (DELETE /loans/{loan_id}) -------------------- */
-/** Option A: soft delete/cancel -> sets status CANCELLED in backend */
+/* -------------------- DEACTIVATE LOAN -------------------- */
 export function useDeactivateLoan() {
     const qc = useQueryClient();
 
@@ -377,18 +385,57 @@ export function useDeactivateLoan() {
             return (await apiClient.patch(`/loans/${loanId}/deactivate`)).data;
         },
         onSuccess: (_data, vars) => {
-            const loanId = normalizeId(vars?.loan_id);
-
-            qc.invalidateQueries({queryKey: ["loans", "stats"]});
-            qc.invalidateQueries({queryKey: ["loans", "installmentsDue"]});
-            qc.invalidateQueries({queryKey: ["loans", "collectionsByLO"]});
-            qc.invalidateQueries({queryKey: ["loans", "master"]});
-
-            if (loanId) {
-                qc.invalidateQueries({queryKey: ["loans", "summary", loanId]});
-                qc.invalidateQueries({queryKey: ["loans", "schedule", loanId]});
-                qc.invalidateQueries({queryKey: ["loans", "statement", loanId]});
-            }
+            invalidateLoanCommon(qc);
+            invalidateLoanDetails(qc, {loan_id: vars?.loan_id, loan_account_no: vars?.loan_account_no});
         },
     });
 }
+
+/* -------------------- PAUSE LOAN -------------------- */
+export function usePauseLoan() {
+    const qc = useQueryClient();
+
+    return useMutation({
+        mutationFn: async ({loan_id, payload}) => {
+            const loanId = normalizeId(loan_id);
+            if (!loanId) throw new Error("loan_id is required");
+            return (await apiClient.patch(`/loans/${loanId}/pause`, payload || {})).data;
+        },
+        onSuccess: (_data, vars) => {
+            invalidateLoanCommon(qc);
+            invalidateLoanDetails(qc, {loan_id: vars?.loan_id, loan_account_no: vars?.loan_account_no});
+        },
+    });
+}
+
+/* -------------------- RESUME LOAN -------------------- */
+export function useResumeLoan() {
+    const qc = useQueryClient();
+
+    return useMutation({
+        mutationFn: async ({loan_id, payload}) => {
+            const loanId = normalizeId(loan_id);
+            if (!loanId) throw new Error("loan_id is required");
+            return (await apiClient.patch(`/loans/${loanId}/resume`, payload || {})).data;
+        },
+        onSuccess: (_data, vars) => {
+            invalidateLoanCommon(qc);
+            invalidateLoanDetails(qc, {loan_id: vars?.loan_id, loan_account_no: vars?.loan_account_no});
+        },
+    });
+}
+
+
+/* -------------------- LOAN CHARGES -------------------- */
+export function useLoanCharges(loan_id) {
+    const loanId = normalizeId(loan_id);
+
+    return useQuery({
+        queryKey: ["loans", "charges", loanId],
+        enabled: !!loanId,
+        queryFn: async () => (await apiClient.get(`/loans/${loanId}/charges`)).data,
+        keepPreviousData: true,
+        refetchOnWindowFocus: false,
+    });
+}
+

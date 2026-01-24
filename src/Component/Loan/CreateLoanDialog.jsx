@@ -20,17 +20,13 @@ import {
 } from "@/components/ui/select";
 
 import {useCreateLoan} from "@/hooks/useLoans";
-import {
-    apiClient,
-    getUserRole,
-    getUserBranchId,
-    getUserRegionId,
-    isAdminLikeRole,
-    isRegionalManagerRole,
-    isBranchManagerRole,
-} from "@/hooks/useApi.js";
+import {apiClient} from "@/hooks/useApi.js";
 import {toast} from "@/components/ui/use-toast";
 import PreviewScheduleDialog from "./PreviewScheduleDialog";
+
+import {useBranches} from "@/hooks/useBranches";
+import {useGroups} from "@/hooks/useGroups";
+import {useMembers} from "@/hooks/useMembers";
 
 import {
     todayISO,
@@ -115,6 +111,10 @@ function extractApiError(err) {
     return {title: "Request failed", description: err?.message || "Something went wrong."};
 }
 
+function safeHookError(e) {
+    return e?.response?.data?.detail || e?.message || "";
+}
+
 // Defaults if /settings missing
 const DEFAULT_PROCESSING_PCT = 1;
 const DEFAULT_INSURANCE_PCT = 0.5;
@@ -122,11 +122,6 @@ const DEFAULT_BOOK_PRICE = 0;
 
 export default function CreateLoanDialog({open, onOpenChange}) {
     const createLoan = useCreateLoan();
-
-    // ✅ role/scope
-    const role = getUserRole();
-    const myBranchId = getUserBranchId();
-    const myRegionId = getUserRegionId();
 
     const defaults = useMemo(() => {
         const today = todayISO();
@@ -168,6 +163,77 @@ export default function CreateLoanDialog({open, onOpenChange}) {
         setForm((p) => ({...p, first_installment_date: addDaysISO(form.disburse_date, 7)}));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [form.disburse_date, open]);
+
+    // ✅ Hooks: branches, groups, members (RBAC handled inside hooks)
+    const {
+        branches,
+        isLoading: bLoading,
+        error: bError,
+    } = useBranches();
+
+    const {
+        groups,
+        isLoading: gLoading,
+        error: gError,
+    } = useGroups();
+
+    const {
+        members,
+        isLoading: mLoading,
+        error: mError,
+    } = useMembers();
+
+    const bErr = safeHookError(bError);
+    const gErr = safeHookError(gError);
+    const mErr = safeHookError(mError);
+
+    const branchNameById = useMemo(() => {
+        const map = {};
+        (branches || []).forEach((b) => {
+            const id = b.branch_id ?? b.id;
+            if (id != null) map[String(id)] = b.branch_name || b.name || `Branch-${id}`;
+        });
+        return map;
+    }, [branches]);
+
+    const groupNameById = useMemo(() => {
+        const map = {};
+        (groups || []).forEach((g) => {
+            map[String(g.group_id)] = g.group_name || `Group-${g.group_id}`;
+        });
+        return map;
+    }, [groups]);
+
+    // ✅ hook already returns scoped groups; no manual filtering needed
+    const visibleGroups = useMemo(() => (Array.isArray(groups) ? groups : []), [groups]);
+
+    const memberOptions = useMemo(() => {
+        const gid = form.group_id ? String(form.group_id) : "";
+        const list = (members || []).filter((m) => (!gid ? true : String(m.group_id) === gid));
+
+        const sortKey = (m) => {
+            const gName = (groupNameById[String(m.group_id)] || "").toLowerCase();
+            const name = (m.full_name || "").toLowerCase();
+            return `${gName}__${name}`;
+        };
+
+        list.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+
+        return list.map((m) => {
+            const gName = groupNameById[String(m.group_id)] || `Group-${m.group_id}`;
+            const name = m.full_name || `Member-${m.member_id}`;
+            const phone = m.phone ? `${m.phone}` : "";
+            return {
+                value: String(m.member_id),
+                label: `${gName} — ${name} - ${phone}`,
+            };
+        });
+    }, [members, form.group_id, groupNameById]);
+
+    useEffect(() => {
+        setForm((p) => ({...p, member_id: ""}));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [form.group_id]);
 
     // Settings fetch
     const [settingsLoading, setSettingsLoading] = useState(false);
@@ -242,150 +308,6 @@ export default function CreateLoanDialog({open, onOpenChange}) {
         };
     }, [open]);
 
-    // Branches (for showing branch_name in group dropdown)
-    const [branches, setBranches] = useState([]);
-    const [bLoading, setBLoading] = useState(false);
-    const [bErr, setBErr] = useState("");
-
-    useEffect(() => {
-        if (!open) return;
-        let cancelled = false;
-
-        (async () => {
-            setBLoading(true);
-            setBErr("");
-            try {
-                const res = await apiClient.get("/branches/");
-                if (!cancelled) setBranches(Array.isArray(res.data) ? res.data : []);
-            } catch (e) {
-                if (!cancelled) setBErr(e?.response?.data?.detail || e?.message || "Failed to load branches");
-            } finally {
-                if (!cancelled) setBLoading(false);
-            }
-        })();
-
-        return () => {
-            cancelled = true;
-        };
-    }, [open]);
-
-    const branchNameById = useMemo(() => {
-        const map = {};
-        (branches || []).forEach((b) => {
-            const id = b.branch_id ?? b.id;
-            if (id != null) map[String(id)] = b.branch_name || b.name || `Branch-${id}`;
-        });
-        return map;
-    }, [branches]);
-
-    // Groups + Members
-    const [groups, setGroups] = useState([]);
-    const [members, setMembers] = useState([]);
-    const [gLoading, setGLoading] = useState(false);
-    const [mLoading, setMLoading] = useState(false);
-    const [gErr, setGErr] = useState("");
-    const [mErr, setMErr] = useState("");
-
-    useEffect(() => {
-        if (!open) return;
-        let cancelled = false;
-
-        async function loadGroups() {
-            setGLoading(true);
-            setGErr("");
-            try {
-                const res = await apiClient.get("/groups/");
-                if (!cancelled) setGroups(Array.isArray(res.data) ? res.data : []);
-            } catch (e) {
-                if (!cancelled) setGErr(e?.response?.data?.detail || e?.message || "Failed to load groups");
-            } finally {
-                if (!cancelled) setGLoading(false);
-            }
-        }
-
-        async function loadMembersWithFallback() {
-            setMLoading(true);
-            setMErr("");
-            try {
-                let res;
-                try {
-                    res = await apiClient.get("/members/");
-                } catch {
-                    res = await apiClient.get("/borrowers/");
-                }
-                if (!cancelled) setMembers(Array.isArray(res.data) ? res.data : []);
-            } catch (e) {
-                if (!cancelled) setMErr(e?.response?.data?.detail || e?.message || "Failed to load Members");
-            } finally {
-                if (!cancelled) setMLoading(false);
-            }
-        }
-
-        loadGroups();
-        loadMembersWithFallback();
-
-        return () => {
-            cancelled = true;
-        };
-    }, [open]);
-
-    // ✅ scope based visible groups
-    const visibleGroups = useMemo(() => {
-        const list = Array.isArray(groups) ? groups : [];
-
-        if (isAdminLikeRole(role)) return list;
-
-        if (isRegionalManagerRole(role)) {
-            if (myRegionId == null) return [];
-            return list.filter((g) => String(g.region_id ?? g.regionId ?? "") === String(myRegionId));
-        }
-
-        if (isBranchManagerRole(role)) {
-            if (myBranchId == null) return [];
-            return list.filter((g) => String(g.branch_id ?? g.branchId ?? "") === String(myBranchId));
-        }
-
-        // safe default
-        return [];
-    }, [groups, role, myRegionId, myBranchId]);
-
-    // used for member sort labels
-    const groupNameById = useMemo(() => {
-        const map = {};
-        (groups || []).forEach((g) => {
-            map[String(g.group_id)] = g.group_name || `Group-${g.group_id}`;
-        });
-        return map;
-    }, [groups]);
-
-    const memberOptions = useMemo(() => {
-        const gid = form.group_id ? String(form.group_id) : "";
-        const list = (members || []).filter((m) => (!gid ? true : String(m.group_id) === gid));
-
-        const sortKey = (m) => {
-            const gName = (groupNameById[String(m.group_id)] || "").toLowerCase();
-            const name = (m.full_name || "").toLowerCase();
-            return `${gName}__${name}`;
-        };
-
-        list.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
-
-        return list.map((m) => {
-            const gName = groupNameById[String(m.group_id)] || `Group-${m.group_id}`;
-            const name = m.full_name || `Member-${m.member_id}`;
-            const phone = m.phone ? `${m.phone}` : "";
-            return {
-                value: String(m.member_id),
-                label: `${gName} — ${name} - ${phone}`,
-            };
-        });
-    }, [members, form.group_id, groupNameById]);
-
-    useEffect(() => {
-        setForm((p) => ({...p, member_id: ""}));
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [form.group_id]);
-
     // ✅ All math via helper
     const weeks = safeNum(form.duration_weeks);
     const principal = safeNum(form.principal_amount);
@@ -417,12 +339,8 @@ export default function CreateLoanDialog({open, onOpenChange}) {
         if (!form.member_id) return toast({title: "Member is required", variant: "destructive"});
         if (!form.principal_amount)
             return toast({title: "Principal is required", variant: "destructive"});
-        if (!String(form.annual_interest_percent || "").trim())
-            return toast({
-                title: "Interest rate not loaded",
-                description: "Please set INTEREST_RATE in System Settings.",
-                variant: "destructive",
-            });
+
+        const money2 = (v) => Number((Number(v || 0)).toFixed(2));
 
         const payload = {
             loan_account_no: form.loan_account_no.trim(),
@@ -435,21 +353,10 @@ export default function CreateLoanDialog({open, onOpenChange}) {
 
             principal_amount: Number(form.principal_amount),
 
-            // ✅ total interest amount derived from TOTAL % for duration
-            flat_interest_total: Number(calc.totalInterestAmount),
-
-            // ✅ keep backend field name, meaning = TOTAL % for duration
-            annual_interest_percent: Number(calc.totalInterestPercent),
-
-            installment_amount: Number(calc.installmentPerWeek),
-
-            processing_fee_percent: Number(form.processing_fee_percent),
-            insurance_fee_percent: Number(form.insurance_fee_percent),
-            processing_fee_amount: Number(calc.processingFeeAmt),
-            insurance_fee_amount: Number(calc.insuranceFeeAmt),
-
-            book_price_amount: Number(calc.bookPriceAmt),
-            first_installment_extra_amount: Number(calc.firstInstallmentExtra),
+            // ✅ send computed disbursement charges
+            insurance_fee: money2(calc.insuranceFeeAmt),
+            processing_fee: money2(calc.processingFeeAmt),
+            book_price: money2(calc.bookPriceAmt),
         };
 
         try {
@@ -481,12 +388,10 @@ export default function CreateLoanDialog({open, onOpenChange}) {
     return (
         <>
             <Dialog open={open} onOpenChange={onOpenChange}>
-                {/* ✅ fixed header/footer + scroll body (prevents select overflow issues) */}
                 <DialogContent className="max-w-4xl h-[85vh] overflow-hidden flex flex-col">
                     <DialogHeader className="space-y-2">
                         <DialogTitle>Create Loan</DialogTitle>
 
-                        {/* compact strip */}
                         <div className="rounded-xl border bg-muted/20 px-3 py-2">
                             {settingsLoading ? (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
@@ -518,7 +423,7 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                                     </div>
 
                                     <div className="rounded-lg bg-background border px-3 py-2">
-                                        <div className="text-[11px] text-muted-foreground">Fees (% + ₹)</div>
+                                        <div className="text-[11px] text-muted-foreground">Charges (Disbursement)</div>
                                         <div className="text-sm font-medium">
                                             {form.processing_fee_percent}% · {form.insurance_fee_percent}% ·
                                             ₹{form.book_price_amount}
@@ -532,7 +437,6 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                         </div>
                     </DialogHeader>
 
-                    {/* ✅ scrollable content area */}
                     <div className="flex-1 overflow-y-auto pr-1">
                         {settingsErr ? <div className="text-sm text-destructive">{settingsErr}</div> : null}
 
@@ -573,10 +477,8 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                                         onValueChange={(v) => setForm((p) => ({...p, group_id: v}))}
                                     >
                                         <SelectTrigger>
-                                            <SelectValue placeholder="Select Branch"/>
+                                            <SelectValue placeholder="Select Group"/>
                                         </SelectTrigger>
-
-                                        {/* ✅ prevent overflow / tall dropdown */}
                                         <SelectContent className="max-h-72 overflow-y-auto" position="popper">
                                             {visibleGroups.length === 0 ? (
                                                 <div className="px-3 py-2 text-sm text-muted-foreground">
@@ -616,8 +518,6 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                                             <SelectValue
                                                 placeholder={form.group_id ? "Select Member" : "Select Group first"}/>
                                         </SelectTrigger>
-
-                                        {/* ✅ prevent overflow / tall dropdown */}
                                         <SelectContent className="max-h-72 overflow-y-auto" position="popper">
                                             {memberOptions.length === 0 ? (
                                                 <div className="px-3 py-2 text-sm text-muted-foreground">
@@ -646,7 +546,6 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                                        placeholder="10000"/>
                             </div>
 
-                            {/* Interest (not editable) */}
                             <div className="space-y-2">
                                 <Label>Interest Rate (total %)</Label>
                                 {settingsLoading ? (
@@ -657,11 +556,11 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                                         <div className="text-xs text-muted-foreground">
                                             Weekly rate:{" "}
                                             <span
-                                                className="font-medium text-foreground">{calc.weeklyInterestPercent || 0}%</span>{" "}
-                                            · Total Interest:{" "}
+                                                className="font-medium text-foreground">{calc.weeklyInterestPercent || 0}%</span>
+                                            {" "}· Total Interest:{" "}
                                             <span
-                                                className="font-medium text-foreground">{calc.totalInterestAmount || 0}</span>{" "}
-                                            · Weekly Installment:{" "}
+                                                className="font-medium text-foreground">{calc.totalInterestAmount || 0}</span>
+                                            {" "}· Weekly Installment:{" "}
                                             <span
                                                 className="font-medium text-foreground">{calc.installmentPerWeek || 0}</span>
                                         </div>
@@ -670,23 +569,35 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                             </div>
 
                             <div className="space-y-2">
-                                <Label>Processing Fee Amount</Label>
-                                <Input value={calc.processingFeeAmt} disabled/>
+                                <Label>Processing Fee Amount (Disbursement)</Label>
+                                <Input
+                                    value={calc.processingFeeAmt?.toFixed ? calc.processingFeeAmt.toFixed(2) : calc.processingFeeAmt}
+                                    disabled
+                                />
                             </div>
 
                             <div className="space-y-2">
-                                <Label>Insurance Fee Amount</Label>
-                                <Input value={calc.insuranceFeeAmt} disabled/>
+                                <Label>Insurance Fee Amount (Disbursement)</Label>
+                                <Input
+                                    value={calc.insuranceFeeAmt?.toFixed ? calc.insuranceFeeAmt.toFixed(2) : calc.insuranceFeeAmt}
+                                    disabled
+                                />
                             </div>
 
                             <div className="space-y-2">
-                                <Label>Book Price (1st installment)</Label>
-                                <Input value={calc.bookPriceAmt} disabled/>
+                                <Label>Book Price (Disbursement)</Label>
+                                <Input
+                                    value={calc.bookPriceAmt?.toFixed ? calc.bookPriceAmt.toFixed(2) : calc.bookPriceAmt}
+                                    disabled
+                                />
                             </div>
 
                             <div className="space-y-2">
-                                <Label>First Installment Extra Total</Label>
-                                <Input value={calc.firstInstallmentExtra} disabled/>
+                                <Label>Total Charges (Disbursement)</Label>
+                                <Input
+                                    value={calc.disbursementChargesTotal?.toFixed ? calc.disbursementChargesTotal.toFixed(2) : calc.disbursementChargesTotal}
+                                    disabled
+                                />
                             </div>
                         </div>
 
@@ -694,9 +605,9 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                             <div className="text-sm text-muted-foreground">
                                 Preview schedule from{" "}
                                 <span
-                                    className="font-medium text-foreground">{form.first_installment_date || "-"}</span> ·
-                                1st installment extra:{" "}
-                                <span className="font-medium text-foreground">{calc.firstInstallmentExtra}</span>
+                                    className="font-medium text-foreground">{form.first_installment_date || "-"}</span>
+                                {" "}· Charges collected on{" "}
+                                <span className="font-medium text-foreground">{form.disburse_date || "-"}</span>
                             </div>
 
                             <Button
@@ -726,6 +637,10 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                 open={previewOpen}
                 onOpenChange={setPreviewOpen}
                 scheduleRows={calc.scheduleRows}
+                disburseDate={form.disburse_date}
+                processingFeeAmt={calc.processingFeeAmt}
+                insuranceFeeAmt={calc.insuranceFeeAmt}
+                bookPriceAmt={calc.bookPriceAmt}
             />
         </>
     );

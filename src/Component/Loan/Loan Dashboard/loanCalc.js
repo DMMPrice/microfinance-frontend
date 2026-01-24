@@ -20,9 +20,8 @@ export function addDaysISO(isoDate, days) {
 }
 
 /**
- * ✅ Interest rules (as per your requirement)
+ * ✅ Interest rules (as per backend)
  * INTEREST_RATE is TOTAL % for the whole duration (weeks)
- * Weekly interest % = totalInterestPercent / weeks
  * Total interest amount = principal * totalInterestPercent / 100
  * Interest per week = totalInterestAmount / weeks
  */
@@ -32,7 +31,6 @@ export function calcInterest({principal, weeks, totalInterestPercent}) {
     const rTotal = safeNum(totalInterestPercent);
 
     const weeklyInterestPercent = W ? round2(rTotal / W) : 0;
-
     const totalInterestAmount = round2((P * rTotal) / 100);
     const interestPerWeek = W ? round2(totalInterestAmount / W) : 0;
 
@@ -45,7 +43,7 @@ export function calcInterest({principal, weeks, totalInterestPercent}) {
 }
 
 /**
- * ✅ Fees (only first installment)
+ * ✅ Fees (collected on Disbursement Day, NOT part of installments)
  * processing & insurance are % of principal
  * bookPrice is fixed amount
  */
@@ -58,18 +56,18 @@ export function calcFees({principal, processingPct, insurancePct, bookPriceAmt})
     const processingFeeAmt = round2((P * pPct) / 100);
     const insuranceFeeAmt = round2((P * iPct) / 100);
 
-    const firstInstallmentExtra = round2(processingFeeAmt + insuranceFeeAmt + book);
+    const disbursementChargesTotal = round2(processingFeeAmt + insuranceFeeAmt + book);
 
     return {
         processingFeeAmt,
         insuranceFeeAmt,
         bookPriceAmt: book,
-        firstInstallmentExtra,
+        disbursementChargesTotal,
     };
 }
 
 /**
- * ✅ Weekly breakdown for principal & installment
+ * ✅ Weekly breakdown for principal & installment (NO FEES)
  */
 export function calcWeeklyBreakdown({principal, weeks, totalInterestAmount}) {
     const P = safeNum(principal);
@@ -79,13 +77,15 @@ export function calcWeeklyBreakdown({principal, weeks, totalInterestAmount}) {
     const principalPerWeek = W ? round2(P / W) : 0;
     const interestPerWeek = W ? round2(TI / W) : 0;
 
+    // ✅ installment is only (principal + interest)/weeks
     const installmentPerWeek = W ? round2((P + TI) / W) : 0;
 
     return {principalPerWeek, interestPerWeek, installmentPerWeek};
 }
 
 /**
- * ✅ Build schedule rows with first installment extra added only to first row
+ * ✅ Build schedule rows (NO FEES in installments)
+ * Fees are collected separately on Disbursement Day.
  */
 export function buildScheduleRows({
                                       weeks,
@@ -93,7 +93,6 @@ export function buildScheduleRows({
                                       firstInstallmentDate,
                                       principalPerWeek,
                                       interestPerWeek,
-                                      firstInstallmentExtra,
                                   }) {
     const W = Math.max(0, safeNum(weeks));
     const P = safeNum(principal);
@@ -108,9 +107,13 @@ export function buildScheduleRows({
 
         const p = principalPerWeek;
         const it = interestPerWeek;
-        const fees = i === 0 ? firstInstallmentExtra : 0;
 
-        const total = round2(p + it + fees);
+        // ✅ always zero now
+        const fees = 0;
+
+        // ✅ total is only principal + interest
+        const total = round2(p + it);
+
         bal = Math.max(0, round2(bal - p));
 
         rows.push({
@@ -129,6 +132,8 @@ export function buildScheduleRows({
 
 /**
  * ✅ One-shot calculator: use this from component
+ * - scheduleRows: NO FEES
+ * - fees: returned separately as disbursement charges
  */
 export function computeLoanNumbers({
                                        principal,
@@ -164,7 +169,6 @@ export function computeLoanNumbers({
         firstInstallmentDate,
         principalPerWeek: weekly.principalPerWeek,
         interestPerWeek: weekly.interestPerWeek,
-        firstInstallmentExtra: fees.firstInstallmentExtra,
     });
 
     return {
