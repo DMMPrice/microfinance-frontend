@@ -16,10 +16,21 @@ import {useDbMaintenance} from "@/hooks/useDbMaintenance";
 export default function DatabaseMaintenanceSection() {
     const {backup, restore, cloneTo, isBackingUp, isRestoring, isCloning} = useDbMaintenance();
 
-    // restore
+    // -------------------------
+    // RESTORE: creds + file
+    // -------------------------
     const [restoreFile, setRestoreFile] = useState(null);
 
-    // clone-to form
+    const [restoreHost, setRestoreHost] = useState("127.0.0.1");
+    const [restorePort, setRestorePort] = useState(5432);
+    const [restoreDb, setRestoreDb] = useState("microfinance");
+    const [restoreUser, setRestoreUser] = useState("postgres");
+    const [restorePass, setRestorePass] = useState("");
+    const [showRestorePass, setShowRestorePass] = useState(false);
+
+    // -------------------------
+    // CLONE-TO form
+    // -------------------------
     const [destHost, setDestHost] = useState("127.0.0.1");
     const [destPort, setDestPort] = useState(5432);
     const [destDb, setDestDb] = useState("microfinance_clone");
@@ -50,25 +61,62 @@ export default function DatabaseMaintenanceSection() {
             toast({
                 variant: "destructive",
                 title: "Backup failed",
-                description: e?.response?.data?.detail?.message || e?.message || "Something went wrong",
+                description:
+                    e?.response?.data?.detail?.message ||
+                    e?.response?.data?.detail ||
+                    e?.message ||
+                    "Something went wrong",
             });
         }
     };
 
     const handleRestore = async () => {
         try {
-            const res = await restore(restoreFile);
+            if (!restoreFile) {
+                toast({
+                    variant: "destructive",
+                    title: "Missing file",
+                    description: "Please select a .sql file to restore.",
+                });
+                return;
+            }
+
+            // basic validation
+            if (!restoreHost?.trim() || !restoreDb?.trim() || !restoreUser?.trim() || !restorePass) {
+                toast({
+                    variant: "destructive",
+                    title: "Missing fields",
+                    description: "Restore Host/DB/User/Password are required.",
+                });
+                return;
+            }
+
+            const res = await restore({
+                file: restoreFile,
+                creds: {
+                    db_host: restoreHost?.trim(),
+                    db_port: Number(restorePort) || 5432,
+                    db_name: restoreDb?.trim(),
+                    db_user: restoreUser?.trim(),
+                    db_pass: restorePass, // don't trim passwords
+                },
+            });
+
             toast({
                 title: "Restore completed",
-                description: `Database: ${res?.database || "unknown"}`,
+                description: `Target DB: ${res?.target?.db || restoreDb?.trim() || "unknown"}`,
             });
+
             setRestoreFile(null);
+            // optional: clear password after success
+            // setRestorePass("");
         } catch (e) {
             toast({
                 variant: "destructive",
                 title: "Restore failed",
                 description:
                     e?.response?.data?.detail?.message ||
+                    e?.response?.data?.detail?.stderr ||
                     e?.response?.data?.detail ||
                     e?.message ||
                     "Something went wrong",
@@ -99,6 +147,7 @@ export default function DatabaseMaintenanceSection() {
                 title: "Clone failed",
                 description:
                     e?.response?.data?.detail?.message ||
+                    e?.response?.data?.detail?.stderr ||
                     e?.response?.data?.detail ||
                     e?.message ||
                     "Something went wrong",
@@ -151,7 +200,7 @@ export default function DatabaseMaintenanceSection() {
                         Restore From SQL
                     </CardTitle>
                     <CardDescription>
-                        Upload a .sql file and restore into SOURCE database (.env configured).
+                        Upload a .sql file and restore into a target database using the credentials provided below.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -162,6 +211,72 @@ export default function DatabaseMaintenanceSection() {
                         </AlertDescription>
                     </Alert>
 
+                    {/* ✅ Restore Credentials */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label>Host</Label>
+                            <Input
+                                value={restoreHost}
+                                onChange={(e) => setRestoreHost(e.target.value)}
+                                placeholder="127.0.0.1"
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Port</Label>
+                            <Input
+                                type="number"
+                                value={restorePort}
+                                onChange={(e) => setRestorePort(e.target.value)}
+                                placeholder="5432"
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Database Name</Label>
+                            <Input
+                                value={restoreDb}
+                                onChange={(e) => setRestoreDb(e.target.value)}
+                                placeholder="microfinance"
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>User</Label>
+                            <Input
+                                value={restoreUser}
+                                onChange={(e) => setRestoreUser(e.target.value)}
+                                placeholder="akota"
+                            />
+                        </div>
+
+                        {/* ✅ Password with Eye toggle */}
+                        <div className="space-y-2 md:col-span-2">
+                            <Label>Password</Label>
+                            <div className="relative">
+                                <Input
+                                    type={showRestorePass ? "text" : "password"}
+                                    value={restorePass}
+                                    onChange={(e) => setRestorePass(e.target.value)}
+                                    placeholder="••••••••"
+                                    className="pr-10"
+                                />
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                                    onClick={() => setShowRestorePass((v) => !v)}
+                                    aria-label={showRestorePass ? "Hide password" : "Show password"}
+                                    title={showRestorePass ? "Hide password" : "Show password"}
+                                >
+                                    {showRestorePass ? <EyeOff className="h-4 w-4"/> : <Eye className="h-4 w-4"/>}
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* ✅ SQL file */}
                     <div className="space-y-2">
                         <Label>Upload .sql file</Label>
                         <Input
@@ -198,7 +313,7 @@ export default function DatabaseMaintenanceSection() {
                         Clone To Another Database
                     </CardTitle>
                     <CardDescription>
-                        Clone SOURCE database into a destination DB (creates DB if missing).
+                        Clone SOURCE database into a destination DB.
                     </CardDescription>
                 </CardHeader>
 
