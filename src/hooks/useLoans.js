@@ -439,3 +439,32 @@ export function useLoanCharges(loan_id) {
     });
 }
 
+
+/* -------------------- COLLECT LOAN CHARGE -------------------- */
+/**
+ * POST /loans/{loan_id}/charges/{charge_id}/collect
+ * body: { charge_type?, payment_date?, amount_received, payment_mode, receipt_no?, remarks? }
+ */
+export function useCollectLoanCharge() {
+    const qc = useQueryClient();
+
+    return useMutation({
+        mutationFn: async ({ loan_id, charge_id, payload }) => {
+            const loanId = normalizeId(loan_id);
+            const chargeId = normalizeId(charge_id);
+            if (!loanId) throw new Error("loan_id is required");
+            if (!chargeId) throw new Error("charge_id is required");
+            return (
+                await apiClient.post(`/loans/${loanId}/charges/${chargeId}/collect`, payload || {})
+            ).data;
+        },
+        onSuccess: (_data, vars) => {
+            invalidateLoanCommon(qc);
+            invalidateLoanDetails(qc, { loan_id: vars?.loan_id, loan_account_no: vars?.loan_account_no });
+
+            // ✅ refresh charges list also
+            const loanId = normalizeId(vars?.loan_id);
+            if (loanId) qc.invalidateQueries({ queryKey: ["loans", "charges", loanId] });
+        },
+    });
+}
