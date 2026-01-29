@@ -89,6 +89,13 @@ export default function CollectionEntryPage() {
     const [posting, setPosting] = useState({});
     const [posted, setPosted] = useState({});
 
+    // ✅ bulk collect all (per group modal)
+    const [collectAllRunning, setCollectAllRunning] = useState(false);
+    const [collectAllProgress, setCollectAllProgress] = useState({ done: 0, total: 0 });
+
+    // ✅ amount validation warnings (per row)
+    const [amountErrors, setAmountErrors] = useState({});
+
     // ✅ warning modal
     const [warnOpen, setWarnOpen] = useState(false);
 
@@ -151,6 +158,39 @@ export default function CollectionEntryPage() {
         }));
     }
 
+
+    // ✅ keep Amount input stable + numeric-only (supports up to 2 decimals)
+    function sanitizeAmountInput(raw) {
+        const s = String(raw ?? "");
+        // allow digits and a single dot
+        let out = "";
+        let dotUsed = false;
+        for (const ch of s) {
+            if (ch >= "0" && ch <= "9") out += ch;
+            else if (ch === "." && !dotUsed) {
+                dotUsed = true;
+                out += ch;
+            }
+        }
+        // limit decimals to 2
+        if (dotUsed) {
+            const [a, b = ""] = out.split(".");
+            out = a + "." + b.slice(0, 2);
+        }
+        return out;
+    }
+
+    function setAmountError(key, msg) {
+        setAmountErrors((p) => {
+            if (!msg) {
+                const n = { ...(p || {}) };
+                delete n[key];
+                return n;
+            }
+            return { ...(p || {}), [key]: msg };
+        });
+    }
+
     function resetTableState() {
         setApplyFilters(false);
         setRowForm({});
@@ -211,18 +251,26 @@ export default function CollectionEntryPage() {
         // ✅ only init after data arrives (after Load Due)
         if (!applyFilters) return;
 
-        const init = {};
-        (rows || []).forEach((r) => {
-            const key = `${r.installment_no}:${r.loan_id}`;
-            init[key] = {
-                amount_received: r.due_left ? String(r.due_left) : "",
-                payment_mode: "CASH",
-                receipt_no: "",
-                remarks: "",
-                payment_date: new Date().toISOString().slice(0, 16),
-            };
+        setRowForm((prev) => {
+            const next = { ...(prev || {}) };
+
+            (rows || []).forEach((r) => {
+                const key = `${r.installment_no}:${r.loan_id}`;
+
+                // ✅ DON'T overwrite if user is typing (prevents cursor/focus loss)
+                if (next[key]) return;
+
+                next[key] = {
+                    amount_received: r.due_left ? String(r.due_left) : "",
+                    payment_mode: "CASH",
+                    receipt_no: "",
+                    remarks: "",
+                    payment_date: new Date().toISOString().slice(0, 16),
+                };
+            });
+
+            return next;
         });
-        setRowForm(init);
     }, [rows, applyFilters]);
 
     /* -------------------- filtering / grouping -------------------- */
@@ -282,6 +330,37 @@ export default function CollectionEntryPage() {
             setPosting((p) => ({ ...p, [key]: false }));
         }
     }
+
+    // ✅ Collect All: sequentially submits every pending row (backend-safe)
+    // UX: user clicks ONCE, we process one-by-one and show progress in the button text.
+    async function collectAllRows(items) {
+        if (!requireLoadOrWarn()) return;
+        if (!Array.isArray(items) || items.length === 0) return;
+        if (collectAllRunning) return;
+
+        // build queue: only not submitted, valid amount > 0
+        const queue = (items || []).filter((r) => {
+            const key = `${r.installment_no}:${r.loan_id}`;
+            const f = rowForm[key] || {};
+            const amount = Number(f.amount_received || 0);
+            return !posted[key] && amount > 0;
+        });
+
+        setCollectAllProgress({ done: 0, total: queue.length });
+        setCollectAllRunning(true);
+
+        try {
+            let done = 0;
+            for (const r of queue) {
+                await submitRow(r); // ✅ one-by-one
+                done += 1;
+                setCollectAllProgress({ done, total: queue.length });
+            }
+        } finally {
+            setCollectAllRunning(false);
+        }
+    }
+
 
 
     function downloadStatementCSV() {
@@ -368,12 +447,38 @@ export default function CollectionEntryPage() {
                                 <td className="p-2 border text-center">{Number(r.due_left || 0).toFixed(2)}</td>
 
                                 <td className="p-2 border">
-                                    <Input
-                                        value={f.amount_received ?? ""}
-                                        onChange={(e) => updateForm(key, {amount_received: e.target.value})}
-                                        placeholder="0.00"
-                                        disabled={isDone}
-                                    />
+                                    <div className="space-y-1">
+                                        <Input
+                                            inputMode="decimal"
+                                            value={f.amount_received ?? ""}
+                                            onChange={(e) => {
+                                                const raw = e.target.value;
+
+                                                // allow empty while typing
+                                                if (raw === "") {
+                                                    setAmountError(key, "");
+                                                    updateForm(key, { amount_received: "" });
+                                                    return;
+                                                }
+
+                                                const cleaned = sanitizeAmountInput(raw);
+
+                                                // if user typed invalid char -> keep cleaned, warn
+                                                if (cleaned !== raw) {
+                                                    setAmountError(key, "Only numbers are allowed.");
+                                                } else {
+                                                    setAmountError(key, "");
+                                                }
+
+                                                updateForm(key, { amount_received: cleaned });
+                                            }}
+                                            placeholder="0.00"
+                                            disabled={isDone}
+                                        />
+                                        {amountErrors[key] ? (
+                                            <div className="text-xs text-red-600">{amountErrors[key]}</div>
+                                        ) : null}
+                                    </div>
                                 </td>
 
                                 <td className="p-2 border">
@@ -424,7 +529,7 @@ export default function CollectionEntryPage() {
 
                                 <td className="p-2 border text-center">
                                     <div className="flex items-center justify-center gap-2">
-                                        <Button size="sm" onClick={() => submitRow(r)} disabled={isPosting || isDone}>
+                                        <Button size="sm" onClick={() => submitRow(r)} disabled={isPosting || isDone || collectAllRunning}>
                                             {isDone ? (
                                                 <>
                                                     <CheckCircle2 className="h-4 w-4"/>
@@ -444,6 +549,7 @@ export default function CollectionEntryPage() {
                                             size="sm"
                                             variant="outline"
                                             onClick={() => {
+                                                if (collectAllRunning) return;
                                                 if (!requireLoadOrWarn()) return;
                                                 setSelectedLoanId(r.loan_id);
                                                 setOpenPayments(true);
@@ -635,9 +741,29 @@ export default function CollectionEntryPage() {
             <Dialog open={openGroupModal} onOpenChange={setOpenGroupModal}>
                 <DialogContent className="max-w-7xl">
                     <DialogHeader>
-                        <DialogTitle>
-                            Due Collections - {selectedGroup?.groupName || "Group"}
-                        </DialogTitle>
+                        <div className="flex items-center justify-between gap-3">
+                            <DialogTitle>
+                                Due Collections - {selectedGroup?.groupName || "Group"}
+                            </DialogTitle>
+
+                            <Button
+                                size="sm"
+                                onClick={() => collectAllRows(selectedGroup?.items || [])}
+                                disabled={!selectedGroup || collectAllRunning}
+                                title="Submit all pending rows in this group"
+                            >
+                                {collectAllRunning ? (
+                                    <>
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        <span className="ml-2">
+                                            Collecting {collectAllProgress.done}/{collectAllProgress.total}
+                                        </span>
+                                    </>
+                                ) : (
+                                    "Collect All"
+                                )}
+                            </Button>
+                        </div>
                     </DialogHeader>
 
                     <div className="max-h-[75vh] overflow-auto pr-1">

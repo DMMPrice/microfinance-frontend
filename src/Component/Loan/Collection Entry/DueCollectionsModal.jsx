@@ -39,11 +39,45 @@ export default function DueCollectionsModal({
     const [posting, setPosting] = useState({});
     const [posted, setPosted] = useState({});
 
+    const [amountErrors, setAmountErrors] = useState({});
+    const [collectAllRunning, setCollectAllRunning] = useState(false);
+    const [collectAllProgress, setCollectAllProgress] = useState({ done: 0, total: 0 });
+
     function updateForm(key, patch) {
         setRowForm((prev) => ({
             ...prev,
             [key]: {...(prev[key] || {}), ...patch},
         }));
+    }
+
+
+    function sanitizeAmountInput(raw) {
+        const s = String(raw ?? "");
+        let out = "";
+        let dotUsed = false;
+        for (const ch of s) {
+            if (ch >= "0" && ch <= "9") out += ch;
+            else if (ch === "." && !dotUsed) {
+                dotUsed = true;
+                out += ch;
+            }
+        }
+        if (dotUsed) {
+            const [a, b = ""] = out.split(".");
+            out = a + "." + b.slice(0, 2);
+        }
+        return out;
+    }
+
+    function setAmountError(key, msg) {
+        setAmountErrors((p) => {
+            if (!msg) {
+                const n = { ...(p || {}) };
+                delete n[key];
+                return n;
+            }
+            return { ...(p || {}), [key]: msg };
+        });
     }
 
     // ✅ init/reset on open
@@ -63,6 +97,7 @@ export default function DueCollectionsModal({
         setRowForm(init);
         setPosted({});
         setPosting({});
+        setAmountErrors({});
     }, [open, rows]);
 
     const grouped = useMemo(() => {
@@ -96,11 +131,56 @@ export default function DueCollectionsModal({
         }
     }
 
+
+    async function collectAllRows(allRows) {
+        if (collectAllRunning) return;
+        const queue = (allRows || []).filter((r) => {
+            const key = `${r.installment_no}:${r.loan_id}`;
+            const f = rowForm[key] || {};
+            const amount = Number(f.amount_received || 0);
+            return !posted[key] && amount > 0;
+        });
+
+        setCollectAllProgress({ done: 0, total: queue.length });
+        setCollectAllRunning(true);
+
+        try {
+            let done = 0;
+            for (const r of queue) {
+                await submitRow(r);
+                done += 1;
+                setCollectAllProgress({ done, total: queue.length });
+            }
+        } finally {
+            setCollectAllRunning(false);
+        }
+    }
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-6xl w-[100vw] max-h-[92vh] overflow-y-auto">
+            <DialogContent className="max-w-7xl w-[200vw] max-h-[102vh] overflow-y-auto">
                 <DialogHeader>
-                    <DialogTitle>Due Collections (Group-wise)</DialogTitle>
+                    <div className="flex items-center  justify-around gap-3">
+                        <DialogTitle>Due Collections (Group-wise)</DialogTitle>
+
+                        <Button
+                            size="sm"
+                            onClick={() => collectAllRows(rows)}
+                            disabled={collectAllRunning || (rows || []).length === 0}
+                            title="Submit all pending rows"
+                        >
+                            {collectAllRunning ? (
+                                <>
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    <span className="ml-2">
+                                        Collecting {collectAllProgress.done}/{collectAllProgress.total}
+                                    </span>
+                                </>
+                            ) : (
+                                "Collect All"
+                            )}
+                        </Button>
+                    </div>
                 </DialogHeader>
 
                 {isLoading ? (
@@ -165,12 +245,35 @@ export default function DueCollectionsModal({
                                                         <td className="p-2 border text-center">{Number(r.due_left || 0).toFixed(2)}</td>
 
                                                         <td className="p-2 border">
-                                                            <Input
-                                                                value={f.amount_received ?? ""}
-                                                                onChange={(e) => updateForm(key, {amount_received: e.target.value})}
-                                                                placeholder="0.00"
-                                                                disabled={isDone}
-                                                            />
+                                                            <div className="space-y-1">
+                                                                <Input
+                                                                    inputMode="decimal"
+                                                                    value={f.amount_received ?? ""}
+                                                                    onChange={(e) => {
+                                                                        const raw = e.target.value;
+
+                                                                        if (raw === "") {
+                                                                            setAmountError(key, "");
+                                                                            updateForm(key, { amount_received: "" });
+                                                                            return;
+                                                                        }
+
+                                                                        const cleaned = sanitizeAmountInput(raw);
+                                                                        if (cleaned !== raw) {
+                                                                            setAmountError(key, "Only numbers are allowed.");
+                                                                        } else {
+                                                                            setAmountError(key, "");
+                                                                        }
+
+                                                                        updateForm(key, { amount_received: cleaned });
+                                                                    }}
+                                                                    placeholder="0.00"
+                                                                    disabled={isDone}
+                                                                />
+                                                                {amountErrors[key] ? (
+                                                                    <div className="text-xs text-red-600">{amountErrors[key]}</div>
+                                                                ) : null}
+                                                            </div>
                                                         </td>
 
                                                         <td className="p-2 border">
@@ -222,7 +325,7 @@ export default function DueCollectionsModal({
                                                         <td className="p-2 border text-center">
                                                             <div className="flex items-center justify-center gap-2">
                                                                 <Button size="sm" onClick={() => submitRow(r)}
-                                                                        disabled={isPosting || isDone}>
+                                                                        disabled={isPosting || isDone || collectAllRunning}>
                                                                     {isDone ? (
                                                                         <>
                                                                             <CheckCircle2 className="h-4 w-4"/>
@@ -239,7 +342,7 @@ export default function DueCollectionsModal({
                                                                 </Button>
 
                                                                 <Button size="sm" variant="outline"
-                                                                        onClick={() => onViewLoan?.(r.loan_id)}>
+                                                                        onClick={() => { if (collectAllRunning) return; onViewLoan?.(r.loan_id); }}>
                                                                     <Eye className="h-4 w-4 mr-2"/>
                                                                     View
                                                                 </Button>
