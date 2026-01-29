@@ -278,19 +278,31 @@ export function useCreateLoanPayment() {
     const qc = useQueryClient();
 
     return useMutation({
-        mutationFn: async ({loan_id, payload}) => {
-            const loanId = normalizeId(loan_id);
-            if (!loanId) throw new Error("loan_id is required");
-            return (await apiClient.post(`/loans/${loanId}/payments`, payload)).data;
+        mutationFn: async ({ payload }) => {
+            if (!payload || typeof payload !== "object") {
+                throw new Error("payload is required");
+            }
+
+            const loanId = normalizeId(payload.loan_id);
+            if (!loanId) throw new Error("payload.loan_id is required");
+
+            // ✅ Correct endpoint as per Swagger
+            return (await apiClient.post(`/loans/collections/pay`, {
+                ...payload,
+                loan_id: loanId,
+            })).data;
         },
         onSuccess: (_data, vars) => {
             invalidateLoanCommon(qc);
 
-            // ✅ invalidate both id + account if provided
-            invalidateLoanDetails(qc, {loan_id: vars?.loan_id, loan_account_no: vars?.loan_account_no});
+            const loan_id = vars?.payload?.loan_id;
+            const loan_account_no = vars?.payload?.loan_account_no;
+
+            invalidateLoanDetails(qc, { loan_id, loan_account_no });
         },
     });
 }
+
 
 /* -------------------- APPLY ADVANCE -------------------- */
 export function useApplyLoanAdvance() {

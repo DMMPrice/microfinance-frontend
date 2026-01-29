@@ -261,11 +261,12 @@ export default function CollectionEntryPage() {
         const amount = Number(f.amount_received || 0);
         if (!amount || amount <= 0) return;
 
-        setPosting((p) => ({...p, [key]: true}));
+        setPosting((p) => ({ ...p, [key]: true }));
+
         try {
             await createPayment.mutateAsync({
-                loan_id: r.loan_id,
                 payload: {
+                    loan_id: r.loan_id, // ✅ REQUIRED in payload
                     amount_received: amount,
                     payment_mode: f.payment_mode || "CASH",
                     receipt_no: f.receipt_no || null,
@@ -274,11 +275,14 @@ export default function CollectionEntryPage() {
                 },
             });
 
-            setPosted((x) => ({...x, [key]: true}));
+            setPosted((x) => ({ ...x, [key]: true }));
+        } catch (e) {
+            console.error("Payment submit failed:", e);
         } finally {
-            setPosting((p) => ({...p, [key]: false}));
+            setPosting((p) => ({ ...p, [key]: false }));
         }
     }
+
 
     function downloadStatementCSV() {
         if (!selectedLoanId) return;
@@ -300,6 +304,27 @@ export default function CollectionEntryPage() {
 
     /* -------------------- table renderer (re-used) -------------------- */
     function RenderGroupTable({items}) {
+        // ✅ Excel-style totals row (under columns)
+        const totals = useMemo(() => {
+            let dueTotal = 0;
+            let enteredTotal = 0;
+            let submittedTotal = 0;
+
+            for (const r of items || []) {
+                const k = `${r.installment_no}:${r.loan_id}`;
+                const f = rowForm[k] || {};
+                const due = Number(r.due_left ?? 0);
+                const entered = Number(f.amount_received ?? 0);
+                const isDone = !!posted[k];
+
+                dueTotal += Number.isFinite(due) ? due : 0;
+                enteredTotal += Number.isFinite(entered) ? entered : 0;
+                if (isDone) submittedTotal += Number.isFinite(entered) ? entered : 0;
+            }
+
+            return { dueTotal, enteredTotal, submittedTotal };
+        }, [items, rowForm, posted]);
+
         return (
             <div className="w-full overflow-x-auto">
                 <table className="w-full text-sm border rounded-md">
@@ -432,7 +457,21 @@ export default function CollectionEntryPage() {
                             </tr>
                         );
                     })}
-                    </tbody>
+                    
+                    {/* ✅ Totals row (Excel-style) */}
+                    <tr className="bg-muted/40 font-semibold border-t">
+                        <td className="p-2 border">TOTAL</td>
+                        <td className="p-2 border" />
+                        <td className="p-2 border" />
+                        <td className="p-2 border text-right">{totals.dueTotal.toFixed(2)}</td>
+                        <td className="p-2 border text-right">{totals.enteredTotal.toFixed(2)}</td>
+                        <td className="p-2 border" />
+                        <td className="p-2 border" />
+                        <td className="p-2 border" />
+                        <td className="p-2 border" />
+                        <td className="p-2 border text-right">{totals.submittedTotal.toFixed(2)}</td>
+                    </tr>
+</tbody>
                 </table>
             </div>
         );

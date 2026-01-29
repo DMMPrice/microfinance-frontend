@@ -36,9 +36,9 @@ export function useDbMaintenance() {
         },
     });
 
-    // 2) RESTORE (now needs creds + file)
+    // 2) RESTORE (now needs creds + file + clean)
     const restoreMutation = useMutation({
-        mutationFn: async ({file, creds}) => {
+        mutationFn: async ({file, creds, clean}) => {
             if (!file) throw new Error("No file selected");
             const name = file?.name || "";
             if (!name.toLowerCase().endsWith(".sql")) {
@@ -63,13 +63,14 @@ export function useDbMaintenance() {
             formData.append("db_name", String(db_name).trim());
             formData.append("db_user", String(db_user).trim());
             formData.append("db_pass", String(db_pass)); // don't trim passwords
+            formData.append("clean", String(Boolean(clean))); // ✅ NEW
             formData.append("sql_file", file);
 
             const res = await api.post("/db/restore", formData, {
                 headers: {"Content-Type": "multipart/form-data"},
             });
 
-            return res.data; // {message, target}
+            return res.data; // {message, target, clean}
         },
     });
 

@@ -28,6 +28,9 @@ export default function DatabaseMaintenanceSection() {
     const [restorePass, setRestorePass] = useState("");
     const [showRestorePass, setShowRestorePass] = useState(false);
 
+    // ✅ NEW: Clean overwrite for RESTORE
+    const [restoreClean, setRestoreClean] = useState(false);
+
     // -------------------------
     // CLONE-TO form
     // -------------------------
@@ -93,6 +96,7 @@ export default function DatabaseMaintenanceSection() {
 
             const res = await restore({
                 file: restoreFile,
+                clean: Boolean(restoreClean), // ✅ NEW
                 creds: {
                     db_host: restoreHost?.trim(),
                     db_port: Number(restorePort) || 5432,
@@ -108,6 +112,7 @@ export default function DatabaseMaintenanceSection() {
             });
 
             setRestoreFile(null);
+            setRestoreClean(false); // ✅ reset after success (optional)
             // optional: clear password after success
             // setRestorePass("");
         } catch (e) {
@@ -274,6 +279,17 @@ export default function DatabaseMaintenanceSection() {
                                 </Button>
                             </div>
                         </div>
+                    </div>
+
+                    {/* ✅ NEW: Clean overwrite for RESTORE */}
+                    <div className="flex items-center justify-between rounded-md border p-3">
+                        <div>
+                            <Label className="block">Clean overwrite</Label>
+                            <p className="text-xs text-muted-foreground">
+                                If enabled, the restore will DROP.
+                            </p>
+                        </div>
+                        <Switch checked={restoreClean} onCheckedChange={setRestoreClean}/>
                     </div>
 
                     {/* ✅ SQL file */}
