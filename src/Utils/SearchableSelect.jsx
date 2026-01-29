@@ -52,21 +52,25 @@ export default function SearchableSelect({
                     disabled={disabled}
                     className={`w-full justify-between ${className}`}
                 >
-                    <span className="truncate">
-                        {selectedLabel ? selectedLabel : placeholder}
-                    </span>
+            <span className="truncate">
+                {selectedLabel ? selectedLabel : placeholder}
+            </span>
                     <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50"/>
                 </Button>
             </PopoverTrigger>
 
             <PopoverContent
-                className="w-[--radix-popover-trigger-width] p-0 max-h-64 overflow-y-auto overflow-x-hidden"
+                className="w-[--radix-popover-trigger-width] p-0"
                 align="start"
+                sideOffset={5}
             >
                 <Command>
                     <CommandInput placeholder={searchPlaceholder} />
 
-                    <CommandList className="overflow-visible">
+                    <CommandList
+                        style={{ maxHeight: "256px", overflowY: "auto" }}
+                        className="overflow-x-hidden"
+                    >
                         <CommandEmpty>No results found.</CommandEmpty>
 
                         <CommandGroup>
@@ -81,8 +85,7 @@ export default function SearchableSelect({
                                         onSelect={() => {
                                             onValueChange?.(String(opt.value));
                                             setOpen(false);
-                                        }}
-                                    >
+                                        }}>
                                         <Check
                                             className={`mr-2 h-4 w-4 ${
                                                 isSelected ? "opacity-100" : "opacity-0"

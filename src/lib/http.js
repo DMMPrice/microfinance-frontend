@@ -59,26 +59,38 @@ api.interceptors.response.use(
 );
 
 // ------------------------------------------------------------
-// getUserCtx — normalize object for frontend
+// getUserCtx — normalized user + profile context
 // ------------------------------------------------------------
 export function getUserCtx() {
     try {
-        const raw =
+        const rawAuth =
             localStorage.getItem("authData") ||
             sessionStorage.getItem("authData");
 
-        if (!raw) return null;
+        if (!rawAuth) return null;
 
-        const parsed = JSON.parse(raw);
+        const parsedAuth = JSON.parse(rawAuth);
+
+        // 🔥 NEW: profile data
+        const rawProfile = localStorage.getItem("profileData");
+        const profileData = rawProfile ? JSON.parse(rawProfile) : null;
 
         return {
-            username: parsed.username,  // (exists)
-            role: parsed.role,          // "super_admin"
-            accessToken: parsed.token,  // 🔥 FIXED
-            userId: parsed.userId,      // also available
-            raw: parsed,                // original object
+            username: parsedAuth.username,
+            role: parsedAuth.role,              // super_admin, branch_manager, etc
+            accessToken: parsedAuth.token,
+            userId: parsedAuth.userId,
+
+            // ✅ NEW
+            profileData,                        // employee profile
+            branchId: profileData?.branch_id ?? null,
+            regionId: profileData?.region_id ?? null,
+
+            rawAuth: parsedAuth,
         };
-    } catch {
+    } catch (err) {
+        console.warn("Failed to build user context:", err);
         return null;
     }
 }
+
