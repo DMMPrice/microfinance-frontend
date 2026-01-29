@@ -9,22 +9,15 @@ import {
 import {Button} from "@/components/ui/button.tsx";
 import {Input} from "@/components/ui/input.tsx";
 import {Label} from "@/components/ui/label.tsx";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select.tsx";
 import {Textarea} from "@/components/ui/textarea.tsx";
 import {Switch} from "@/components/ui/switch.tsx";
 import {ScrollArea} from "@/components/ui/scroll-area.tsx";
 import {Separator} from "@/components/ui/separator.tsx";
 import {Loader2, Image as ImageIcon, X, Download} from "lucide-react";
-
-// ✅ PDF libs
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+
+import SearchableSelect from "@/Utils/SearchableSelect.jsx";
 
 function SectionTitle({title, desc}) {
     return (
@@ -194,6 +187,18 @@ export default function MemberDialog({
         });
     };
 
+    const groupOptions = groups.map((group) => {
+        const gid = String(group.id ?? group.group_id);
+        const loId = String(group.loanOfficerId ?? group.lo_id);
+        const loName = officerNameById?.get(loId) || "Unknown";
+
+        return {
+            value: gid,
+            label: `${group.name || group.group_name || `Group ${gid}`} (${loName})`,
+            keywords: `${gid} ${loName}`,
+        };
+    });
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="w-[95vw] max-w-4xl p-0 overflow-hidden">
@@ -237,24 +242,16 @@ export default function MemberDialog({
                         {/* Group */}
                         <div className="space-y-2">
                             <Label>Assign to Group</Label>
-                            <Select value={groupId} onValueChange={setGroupId} required>
-                                <SelectTrigger className="h-11">
-                                    <SelectValue placeholder="Select group"/>
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {groups.map((group) => {
-                                        const gid = String(group.id ?? group.group_id);
-                                        const loId = String(group.loanOfficerId ?? group.lo_id);
-                                        const loName = officerNameById?.get(loId) || "Unknown";
-                                        return (
-                                            <SelectItem key={gid} value={gid}>
-                                                {(group.name || group.group_name || `Group ${gid}`)} ({loName})
-                                            </SelectItem>
-                                        );
-                                    })}
-                                </SelectContent>
-                            </Select>
-                        </div>
+
+                                <SearchableSelect
+                                    value={groupId}
+                                    onValueChange={setGroupId}
+                                    options={groupOptions}
+                                    placeholder="Select group"
+                                    searchPlaceholder="Search group or loan officer..."
+                                    className="h-11"
+                                />
+                            </div>
 
                         <Separator/>
 

@@ -8,24 +8,8 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card.tsx";
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-} from "@/components/ui/dialog.tsx";
-import {Input} from "@/components/ui/input.tsx";
-import {Label} from "@/components/ui/label.tsx";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select.tsx";
 import {Badge} from "@/components/ui/badge.tsx";
-import {Plus, Trash2} from "lucide-react";
+import {Trash2} from "lucide-react";
 import {useToast} from "@/hooks/use-toast.ts";
 
 import {useGroups} from "@/hooks/useGroups.js";
@@ -46,6 +30,9 @@ import {
     isAdminLikeRole,
 } from "@/hooks/useApi.js";
 
+import CreateGroupDialog from "./CreateGroupDialog.jsx";
+import {getISTWeekday} from "@/Helpers/dateTimeIST.js";
+
 const DAYS = [
     "Monday",
     "Tuesday",
@@ -56,13 +43,15 @@ const DAYS = [
     "Sunday",
 ];
 
-export default function GroupManagement() {
-    // Create modal state
-    const [open, setOpen] = useState(false);
-    const [groupName, setGroupName] = useState("");
-    const [meetingDay, setMeetingDay] = useState("");
-    const [loanOfficerId, setLoanOfficerId] = useState("");
+const dayIndex = (d) => {
+    const idx = DAYS.findIndex(
+        (x) => String(x).toLowerCase() === String(d || "").trim().toLowerCase()
+    );
+    return idx === -1 ? 999 : idx;
+};
 
+export default function GroupManagement() {
+    const [open, setOpen] = useState(false);
     const {toast} = useToast();
 
     const {groups = [], isLoading, createGroupMutation, deleteGroupMutation} =
@@ -71,12 +60,14 @@ export default function GroupManagement() {
     const {regions = []} = useRegions();
     const {loanOfficers = []} = useLoanOfficers();
 
+    // ✅ IST weekday
+    const istToday = useMemo(() => getISTWeekday(), []);
+    const isMeetingToday = (row) =>
+        String(row?.meeting_day || "").trim().toLowerCase() ===
+        String(istToday || "").trim().toLowerCase();
+
     /* =========================
        ✅ ProfileData (given)
-       {
-         user_id, employee_id, role,
-         region_id, branch_id, exp
-       }
     ========================= */
     const profile = getProfileData();
     const role = getUserRole();
@@ -138,11 +129,7 @@ export default function GroupManagement() {
     };
 
     /* =========================
-       ✅ Role-based visibility for table data:
-       - Loan Officer: only own groups (by lo_id)
-       - Branch Manager: only own branch groups (branch_id)
-       - Regional Manager: entire region (region_id)
-       - Admin/Super Admin: all
+       ✅ Role-based visibility for table data
     ========================= */
     const roleScopedGroups = useMemo(() => {
         const list = Array.isArray(groups) ? groups : [];
@@ -164,15 +151,24 @@ export default function GroupManagement() {
             return list.filter((g) => String(g.region_id) === String(myRegionId));
         }
 
-        // default fallback: show nothing
         return [];
     }, [groups, isAdmin, isLO, isBM, isRM, myLoId, myBranchId, myRegionId]);
 
+    // ✅ By default sort by Meeting Day (Mon..Sun)
+    const sortedGroups = useMemo(() => {
+        const arr = Array.isArray(roleScopedGroups) ? [...roleScopedGroups] : [];
+        arr.sort((a, b) => {
+            const da = dayIndex(a?.meeting_day);
+            const db = dayIndex(b?.meeting_day);
+            if (da !== db) return da - db;
+            // then by group name
+            return String(a?.group_name || "").localeCompare(String(b?.group_name || ""));
+        });
+        return arr;
+    }, [roleScopedGroups]);
+
     /* =========================
-       ✅ Create dialog LO list:
-       - BM: only officers in same branch
-       - Others (admin/rm): all
-       - LO: cannot open dialog
+       ✅ Create dialog LO list
     ========================= */
     const eligibleLoanOfficersForCreate = useMemo(() => {
         const list = loanOfficers || [];
@@ -182,90 +178,12 @@ export default function GroupManagement() {
             );
         }
         if (isRM && myRegionId != null) {
-            // optional: regional manager sees only their region officers
             return list.filter(
                 (lo) => String(lo.employee?.region_id) === String(myRegionId)
             );
         }
-        return list; // admin-like etc.
+        return list;
     }, [loanOfficers, isBM, isRM, myBranchId, myRegionId]);
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-
-        if (isLO) {
-            toast({
-                title: "Not allowed",
-                description: "Loan Officer cannot create groups.",
-                variant: "destructive",
-            });
-            return;
-        }
-
-        const lo = eligibleLoanOfficersForCreate.find(
-            (x) => String(x.lo_id) === String(loanOfficerId)
-        );
-        if (!lo) {
-            toast({title: "Loan officer not found", variant: "destructive"});
-            return;
-        }
-
-        const branchId = lo.employee?.branch_id;
-        const regionId = lo.employee?.region_id;
-
-        if (!branchId || !regionId) {
-            toast({
-                title: "Missing branch/region",
-                description:
-                    "Selected loan officer does not have branch_id/region_id in employee.",
-                variant: "destructive",
-            });
-            return;
-        }
-
-        // ✅ BM must match branch
-        if (isBM && myBranchId != null && String(branchId) !== String(myBranchId)) {
-            toast({
-                title: "Not allowed",
-                description: "You can only assign loan officers from your own branch.",
-                variant: "destructive",
-            });
-            return;
-        }
-
-        // ✅ RM must match region (optional but consistent)
-        if (isRM && myRegionId != null && String(regionId) !== String(myRegionId)) {
-            toast({
-                title: "Not allowed",
-                description: "You can only assign loan officers from your own region.",
-                variant: "destructive",
-            });
-            return;
-        }
-
-        try {
-            await createGroupMutation.mutateAsync({
-                group_name: groupName,
-                lo_id: Number(lo.lo_id),
-                region_id: Number(regionId),
-                branch_id: Number(branchId),
-                meeting_day: meetingDay,
-            });
-
-            toast({title: "Group created successfully"});
-            setGroupName("");
-            setMeetingDay("");
-            setLoanOfficerId("");
-            setOpen(false);
-        } catch (err) {
-            toast({
-                title: "Failed to create group",
-                description:
-                    err?.response?.data?.detail || err?.message || "Unexpected error",
-                variant: "destructive",
-            });
-        }
-    };
 
     const handleDelete = async (group) => {
         const gid = group.group_id;
@@ -296,28 +214,54 @@ export default function GroupManagement() {
         }
     };
 
+    const highlightCell = (row) =>
+        isMeetingToday(row) ? "bg-emerald-50/70 dark:bg-emerald-900/20" : "";
+
+    const headerCenter = "text-center";
+    const tdCenter = "px-3 py-3 text-center align-middle";
+
     /* =========================
        ✅ AdvancedTable columns
+       Role requirement:
+       1) Branch Manager -> hide Branch & Region
+       2) Loan Officer -> hide Branch, Region, and Loan Officer
+       Also: center align header + data
     ========================= */
     const columns = useMemo(() => {
-        return [
+        const base = [
             {
                 key: "group_name",
                 header: "Group",
-                cell: (row) => <span className="font-medium">{row.group_name}</span>,
+                className: headerCenter,
+                tdClassName: (row) => `${tdCenter} ${highlightCell(row)}`,
+                cell: (row) => (
+                    <span className={isMeetingToday(row) ? "font-bold" : "font-medium"}>
+                        {row.group_name}
+                    </span>
+                ),
                 sortValue: (row) => row.group_name,
             },
             {
                 key: "meeting_day",
                 header: "Meeting Day",
+                className: headerCenter,
+                tdClassName: (row) => `${tdCenter} ${highlightCell(row)}`,
                 cell: (row) => (
-                    <Badge variant="secondary">{row.meeting_day || "—"}</Badge>
+                    <div className="flex items-center justify-center gap-2">
+                        <Badge variant="secondary">{row.meeting_day || "—"}</Badge>
+                        {isMeetingToday(row) ? (
+                            <Badge className="bg-emerald-600 text-white">Today</Badge>
+                        ) : null}
+                    </div>
                 ),
-                sortValue: (row) => row.meeting_day,
+                // Keep sortValue stable (table sorting) but we already pre-sort in data
+                sortValue: (row) => dayIndex(row.meeting_day),
             },
             {
                 key: "lo_id",
                 header: "Loan Officer",
+                className: headerCenter,
+                tdClassName: (row) => `${tdCenter} ${highlightCell(row)}`,
                 cell: (row) => {
                     const info = officerInfoById.get(Number(row.lo_id));
                     return info?.name || "Unknown";
@@ -330,12 +274,16 @@ export default function GroupManagement() {
             {
                 key: "branch_id",
                 header: "Branch",
+                className: headerCenter,
+                tdClassName: (row) => `${tdCenter} ${highlightCell(row)}`,
                 cell: (row) => getBranchName(row.branch_id),
                 sortValue: (row) => getBranchName(row.branch_id),
             },
             {
                 key: "region_id",
                 header: "Region",
+                className: headerCenter,
+                tdClassName: (row) => `${tdCenter} ${highlightCell(row)}`,
                 cell: (row) => getRegionName(row.region_id),
                 sortValue: (row) => getRegionName(row.region_id),
             },
@@ -343,8 +291,8 @@ export default function GroupManagement() {
                 key: "action",
                 header: "Action",
                 hideable: false,
-                className: "text-center",
-                tdClassName: "px-3 py-3 text-center align-middle whitespace-nowrap",
+                className: headerCenter,
+                tdClassName: (row) => `${tdCenter} whitespace-nowrap ${highlightCell(row)}`,
                 cell: (row) => (
                     <Button
                         variant="destructive"
@@ -361,7 +309,33 @@ export default function GroupManagement() {
                 ),
             },
         ];
-    }, [officerInfoById, branchMap, regionMap, deleteGroupMutation.isPending]);
+
+        // ✅ Role based column hiding
+        if (isLO) {
+            // No need to show Branch, Region, and Loan Officer
+            return base.filter((c) => !["lo_id", "branch_id", "region_id"].includes(c.key));
+        }
+        if (isBM) {
+            // No need to show Branch and Region
+            return base.filter((c) => !["branch_id", "region_id"].includes(c.key));
+        }
+        return base;
+    }, [
+        officerInfoById,
+        branchMap,
+        regionMap,
+        deleteGroupMutation.isPending,
+        istToday,
+        isLO,
+        isBM,
+    ]);
+
+    // ✅ Search keys should match visible columns
+    const searchKeys = useMemo(() => {
+        if (isLO) return ["group_name", "meeting_day"];
+        if (isBM) return ["group_name", "meeting_day", "lo_id"];
+        return ["group_name", "meeting_day", "lo_id", "branch_id", "region_id"];
+    }, [isLO, isBM]);
 
     return (
         <Card>
@@ -379,117 +353,41 @@ export default function GroupManagement() {
                     </CardDescription>
                 </div>
 
-                {/* ✅ Create Group */}
-                <Dialog
+                <CreateGroupDialog
                     open={open}
-                    onOpenChange={(v) => {
-                        if (isLO) return; // LO can't open
-                        setOpen(v);
-                    }}
-                >
-                    <DialogTrigger asChild>
-                        <Button
-                            size="lg"
-                            disabled={isLO || eligibleLoanOfficersForCreate.length === 0}
-                            title={
-                                isLO
-                                    ? "Loan Officer cannot create groups"
-                                    : eligibleLoanOfficersForCreate.length === 0
-                                        ? "No eligible loan officers found"
-                                        : ""
-                            }
-                        >
-                            <Plus className="mr-2 h-5 w-5"/>
-                            Add Group
-                        </Button>
-                    </DialogTrigger>
-
-                    <DialogContent className="sm:max-w-lg">
-                        <DialogHeader>
-                            <DialogTitle>Create New Group</DialogTitle>
-                        </DialogHeader>
-
-                        <form onSubmit={handleSubmit} className="space-y-4">
-                            <div className="space-y-2">
-                                <Label>Assign to Loan Officer</Label>
-                                <Select
-                                    value={loanOfficerId}
-                                    onValueChange={setLoanOfficerId}
-                                    required
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select loan officer"/>
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {eligibleLoanOfficersForCreate.map((lo) => (
-                                            <SelectItem key={lo.lo_id} value={String(lo.lo_id)}>
-                                                {officerLabel(lo)}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                <div className="space-y-2">
-                                    <Label>Group Name</Label>
-                                    <Input
-                                        value={groupName}
-                                        onChange={(e) => setGroupName(e.target.value)}
-                                        placeholder="e.g., Group A"
-                                        required
-                                    />
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label>Meeting Day</Label>
-                                    <Select
-                                        value={meetingDay}
-                                        onValueChange={setMeetingDay}
-                                        required
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select day"/>
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {DAYS.map((d) => (
-                                                <SelectItem key={d} value={d}>
-                                                    {d}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-
-                            <Button
-                                type="submit"
-                                className="w-full"
-                                disabled={createGroupMutation.isPending}
-                            >
-                                {createGroupMutation.isPending ? "Creating..." : "Create Group"}
-                            </Button>
-                        </form>
-                    </DialogContent>
-                </Dialog>
+                    onOpenChange={setOpen}
+                    isLO={isLO}
+                    isBM={isBM}
+                    isRM={isRM}
+                    myBranchId={myBranchId}
+                    myRegionId={myRegionId}
+                    eligibleLoanOfficers={eligibleLoanOfficersForCreate}
+                    officerLabel={officerLabel}
+                    createGroupMutation={createGroupMutation}
+                    toast={toast}
+                    days={DAYS}
+                />
             </CardHeader>
 
             <CardContent>
-                {/* ✅ AdvancedTable used here */}
                 <AdvancedTable
                     title={null}
                     description={null}
-                    data={roleScopedGroups}
+                    data={sortedGroups}
                     columns={columns}
                     isLoading={isLoading}
                     emptyText="No groups found."
                     enableSearch
-                    searchPlaceholder="Search group / officer / branch / region..."
-                    // Search uses these keys (sortValue in columns handles officer/branch/region)
-                    searchKeys={["group_name", "meeting_day", "lo_id", "branch_id", "region_id"]}
+                    searchPlaceholder="Search group / meeting day..."
+                    searchKeys={searchKeys}
                     enablePagination
                     initialPageSize={10}
                     rowKey={(r) => r.group_id}
+                    rowClassName={(row) =>
+                        isMeetingToday(row)
+                            ? "bg-emerald-50/70 dark:bg-emerald-900/20"
+                            : ""
+                    }
                 />
             </CardContent>
         </Card>
