@@ -1,4 +1,3 @@
-// src/Helpers/dateTimeIST.js
 /**
  * IST helpers (Asia/Kolkata)
  * Keep all IST logic here so the app stays consistent everywhere.
@@ -26,7 +25,7 @@ export function getISTWeekday(date = new Date()) {
 export function convertToIST(dateInput) {
     if (!dateInput) return null;
 
-    const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
+    const date = typeof dateInput === "string" ? new Date(dateInput) : dateInput;
 
     // Add 5 hours and 30 minutes (in milliseconds)
     const IST_OFFSET = 5.5 * 60 * 60 * 1000; // 5.5 hours in milliseconds
@@ -53,14 +52,14 @@ export function formatToIST(dateInput, includeTime = true) {
             hour: "2-digit",
             minute: "2-digit",
             second: "2-digit",
-            hour12: true
+            hour12: true,
         });
     } else {
         return istDate.toLocaleDateString("en-IN", {
             timeZone: "Asia/Kolkata",
             year: "numeric",
             month: "2-digit",
-            day: "2-digit"
+            day: "2-digit",
         });
     }
 }
@@ -75,10 +74,10 @@ export function getISTDateTimeLocal() {
 
     // Format to YYYY-MM-DDTHH:MM for datetime-local input
     const year = istDate.getFullYear();
-    const month = String(istDate.getMonth() + 1).padStart(2, '0');
-    const day = String(istDate.getDate()).padStart(2, '0');
-    const hours = String(istDate.getHours()).padStart(2, '0');
-    const minutes = String(istDate.getMinutes()).padStart(2, '0');
+    const month = String(istDate.getMonth() + 1).padStart(2, "0");
+    const day = String(istDate.getDate()).padStart(2, "0");
+    const hours = String(istDate.getHours()).padStart(2, "0");
+    const minutes = String(istDate.getMinutes()).padStart(2, "0");
 
     return `${year}-${month}-${day}T${hours}:${minutes}`;
 }

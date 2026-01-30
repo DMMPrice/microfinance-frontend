@@ -23,6 +23,9 @@ import {
   Download,
 } from "lucide-react";
 
+// ✅ IST formatting for Excel export (handles UTC -> IST +05:30)
+import {formatToIST} from "@/Helpers/dateTimeIST.js";
+
 // ✅ Make header + body alignment consistent
 // - TH and default TD both center-aligned
 // - Use TD_LEFT only when a column explicitly needs wrapping/left align
@@ -52,6 +55,48 @@ function downloadBlob(bytes, filename, mime) {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+// -------------------------------------------------
+// ✅ Excel value normalization
+// - Backend often stores timestamps in UTC.
+// - For exports, convert those UTC timestamps to IST (+05:30)
+//   so Excel shows correct local date/time.
+// -------------------------------------------------
+function isDateLikeString(v) {
+    if (typeof v !== "string") return false;
+    const s = v.trim();
+    if (!s) return false;
+
+    // ISO-ish patterns or common server timestamp shapes
+    const looksIso =
+        /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s) ||
+        /\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(s) ||
+        s.endsWith("Z") ||
+        /[+-]\d{2}:?\d{2}$/.test(s);
+
+    if (!looksIso) return false;
+
+    const t = Date.parse(s);
+    return Number.isFinite(t);
+}
+
+function normalizeExportCellValue(v) {
+    if (v == null) return "";
+
+    // Date objects
+    if (v instanceof Date) {
+        const hasTime = true;
+        return formatToIST(v, hasTime);
+    }
+
+    // Timestamp strings (UTC -> IST)
+    if (isDateLikeString(v)) {
+        const includeTime = String(v).includes(":");
+        return formatToIST(v, includeTime);
+    }
+
+    return v;
 }
 
 export default function AdvancedTable({
@@ -224,7 +269,8 @@ export default function AdvancedTable({
                 ? c.sortValue(row, idx)
                 : row?.[c.key];
 
-          return v ?? "";
+                    // ✅ Normalize timestamps to IST for Excel readability
+                    return normalizeExportCellValue(v ?? "");
         });
       });
 
