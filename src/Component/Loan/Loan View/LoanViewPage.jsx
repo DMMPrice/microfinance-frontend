@@ -15,7 +15,7 @@ import {
     useLoanStatement,
 } from "@/hooks/useLoans.js";
 import {useLoanOfficerById} from "@/hooks/useLoanOfficers.js";
-import CommonTable from "@/Utils/CommonTable.jsx";
+import AdvancedTable from "@/Utils/AdvancedTable.jsx";
 
 function money(v) {
     const n = Number(v || 0);
@@ -145,70 +145,167 @@ export default function LoanViewPage() {
         );
     }, [loanOfficer, loId]);
 
-    // ---- CommonTable mappings ----
-    const scheduleColumns = useMemo(
-        () => ["Inst", "Due Date", "Principal Due", "Interest Due", "Total Due", "Total Paid", "Status", "Paid Date"],
+    // ---- AdvancedTable data ----
+    const scheduleData = useMemo(() => (Array.isArray(schedule) ? schedule : []), [schedule]);
+    const statementData = useMemo(() => (Array.isArray(statement) ? statement : []), [statement]);
+    const paymentsData = useMemo(() => (Array.isArray(paymentTxns) ? paymentTxns : []), [paymentTxns]);
+
+    const scheduleTableColumns = useMemo(
+        () => [
+            {
+                key: "installment_no",
+                header: "Installment No",
+                sortValue: (r) => Number(r.installment_no || 0),
+                cell: (r) => <div className="text-center font-medium">{r.installment_no ?? "-"}</div>,
+                tdClassName: "px-3 py-3 text-center align-middle whitespace-nowrap",
+            },
+            {
+                key: "due_date",
+                header: "Due Date",
+                sortValue: (r) => (r?.due_date ? new Date(r.due_date).getTime() : 0),
+                cell: (r) => <div className="text-center">{fmtDate(r.due_date)}</div>,
+                tdClassName: "px-3 py-3 text-center align-middle whitespace-nowrap",
+            },
+            {
+                key: "principal_due",
+                header: "Principal Due",
+                sortValue: (r) => Number(r.principal_due || 0),
+                cell: (r) => <div className="text-right">₹ {money(r.principal_due)}</div>,
+                tdClassName: "px-3 py-3 text-right align-middle whitespace-nowrap",
+            },
+            {
+                key: "interest_due",
+                header: "Interest Due",
+                sortValue: (r) => Number(r.interest_due || 0),
+                cell: (r) => <div className="text-right">₹ {money(r.interest_due)}</div>,
+                tdClassName: "px-3 py-3 text-right align-middle whitespace-nowrap",
+            },
+            {
+                key: "total_due",
+                header: "Total Due",
+                sortValue: (r) => Number(r.total_due || 0),
+                cell: (r) => <div className="text-right font-semibold">₹ {money(r.total_due)}</div>,
+                tdClassName: "px-3 py-3 text-right align-middle whitespace-nowrap",
+            },
+            {
+                key: "total_paid",
+                header: "Total Paid",
+                sortValue: (r) => Number(r.total_paid || 0),
+                cell: (r) => <div className="text-right">₹ {money(r.total_paid)}</div>,
+                tdClassName: "px-3 py-3 text-right align-middle whitespace-nowrap",
+            },
+            {
+                key: "status",
+                header: "Status",
+                sortValue: (r) => r.status,
+                cell: (r) => (
+                    <div className="text-center">
+                        <Badge variant="secondary">{r.status || "-"}</Badge>
+                    </div>
+                ),
+                tdClassName: "px-3 py-3 text-center align-middle whitespace-nowrap",
+            },
+            {
+                key: "paid_date",
+                header: "Paid Date",
+                sortValue: (r) => (r?.paid_date ? new Date(r.paid_date).getTime() : 0),
+                cell: (r) => <div className="text-center">{fmtDate(r.paid_date)}</div>,
+                tdClassName: "px-3 py-3 text-center align-middle whitespace-nowrap",
+            },
+        ],
         []
     );
 
-    const scheduleRows = useMemo(() => {
-        const list = schedule || [];
-        return list.map((r) => ({
-            key: String(r.installment_id),
-            cells: [
-                <div className="text-center">{r.installment_no}</div>,
-                <div className="text-center">{fmtDate(r.due_date)}</div>,
-                <div className="text-right">{money(r.principal_due)}</div>,
-                <div className="text-right">{money(r.interest_due)}</div>,
-                <div className="text-right">{money(r.total_due)}</div>,
-                <div className="text-right">{money(r.total_paid)}</div>,
-                <div className="text-center">
-                    <Badge variant="secondary">{r.status}</Badge>
-                </div>,
-                <div className="text-center">{fmtDate(r.paid_date)}</div>,
-            ],
-        }));
-    }, [schedule]);
-
-    const statementColumns = useMemo(
-        () => ["Ledger ID", "Date & Time", "Type", "Debit", "Credit", "Outstanding", "Narration"],
+    const statementTableColumns = useMemo(
+        () => [
+            {
+                key: "ledger_id",
+                header: "Ledger ID",
+                sortValue: (r) => Number(r.ledger_id || 0),
+                cell: (r) => <div className="text-center">{r.ledger_id ?? "-"}</div>,
+                tdClassName: "px-3 py-3 text-center align-middle whitespace-nowrap",
+            },
+            {
+                key: "txn_date",
+                header: "Date & Time",
+                sortValue: (r) => (r?.txn_date ? new Date(r.txn_date).getTime() : 0),
+                cell: (r) => <div className="whitespace-nowrap">{fmtDateTime(r.txn_date)}</div>,
+            },
+            {
+                key: "txn_type",
+                header: "Type",
+                sortValue: (r) => r.txn_type,
+                cell: (r) => (
+                    <div className="text-center">
+                        <Badge variant="secondary">{r.txn_type || "-"}</Badge>
+                    </div>
+                ),
+                tdClassName: "px-3 py-3 text-center align-middle whitespace-nowrap",
+            },
+            {
+                key: "debit",
+                header: "Debit",
+                sortValue: (r) => Number(r.debit || 0),
+                cell: (r) => <div className="text-right">₹ {money(r.debit)}</div>,
+                tdClassName: "px-3 py-3 text-right align-middle whitespace-nowrap",
+            },
+            {
+                key: "credit",
+                header: "Credit",
+                sortValue: (r) => Number(r.credit || 0),
+                cell: (r) => <div className="text-right">₹ {money(r.credit)}</div>,
+                tdClassName: "px-3 py-3 text-right align-middle whitespace-nowrap",
+            },
+            {
+                key: "balance_outstanding",
+                header: "Outstanding",
+                sortValue: (r) => Number(r.balance_outstanding || 0),
+                cell: (r) => <div className="text-right font-medium">₹ {money(r.balance_outstanding)}</div>,
+                tdClassName: "px-3 py-3 text-right align-middle whitespace-nowrap",
+            },
+            {
+                key: "narration",
+                header: "Narration",
+                hideable: true,
+                sortValue: (r) => r.narration,
+                cell: (r) => <div className="whitespace-normal">{r.narration || "-"}</div>,
+            },
+        ],
         []
     );
 
-    const statementRows = useMemo(() => {
-        const list = statement || [];
-        return list.map((x) => ({
-            key: String(x.ledger_id),
-            cells: [
-                <div className="text-center">{x.ledger_id}</div>,
-                <div>{fmtDateTime(x.txn_date)}</div>,
-                <div>
-                    <Badge variant="secondary">{x.txn_type}</Badge>
-                </div>,
-                <div className="text-right">{money(x.debit)}</div>,
-                <div className="text-right">{money(x.credit)}</div>,
-                <div className="text-right">{money(x.balance_outstanding)}</div>,
-                <div className="whitespace-pre-wrap">{x.narration || "-"}</div>,
-            ],
-        }));
-    }, [statement]);
-
-    const paymentsColumns = useMemo(
-        () => ["Date & Time", "Paid", "Outstanding After", "Narration"],
+    const paymentsTableColumns = useMemo(
+        () => [
+            {
+                key: "txn_date",
+                header: "Date & Time",
+                sortValue: (r) => (r?.txn_date ? new Date(r.txn_date).getTime() : 0),
+                cell: (r) => <div className="whitespace-nowrap">{fmtDateTime(r.txn_date)}</div>,
+            },
+            {
+                key: "credit",
+                header: "Paid",
+                sortValue: (r) => Number(r.credit || 0),
+                cell: (r) => <div className="text-right font-semibold">₹ {money(r.credit)}</div>,
+                tdClassName: "px-3 py-3 text-right align-middle whitespace-nowrap",
+            },
+            {
+                key: "balance_outstanding",
+                header: "Outstanding After",
+                sortValue: (r) => Number(r.balance_outstanding || 0),
+                cell: (r) => <div className="text-right">₹ {money(r.balance_outstanding)}</div>,
+                tdClassName: "px-3 py-3 text-right align-middle whitespace-nowrap",
+            },
+            {
+                key: "narration",
+                header: "Narration",
+                hideable: true,
+                sortValue: (r) => r.narration,
+                cell: (r) => <div className="whitespace-normal">{r.narration || "-"}</div>,
+            },
+        ],
         []
     );
-
-    const paymentsRows = useMemo(() => {
-        return (paymentTxns || []).map((x) => ({
-            key: String(x.ledger_id),
-            cells: [
-                <div>{fmtDateTime(x.txn_date)}</div>,
-                <div className="text-right">{money(x.credit)}</div>,
-                <div className="text-right">{money(x.balance_outstanding)}</div>,
-                <div className="whitespace-pre-wrap">{x.narration || "-"}</div>,
-            ],
-        }));
-    }, [paymentTxns]);
 
     return (
         <div className="space-y-4">
@@ -385,38 +482,55 @@ export default function LoanViewPage() {
                         </TabsList>
 
                         <TabsContent value="schedule" className="mt-4">
-                            <CommonTable
-                                columns={scheduleColumns}
-                                rows={scheduleRows}
+                            <AdvancedTable
+                                title="Loan Schedule"
+                                description={summary?.loan_account_no ? `Loan A/C: ${summary.loan_account_no}` : ""}
+                                data={scheduleData}
+                                columns={scheduleTableColumns}
                                 isLoading={scheduleLoading}
-                                isError={scheduleError}
-                                error={scheduleErrObj}
-                                emptyTitle="No schedule rows found."
-                                emptyDesc="No installments exist for this loan."
+                                errorText={scheduleError ? "Failed to load schedule." : ""}
+                                emptyText="No installments exist for this loan."
+                                enableSearch
+                                enablePagination
+                                initialPageSize={10}
+                                enableExport
+                                exportFileName={`schedule_${summary?.loan_account_no || activeLoanRef || "loan"}.xlsx`}
+                                rowKey={(r, idx) => r.installment_id ?? `${activeLoanRef}-sch-${idx}`}
                             />
                         </TabsContent>
 
                         <TabsContent value="statement" className="mt-4">
-                            <CommonTable
-                                columns={statementColumns}
-                                rows={statementRows}
+                            <AdvancedTable
+                                title="Loan Statement"
+                                data={statementData}
+                                columns={statementTableColumns}
                                 isLoading={statementLoading}
-                                isError={statementError}
-                                error={statementErrObj}
-                                emptyTitle="No statement rows found."
-                                emptyDesc="No ledger entries exist for this loan."
+                                errorText={statementError ? "Failed to load statement." : ""}
+                                emptyText="No ledger entries exist for this loan."
+                                enableSearch
+                                enablePagination
+                                initialPageSize={10}
+                                enableExport
+                                exportFileName={`statement_${summary?.loan_account_no || activeLoanRef || "loan"}.xlsx`}
+                                rowKey={(r, idx) => r.ledger_id ?? `${activeLoanRef}-st-${idx}`}
                             />
                         </TabsContent>
 
                         <TabsContent value="payments" className="mt-4">
-                            <CommonTable
-                                columns={paymentsColumns}
-                                rows={paymentsRows}
+                            <AdvancedTable
+                                title="Paid Installments"
+                                description="PAYMENT transactions"
+                                data={paymentsData}
+                                columns={paymentsTableColumns}
                                 isLoading={statementLoading}
-                                isError={statementError}
-                                error={statementErrObj}
-                                emptyTitle="No payments found."
-                                emptyDesc="There are no PAYMENT transactions yet."
+                                errorText={statementError ? "Failed to load payments." : ""}
+                                emptyText="There are no PAYMENT transactions yet."
+                                enableSearch
+                                enablePagination
+                                initialPageSize={10}
+                                enableExport
+                                exportFileName={`payments_${summary?.loan_account_no || activeLoanRef || "loan"}.xlsx`}
+                                rowKey={(r, idx) => r.ledger_id ?? `${activeLoanRef}-pay-${idx}`}
                             />
                         </TabsContent>
                     </Tabs>

@@ -1,77 +1,125 @@
-// src/Component/Loan/Loan View/LoanViewLandingPage.jsx
+// src/Component/Loan/LoanViewLandingPage.jsx
 import React, {useMemo, useState} from "react";
 import {useNavigate} from "react-router-dom";
-import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card.tsx";
-import {Input} from "@/components/ui/input.tsx";
-import {Button} from "@/components/ui/button.tsx";
-import {Label} from "@/components/ui/label.tsx";
 
-function readLoanAccountSuggestions() {
-    try {
-        const raw = localStorage.getItem("mf.loanAccountNos.v1");
-        const list = raw ? JSON.parse(raw) : [];
-        return Array.isArray(list) ? list : [];
-    } catch {
-        return [];
-    }
-}
+import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card";
+import {Input} from "@/components/ui/input";
+import {Button} from "@/components/ui/button";
+import {Badge} from "@/components/ui/badge";
 
-function isNumericId(v) {
-    return /^\d+$/.test(String(v || "").trim());
+import AdvancedTable from "@/Utils/AdvancedTable.jsx";
+import {useLoanMaster} from "@/hooks/useLoans";
+
+function money(v) {
+  const n = Number(v || 0);
+  return n.toFixed(2);
 }
 
 export default function LoanViewLandingPage() {
-    const [loanRef, setLoanRef] = useState("");
-    const navigate = useNavigate();
+  const navigate = useNavigate();
 
-    const suggestions = useMemo(() => readLoanAccountSuggestions(), []);
-    const isFetching = false;
+  // Quick open input (Loan Account No or numeric Loan ID)
+  const [ref, setRef] = useState("");
 
-    function go() {
-        const ref = String(loanRef).trim();
-        if (!ref) return;
+  const {data, isLoading, isError} = useLoanMaster();
 
-        if (isNumericId(ref)) {
-            navigate(`/dashboard/loans/view/${encodeURIComponent(ref)}`);
-            return;
-        }
-        navigate(`/dashboard/loans/view/${encodeURIComponent(ref)}`);
-    }
+  // API sometimes returns plain array, sometimes {rows/items}
+  const rows = useMemo(() => {
+    if (Array.isArray(data)) return data;
+    return data?.rows ?? data?.items ?? [];
+  }, [data]);
 
-    return (
-        /* ✅ FULL PAGE CENTER */
-        <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4">
-            <Card className="w-full max-w-md shadow-md">
-                <CardHeader className="text-center">
-                    <CardTitle>Loan Detail View</CardTitle>
-                </CardHeader>
+  const columns = useMemo(
+    () => [
+      {
+        key: "loan_account_no",
+        header: "Loan A/C No",
+        sortValue: (r) => String(r?.loan_account_no || ""),
+        cell: (r) => <div className="text-center font-medium">{r.loan_account_no || "-"}</div>,
+        tdClassName: "px-3 py-3 text-center align-middle whitespace-nowrap",
+      },
+      {
+        key: "member_name",
+        header: "Member Name",
+        sortValue: (r) => String(r?.member_name || ""),
+        cell: (r) => <div className="whitespace-nowrap">{r.member_name || "-"}</div>,
+      },
+      {
+        key: "group_name",
+        header: "Group",
+        sortValue: (r) => String(r?.group_name || ""),
+        cell: (r) => <div className="whitespace-nowrap">{r.group_name || "-"}</div>,
+      },
+      {
+        key: "outstanding",
+        header: "Outstanding",
+        sortValue: (r) => Number(r?.outstanding || 0),
+        cell: (r) => <div className="text-right font-semibold">₹ {money(r.outstanding)}</div>,
+        tdClassName: "px-3 py-3 text-right align-middle whitespace-nowrap",
+      },
+      {
+        key: "status",
+        header: "Status",
+        sortValue: (r) => String(r?.status || ""),
+        cell: (r) => (
+          <div className="text-center">
+            <Badge variant="secondary">{r.status || "-"}</Badge>
+          </div>
+        ),
+        tdClassName: "px-3 py-3 text-center align-middle whitespace-nowrap",
+      },
+    ],
+    []
+  );
 
-                <CardContent className="space-y-4">
-                    <div className="space-y-1">
-                        <Label>Enter Loan Account No</Label>
-                        <Input
-                            placeholder="LN-TIYA-01"
-                            value={loanRef}
-                            onChange={(e) => setLoanRef(e.target.value)}
-                            onKeyDown={(e) => e.key === "Enter" && go()}
-                            list="loanAccountSuggestions"
-                        />
-                        <datalist id="loanAccountSuggestions">
-                            {suggestions.map((x) => (
-                                <option key={x} value={x}/>
-                            ))}
-                        </datalist>
-                    </div>
+  const openLoan = () => {
+    const clean = String(ref || "").trim();
+    if (!clean) return;
+    navigate(`/dashboard/loans/view/${encodeURIComponent(clean)}`);
+  };
 
-                    <Button
-                        onClick={go}
-                        disabled={isFetching}
-                        className="w-full"
-                    >
-                        {isFetching ? "Searching..." : "Show Details"}
-                    </Button>
-                </CardContent>
-            </Card>
-        </div>
-    );
+  return (
+    <div className="space-y-4">
+      {/* Quick Open */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Loan View</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div className="text-sm text-muted-foreground">Open a loan by <span className="font-medium">Loan Account No</span> (preferred) or <span className="font-medium">Loan ID</span>.</div>
+            <div className="flex items-center gap-2">
+              <Input
+                value={ref}
+                onChange={(e) => setRef(e.target.value)}
+                placeholder="Enter Loan Account No (e.g., LN-TIYA-01)"
+                className="w-full md:w-[320px]"
+              />
+              <Button onClick={openLoan}>Open</Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Loans List */}
+      <AdvancedTable
+        title="Loans"
+        description="Click any row to open loan view"
+        data={rows}
+        columns={columns}
+        isLoading={isLoading}
+        errorText={isError ? "Failed to load loans." : ""}
+        emptyText="No loans found."
+        enableSearch
+        enablePagination
+        initialPageSize={10}
+        searchKeys={["loan_account_no", "member_name", "group_name", "status"]}
+        onRowClick={(row) => {
+          const key = row?.loan_account_no || row?.loan_id;
+          if (!key) return;
+          navigate(`/dashboard/loans/view/${encodeURIComponent(String(key))}`);
+        }}
+      />
+    </div>
+  );
 }
