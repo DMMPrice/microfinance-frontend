@@ -5,7 +5,7 @@
 // 3) Each group has an "Open" button -> opens that group's rows in a MODAL
 // 4) If user tries Open/View before Load Due -> show WARNING modal
 
-import React, {useEffect, useMemo, useState} from "react";
+import React, {useEffect, useMemo, useRef, useState} from "react";
 import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card.tsx";
 import {Button} from "@/components/ui/button.tsx";
 import {Input} from "@/components/ui/input.tsx";
@@ -247,9 +247,13 @@ export default function CollectionEntryPage() {
     }, [selectedLoanId, loanAccountById]);
 
     /* -------------------- init row form -------------------- */
+    const rowsStringified = useMemo(() => {
+        return JSON.stringify((rows || []).map(r => `${r.installment_no}:${r.loan_id}`));
+    }, [rows]);
+
     useEffect(() => {
         // ✅ only init after data arrives (after Load Due)
-        if (!applyFilters) return;
+        if (!applyFilters || rows.length === 0) return;
 
         setRowForm((prev) => {
             const next = { ...(prev || {}) };
@@ -257,7 +261,7 @@ export default function CollectionEntryPage() {
             (rows || []).forEach((r) => {
                 const key = `${r.installment_no}:${r.loan_id}`;
 
-                // ✅ DON'T overwrite if user is typing (prevents cursor/focus loss)
+                // ✅ DON'T overwrite if field already exists (prevents cursor/focus loss)
                 if (next[key]) return;
 
                 next[key] = {
@@ -271,7 +275,7 @@ export default function CollectionEntryPage() {
 
             return next;
         });
-    }, [rows, applyFilters]);
+    }, [rowsStringified, applyFilters]);
 
     /* -------------------- filtering / grouping -------------------- */
     const displayRows = useMemo(() => {

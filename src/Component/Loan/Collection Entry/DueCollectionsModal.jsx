@@ -1,5 +1,5 @@
 // ✅ UPDATED: src/pages/loans/DueCollectionsModal.jsx
-import React, {useEffect, useMemo, useState} from "react";
+import React, {useEffect, useMemo, useRef, useState} from "react";
 import {Button} from "@/components/ui/button.tsx";
 import {Input} from "@/components/ui/input.tsx";
 import {Skeleton} from "@/components/ui/skeleton.tsx";
@@ -41,7 +41,7 @@ export default function DueCollectionsModal({
 
     const [amountErrors, setAmountErrors] = useState({});
     const [collectAllRunning, setCollectAllRunning] = useState(false);
-    const [collectAllProgress, setCollectAllProgress] = useState({ done: 0, total: 0 });
+    const [collectAllProgress, setCollectAllProgress] = useState({done: 0, total: 0});
 
     function updateForm(key, patch) {
         setRowForm((prev) => ({
@@ -72,17 +72,25 @@ export default function DueCollectionsModal({
     function setAmountError(key, msg) {
         setAmountErrors((p) => {
             if (!msg) {
-                const n = { ...(p || {}) };
+                const n = {...(p || {})};
                 delete n[key];
                 return n;
             }
-            return { ...(p || {}), [key]: msg };
+            return {...(p || {}), [key]: msg};
         });
     }
 
-    // ✅ init/reset on open
+// ✅ init/reset on open - use a flag to track if already initialized
+    const [isInitialized, setIsInitialized] = useState(false);
+
     useEffect(() => {
-        if (!open) return;
+        if (!open) {
+            setIsInitialized(false);
+            return;
+        }
+
+        if (isInitialized) return; // Don't re-initialize
+
         const init = {};
         (rows || []).forEach((r) => {
             const key = `${r.installment_no}:${r.loan_id}`;
@@ -94,11 +102,13 @@ export default function DueCollectionsModal({
                 payment_date: new Date().toISOString().slice(0, 16),
             };
         });
+
         setRowForm(init);
         setPosted({});
         setPosting({});
         setAmountErrors({});
-    }, [open, rows]);
+        setIsInitialized(true);
+    }, [open, rows, isInitialized]);
 
     const grouped = useMemo(() => {
         const map = new Map();
@@ -141,7 +151,7 @@ export default function DueCollectionsModal({
             return !posted[key] && amount > 0;
         });
 
-        setCollectAllProgress({ done: 0, total: queue.length });
+        setCollectAllProgress({done: 0, total: queue.length});
         setCollectAllRunning(true);
 
         try {
@@ -149,7 +159,7 @@ export default function DueCollectionsModal({
             for (const r of queue) {
                 await submitRow(r);
                 done += 1;
-                setCollectAllProgress({ done, total: queue.length });
+                setCollectAllProgress({done, total: queue.length});
             }
         } finally {
             setCollectAllRunning(false);
@@ -171,7 +181,7 @@ export default function DueCollectionsModal({
                         >
                             {collectAllRunning ? (
                                 <>
-                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    <Loader2 className="h-4 w-4 animate-spin"/>
                                     <span className="ml-2">
                                         Collecting {collectAllProgress.done}/{collectAllProgress.total}
                                     </span>
@@ -254,7 +264,7 @@ export default function DueCollectionsModal({
 
                                                                         if (raw === "") {
                                                                             setAmountError(key, "");
-                                                                            updateForm(key, { amount_received: "" });
+                                                                            updateForm(key, {amount_received: ""});
                                                                             return;
                                                                         }
 
@@ -265,13 +275,14 @@ export default function DueCollectionsModal({
                                                                             setAmountError(key, "");
                                                                         }
 
-                                                                        updateForm(key, { amount_received: cleaned });
+                                                                        updateForm(key, {amount_received: cleaned});
                                                                     }}
                                                                     placeholder="0.00"
                                                                     disabled={isDone}
                                                                 />
                                                                 {amountErrors[key] ? (
-                                                                    <div className="text-xs text-red-600">{amountErrors[key]}</div>
+                                                                    <div
+                                                                        className="text-xs text-red-600">{amountErrors[key]}</div>
                                                                 ) : null}
                                                             </div>
                                                         </td>
@@ -342,7 +353,10 @@ export default function DueCollectionsModal({
                                                                 </Button>
 
                                                                 <Button size="sm" variant="outline"
-                                                                        onClick={() => { if (collectAllRunning) return; onViewLoan?.(r.loan_id); }}>
+                                                                        onClick={() => {
+                                                                            if (collectAllRunning) return;
+                                                                            onViewLoan?.(r.loan_id);
+                                                                        }}>
                                                                     <Eye className="h-4 w-4 mr-2"/>
                                                                     View
                                                                 </Button>

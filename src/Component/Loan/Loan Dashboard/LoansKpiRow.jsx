@@ -3,67 +3,82 @@ import {Skeleton} from "@/components/ui/skeleton.tsx";
 import StatCard from "@/Utils/StatCard.jsx";
 
 const VARIANT_BY_KEY = {
+    TOTAL_DISBURSED: "blue",
+    TOTAL_EARNED: "green",
+
     DISBURSED: "blue",
     ACTIVE: "green",
     CLOSED: "purple",
-    CANCELLED: "red",
-    OTHER: "amber",
 };
 
-// (optional) if you want icons later you can wire them here
-const ICON_BY_KEY = {
-    // DISBURSED: Banknote,
-    // ACTIVE: Activity,
-    // CLOSED: CheckCircle2,
-    // CANCELLED: XCircle,
-    // OTHER: Layers,
-};
+function safeNum(v) {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+}
+
+function formatINR(n) {
+    const x = safeNum(n);
+    return x.toLocaleString("en-IN", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    });
+}
 
 export default function LoansKpiRow({statsQ}) {
-    const statsCards = useMemo(() => {
-        const d = statsQ?.data || {};
+    const {cards} = useMemo(() => {
+        const data = statsQ?.data || {};
 
-        const preferred = ["DISBURSED", "ACTIVE", "CLOSED", "CANCELLED", "OTHER"];
-        const available = preferred.filter((k) =>
-            Object.prototype.hasOwnProperty.call(d, k)
-        );
-        const extras = Object.keys(d).filter((k) => !preferred.includes(k));
-        const keys = [...available, ...extras];
+        // ✅ New API shape: { status: {...}, amounts: {...} }
+        // ✅ Backward compatible: old API might return counts directly
+        const status = data.status && typeof data.status === "object" ? data.status : data;
+        const amounts = data.amounts && typeof data.amounts === "object" ? data.amounts : {};
 
-        const finalKeys = keys.length ? keys : ["DISBURSED", "ACTIVE", "CLOSED", "OTHER"];
-        return finalKeys.map((k) => ({k, v: Number(d[k] ?? 0)}));
+        const cards = [
+            {
+                k: "TOTAL AMOUNT DISBURSED",
+                key: "TOTAL_DISBURSED",
+                v: safeNum(amounts.total_disbursed),
+                isMoney: true,
+            },
+            {
+                k: "TOTAL AMOUNT EARNED",
+                key: "TOTAL_EARNED",
+                v: safeNum(amounts.total_earned),
+                isMoney: true,
+            },
+            {k: "LOANS DISBURSED", key: "DISBURSED", v: safeNum(status.DISBURSED)},
+            {k: "LOANS ACTIVE", key: "ACTIVE", v: safeNum(status.ACTIVE)},
+            {k: "LOANS CLOSED", key: "CLOSED", v: safeNum(status.CLOSED)},
+        ];
+
+        return {cards};
     }, [statsQ?.data]);
 
-    const cols = Math.min(statsCards.length || 4, 5);
+    const loading = !!statsQ?.isLoading;
 
     return (
-        <div
-            className="grid gap-4 sm:grid-cols-2"
-            style={{gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`}}
-        >
-            {statsQ?.isLoading
-                ? Array.from({length: statsCards.length || 4}).map((_, i) => (
-                    <div key={i} className="rounded-xl border p-4">
-                        <Skeleton className="h-4 w-24"/>
-                        <Skeleton className="h-8 w-16 mt-3"/>
-                    </div>
-                ))
-                : statsCards.map((x) => {
-                    const variant = VARIANT_BY_KEY[x.k] || "blue";
-                    const Icon = ICON_BY_KEY[x.k];
-
-                    return (
+        <div className="space-y-4">
+            {/* ✅ All KPI cards in ONE ROW (desktop) */}
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+                {loading
+                    ? Array.from({length: 5}).map((_, i) => (
+                        <div key={i} className="rounded-xl border p-4">
+                            <Skeleton className="h-4 w-32"/>
+                            <Skeleton className="h-8 w-24 mt-3"/>
+                        </div>
+                    ))
+                    : cards.map((x) => (
                         <StatCard
-                            key={x.k}
+                            key={x.key}
                             title={x.k}
-                            value={x.v}
+                            value={x.isMoney ? `₹ ${formatINR(x.v)}` : x.v}
                             subtitle={null}
-                            Icon={Icon}
-                            variant={variant}
+                            Icon={null}
+                            variant={VARIANT_BY_KEY[x.key] || "blue"}
                             className="rounded-xl"
                         />
-                    );
-                })}
+                    ))}
+            </div>
         </div>
     );
 }

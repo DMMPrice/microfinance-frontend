@@ -15,6 +15,8 @@ import {
     useDeactivateLoan,
 } from "@/hooks/useLoans.js";
 
+import {getUserCtx} from "@/lib/http.js";
+
 import {toast} from "@/components/ui/use-toast";
 import {ConfirmDialog} from "@/Utils/ConfirmDialog.jsx";
 import EditLoanDialog from "@/Component/Loan/EditLoanDialog.jsx";
@@ -61,7 +63,13 @@ export default function LoansPage() {
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [deleteLoanId, setDeleteLoanId] = useState(null);
 
-    const statsQ = useLoanStats();
+    // ✅ Role-wise scope for stats
+    // - super_admin: no branch filter (all branches)
+    // - others: restrict to their branch_id if present
+    const ctx = getUserCtx();
+    const branch_id = ctx?.role === "super_admin" ? undefined : (ctx?.branchId ?? undefined);
+
+    const statsQ = useLoanStats({branch_id});
 
     // mutations
     const updateMut = useUpdateLoan();

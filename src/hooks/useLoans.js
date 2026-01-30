@@ -97,10 +97,20 @@ function invalidateLoanDetails(qc, loanRef) {
 }
 
 /* -------------------- STATS -------------------- */
-export function useLoanStats() {
+export function useLoanStats(filters = {}) {
+    // ✅ optional branch filter
+    // - super_admin: do NOT pass branch_id
+    // - others: pass branch_id
+    const params = {
+        branch_id: filters?.branch_id ?? undefined,
+    };
+
+    // make cache key stable
+    const key = JSON.stringify(params);
+
     return useQuery({
-        queryKey: ["loans", "stats"],
-        queryFn: async () => (await apiClient.get("/loans/stats")).data,
+        queryKey: ["loans", "stats", key],
+        queryFn: async () => (await apiClient.get("/loans/stats", {params})).data,
         staleTime: 30_000,
         refetchOnWindowFocus: false,
     });
