@@ -5,8 +5,6 @@ import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card.tsx
 import {Input} from "@/components/ui/input.tsx";
 import {Button} from "@/components/ui/button.tsx";
 import {Label} from "@/components/ui/label.tsx";
-import {toast} from "@/components/ui/use-toast";
-import {useResolveLoanId} from "@/hooks/useLoanResolver.js";
 
 function readLoanAccountSuggestions() {
     try {
@@ -27,7 +25,7 @@ export default function LoanViewLandingPage() {
     const navigate = useNavigate();
 
     const suggestions = useMemo(() => readLoanAccountSuggestions(), []);
-    const {data: resolvedLoanId, isFetching} = useResolveLoanId(loanRef);
+    const isFetching = false;
 
     function go() {
         const ref = String(loanRef).trim();
@@ -37,17 +35,7 @@ export default function LoanViewLandingPage() {
             navigate(`/dashboard/loans/view/${encodeURIComponent(ref)}`);
             return;
         }
-
-        if (!resolvedLoanId) {
-            toast?.({
-                title: "Loan not found",
-                description: "Please check the Loan Account No and try again.",
-                variant: "destructive",
-            });
-            return;
-        }
-
-        navigate(`/dashboard/loans/view/${encodeURIComponent(String(resolvedLoanId))}`);
+        navigate(`/dashboard/loans/view/${encodeURIComponent(ref)}`);
     }
 
     return (

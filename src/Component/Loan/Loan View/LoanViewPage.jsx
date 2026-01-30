@@ -13,7 +13,6 @@ import {
     useLoanSummary,
     useLoanSchedule,
     useLoanStatement,
-    useLoanMaster,
 } from "@/hooks/useLoans.js";
 import {useLoanOfficerById} from "@/hooks/useLoanOfficers.js";
 import CommonTable from "@/Utils/CommonTable.jsx";
@@ -62,61 +61,37 @@ export default function LoanViewPage() {
     // 🔹 Input state (we will auto-switch it to loan_account_no after summary loads)
     const [searchRef, setSearchRef] = useState(cleanedRef || "");
 
-    // ---- Resolve loan_id when route param is an account no ----
-    const masterFilters = useMemo(() => {
-        if (!cleanedRef || isId) return {};
-        return {search: cleanedRef, limit: 50, offset: 0};
-    }, [cleanedRef, isId]);
+    // ✅ Use whatever user provided in URL/input:
+// - numeric => loan_id endpoints
+// - non-numeric => loan_account_no endpoints
+    const [activeLoanRef, setActiveLoanRef] = useState(cleanedRef || "");
 
-    const {
-        data: masterData,
-        isLoading: masterLoading,
-        isError: masterError,
-    } = useLoanMaster(masterFilters);
+// keep in sync when route param changes
+    useEffect(() => {
+        setActiveLoanRef(cleanedRef || "");
+    }, [cleanedRef]);
 
-    const resolvedLoanId = useMemo(() => {
-        if (isId) return Number(cleanedRef);
-        if (!cleanedRef) return null;
-
-        const rows = Array.isArray(masterData)
-            ? masterData
-            : (masterData?.rows ?? masterData?.items ?? []);
-
-        const hit = rows.find(
-            (x) =>
-                String(x?.loan_account_no || "").trim().toLowerCase() ===
-                cleanedRef.toLowerCase()
-        );
-
-        return hit?.loan_id ?? null;
-    }, [masterData, cleanedRef, isId]);
-
-    const identifier = useMemo(() => {
-        if (!resolvedLoanId) return null;
-        return {loan_id: Number(resolvedLoanId)};
-    }, [resolvedLoanId]);
-
-    // ---- Load data using loan_id ----
+// ---- Load data using loan_id ----
     const {
         data: summary,
         isLoading: summaryLoading,
         isError: summaryError,
         error: summaryErrObj,
-    } = useLoanSummary(identifier);
+    } = useLoanSummary(activeLoanRef);
 
     const {
         data: schedule,
         isLoading: scheduleLoading,
         isError: scheduleError,
         error: scheduleErrObj,
-    } = useLoanSchedule(identifier);
+    } = useLoanSchedule(activeLoanRef);
 
     const {
         data: statement,
         isLoading: statementLoading,
         isError: statementError,
         error: statementErrObj,
-    } = useLoanStatement(identifier);
+    } = useLoanStatement(activeLoanRef);
 
     // ✅ IMPORTANT: if route param was numeric, replace input value with loan_account_no
     useEffect(() => {
@@ -126,6 +101,7 @@ export default function LoanViewPage() {
         // If the current input is a numeric loan_id (like "14"), replace it with account no
         if (isNumericId(searchRef) || searchRef.trim() === cleanedRef) {
             setSearchRef(acc);
+            setActiveLoanRef(acc);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [summary?.loan_account_no]);
@@ -154,8 +130,6 @@ export default function LoanViewPage() {
         // but if user still typed a numeric id, it will still work.
         navigate(`/dashboard/loans/view/${encodeURIComponent(clean)}`);
     }
-
-    const resolvingFromAccountNo = !!cleanedRef && !isId && !resolvedLoanId;
 
     // ---- Loan Officer Name lookup ----
     const loId = summary?.lo_id != null ? Number(summary.lo_id) : null;
@@ -284,24 +258,28 @@ export default function LoanViewPage() {
             </Card>
 
             {/* ✅ Resolve status when opened using Loan Account No */}
-            {resolvingFromAccountNo ? (
+            {/* ✅ When opened using Loan Account No, show a small loader while summary is fetching */}
+            {!isId && summaryLoading ? (
                 <Card>
                     <CardHeader className="pb-2">
-                        <CardTitle className="text-base">Resolving Loan Account No…</CardTitle>
+                        <CardTitle className="text-base">Loading Loan…</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        {masterLoading ? (
-                            <div className="space-y-2">
-                                <Skeleton className="h-6 w-1/3"/>
-                                <Skeleton className="h-10 w-full"/>
-                            </div>
-                        ) : masterError ? (
-                            <p className="text-sm text-destructive">Failed to resolve Loan Account No.</p>
-                        ) : (
-                            <p className="text-sm text-destructive">
-                                Loan not found for account no: <span className="font-medium">{cleanedRef}</span>
-                            </p>
-                        )}
+                        <div className="space-y-2">
+                            <Skeleton className="h-6 w-1/3"/>
+                            <Skeleton className="h-10 w-full"/>
+                        </div>
+                    </CardContent>
+                </Card>
+            ) : !isId && summaryError ? (
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-base">Loan Not Found</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <p className="text-sm text-destructive">
+                            Please check the Loan Account No and try again.
+                        </p>
                     </CardContent>
                 </Card>
             ) : null}

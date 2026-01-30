@@ -117,15 +117,16 @@ export function useLoanStats(filters = {}) {
 }
 
 /* -------------------- INSTALLMENTS DUE -------------------- */
-export function useDueInstallments(as_on) {
+export function useDueInstallments(as_on, loan_account_no) {
     const asOn = normalizeDate(as_on);
 
     return useQuery({
-        queryKey: ["loans", "installmentsDue", asOn || "ALL"],
+        queryKey: ["loans", "installmentsDue", asOn || "ALL", loan_account_no ? String(loan_account_no).trim() : "ALL"],
         enabled: true,
         queryFn: async () => {
             const params = {};
             if (asOn) params.as_on = asOn;
+            if (loan_account_no) params.loan_account_no = String(loan_account_no).trim();
             const res = await apiClient.get("/loans/installments/due", {params});
             return res.data;
         },
@@ -146,6 +147,7 @@ export function useCollectionsByLO(lo_id, as_on) {
             const params = {};
             if (loId) params.lo_id = Number(loId);
             if (asOn) params.as_on = asOn;
+            if (loan_account_no) params.loan_account_no = String(loan_account_no).trim();
 
             const {data} = await apiClient.get("/loans/collections/by-lo", {params});
             return data;
