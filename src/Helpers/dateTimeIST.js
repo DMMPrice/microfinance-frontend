@@ -81,3 +81,48 @@ export function getISTDateTimeLocal() {
 
     return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
+/**
+ * Get today's date in IST as YYYY-MM-DD
+ */
+export function getISTTodayISO(date = new Date()) {
+    // Use formatToParts to avoid timezone drift
+    const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    }).formatToParts(date);
+
+    const get = (type) => parts.find((p) => p.type === type)?.value || "";
+    const y = get("year");
+    const m = get("month");
+    const d = get("day");
+    return `${y}-${m}-${d}`;
+}
+
+/**
+ * Get current month range in IST.
+ * @returns {{from_date: string, to_date: string}} - YYYY-MM-DD for first and last day of this month in IST
+ */
+export function getISTCurrentMonthRange(date = new Date()) {
+    // Get IST year/month from the provided date
+    const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    }).formatToParts(date);
+
+    const get = (type) => parts.find((p) => p.type === type)?.value || "";
+    const year = Number(get("year"));
+    const month2 = get("month"); // 01-12
+    const monthIndex = Number(month2) - 1;
+
+    // Last day count for the month (safe with JS Date)
+    const lastDay = new Date(year, monthIndex + 1, 0).getDate();
+
+    const from_date = `${year}-${month2}-01`;
+    const to_date = `${year}-${month2}-${String(lastDay).padStart(2, "0")}`;
+
+    return {from_date, to_date};
+}

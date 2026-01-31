@@ -22,6 +22,15 @@ import AdvancedTable from "@/Utils/AdvancedTable.jsx";
 import {getUserCtx} from "@/lib/http.js";
 
 /* ---------------- helpers ---------------- */
+function todayLocalISODate() {
+    // Uses browser local timezone (IST on your machines)
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+}
+
 
 function getAmountDue(row) {
     if (!row) return null;
@@ -91,7 +100,7 @@ function readProfileData() {
 /* ---------------- component ---------------- */
 
 export default function LoanDueSection({onOpenSummary}) {
-    const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+    const today = useMemo(() => todayLocalISODate(), []);
 
     // ✅ central auth ctx (from src/lib/http.js)
     const userCtx = useMemo(() => getUserCtx(), []);
@@ -139,6 +148,14 @@ export default function LoanDueSection({onOpenSummary}) {
     const [asOnDraft, setAsOnDraft] = useState("");
     const [asOnApplied, setAsOnApplied] = useState("");
     const [loDraft, setLoDraft] = useState("ALL");
+
+    // ✅ Default = today (auto-applied on first load)
+    useEffect(() => {
+        const t = todayLocalISODate();
+        setAsOnDraft(t);
+        setAsOnApplied(t);
+    }, []);
+
 
     const loQ = useLoanOfficers();
     const dueQ = useDueInstallments(asOnApplied);
@@ -251,8 +268,9 @@ export default function LoanDueSection({onOpenSummary}) {
 
     const applyAsOn = () => setAsOnApplied(asOnDraft || "");
     const resetDueFilters = () => {
-        setAsOnDraft("");
-        setAsOnApplied("");
+        const t = todayLocalISODate();
+        setAsOnDraft(t);
+        setAsOnApplied(t);
         setLoDraft("ALL");
     };
 

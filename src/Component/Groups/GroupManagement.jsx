@@ -9,7 +9,7 @@ import {
     CardTitle,
 } from "@/components/ui/card.tsx";
 import {Badge} from "@/components/ui/badge.tsx";
-import {Trash2} from "lucide-react";
+import {Pencil, Trash2} from "lucide-react";
 import {useToast} from "@/hooks/use-toast.ts";
 
 import {useGroups} from "@/hooks/useGroups.js";
@@ -31,6 +31,7 @@ import {
 } from "@/hooks/useApi.js";
 
 import CreateGroupDialog from "./CreateGroupDialog.jsx";
+import EditGroupDialog from "./EditGroupDialog.jsx";
 import {getISTWeekday} from "@/Helpers/dateTimeIST.js";
 
 const DAYS = [
@@ -52,10 +53,21 @@ const dayIndex = (d) => {
 
 export default function GroupManagement() {
     const [open, setOpen] = useState(false);
+
+    // ✅ edit dialog state
+    const [editOpen, setEditOpen] = useState(false);
+    const [selectedGroup, setSelectedGroup] = useState(null);
+
     const {toast} = useToast();
 
-    const {groups = [], isLoading, createGroupMutation, deleteGroupMutation} =
-        useGroups();
+    const {
+        groups = [],
+        isLoading,
+        createGroupMutation,
+        updateGroupMutation,
+        deleteGroupMutation,
+    } = useGroups();
+
     const {branches = []} = useBranches();
     const {regions = []} = useRegions();
     const {loanOfficers = []} = useLoanOfficers();
@@ -154,14 +166,13 @@ export default function GroupManagement() {
         return [];
     }, [groups, isAdmin, isLO, isBM, isRM, myLoId, myBranchId, myRegionId]);
 
-    // ✅ By default sort by Meeting Day (Mon..Sun)
+    // ✅ default sort by meeting day
     const sortedGroups = useMemo(() => {
         const arr = Array.isArray(roleScopedGroups) ? [...roleScopedGroups] : [];
         arr.sort((a, b) => {
             const da = dayIndex(a?.meeting_day);
             const db = dayIndex(b?.meeting_day);
             if (da !== db) return da - db;
-            // then by group name
             return String(a?.group_name || "").localeCompare(String(b?.group_name || ""));
         });
         return arr;
@@ -207,25 +218,35 @@ export default function GroupManagement() {
         } catch (err) {
             toast({
                 title: "Failed to delete group",
-                description:
-                    err?.response?.data?.detail || err?.message || "Unexpected error",
+                description: err?.response?.data?.detail || err?.message || "Unexpected error",
                 variant: "destructive",
             });
         }
     };
 
+    const openEdit = (row) => {
+        setSelectedGroup(row);
+        setEditOpen(true);
+    };
+
     const highlightCell = (row) =>
         isMeetingToday(row) ? "bg-emerald-50/70 dark:bg-emerald-900/20" : "";
 
+    // ✅ table align
     const headerCenter = "text-center";
-    const tdCenter = "px-3 py-3 text-center align-middle";
+    const tdCenter = "text-center align-middle";
+
+    // ✅ IMPORTANT: padding applied INSIDE cell content (works even if AdvancedTable ignores tdClassName)
+    const CELL_PAD = "px-5 py-4"; // increase/decrease here
+    const CELL_WRAP = (row) =>
+        `w-full ${CELL_PAD} flex justify-center items-center text-center ${highlightCell(row)}`;
+    const CELL_WRAP_GAP = (row) =>
+        `w-full ${CELL_PAD} flex justify-center items-center text-center gap-2 ${highlightCell(row)}`;
 
     /* =========================
-       ✅ AdvancedTable columns
-       Role requirement:
-       1) Branch Manager -> hide Branch & Region
-       2) Loan Officer -> hide Branch, Region, and Loan Officer
-       Also: center align header + data
+       ✅ Columns
+       - BM: hide Branch & Region
+       - LO: hide Branch, Region, Loan Officer + Action
     ========================= */
     const columns = useMemo(() => {
         const base = [
@@ -233,11 +254,13 @@ export default function GroupManagement() {
                 key: "group_name",
                 header: "Group",
                 className: headerCenter,
-                tdClassName: (row) => `${tdCenter} ${highlightCell(row)}`,
+                tdClassName: () => tdCenter,
                 cell: (row) => (
-                    <span className={isMeetingToday(row) ? "font-bold" : "font-medium"}>
-                        {row.group_name}
-                    </span>
+                    <div className={CELL_WRAP(row)}>
+            <span className={isMeetingToday(row) ? "font-bold" : "font-medium"}>
+              {row.group_name}
+            </span>
+                    </div>
                 ),
                 sortValue: (row) => row.group_name,
             },
@@ -245,26 +268,25 @@ export default function GroupManagement() {
                 key: "meeting_day",
                 header: "Meeting Day",
                 className: headerCenter,
-                tdClassName: (row) => `${tdCenter} ${highlightCell(row)}`,
+                tdClassName: () => tdCenter,
                 cell: (row) => (
-                    <div className="flex items-center justify-center gap-2">
+                    <div className={CELL_WRAP_GAP(row)}>
                         <Badge variant="secondary">{row.meeting_day || "—"}</Badge>
                         {isMeetingToday(row) ? (
                             <Badge className="bg-emerald-600 text-white">Today</Badge>
                         ) : null}
                     </div>
                 ),
-                // Keep sortValue stable (table sorting) but we already pre-sort in data
                 sortValue: (row) => dayIndex(row.meeting_day),
             },
             {
                 key: "lo_id",
                 header: "Loan Officer",
                 className: headerCenter,
-                tdClassName: (row) => `${tdCenter} ${highlightCell(row)}`,
+                tdClassName: () => tdCenter,
                 cell: (row) => {
                     const info = officerInfoById.get(Number(row.lo_id));
-                    return info?.name || "Unknown";
+                    return <div className={CELL_WRAP(row)}>{info?.name || "Unknown"}</div>;
                 },
                 sortValue: (row) => {
                     const info = officerInfoById.get(Number(row.lo_id));
@@ -275,16 +297,16 @@ export default function GroupManagement() {
                 key: "branch_id",
                 header: "Branch",
                 className: headerCenter,
-                tdClassName: (row) => `${tdCenter} ${highlightCell(row)}`,
-                cell: (row) => getBranchName(row.branch_id),
+                tdClassName: () => tdCenter,
+                cell: (row) => <div className={CELL_WRAP(row)}>{getBranchName(row.branch_id)}</div>,
                 sortValue: (row) => getBranchName(row.branch_id),
             },
             {
                 key: "region_id",
                 header: "Region",
                 className: headerCenter,
-                tdClassName: (row) => `${tdCenter} ${highlightCell(row)}`,
-                cell: (row) => getRegionName(row.region_id),
+                tdClassName: () => tdCenter,
+                cell: (row) => <div className={CELL_WRAP(row)}>{getRegionName(row.region_id)}</div>,
                 sortValue: (row) => getRegionName(row.region_id),
             },
             {
@@ -292,45 +314,65 @@ export default function GroupManagement() {
                 header: "Action",
                 hideable: false,
                 className: headerCenter,
-                tdClassName: (row) => `${tdCenter} whitespace-nowrap ${highlightCell(row)}`,
+                tdClassName: () => `${tdCenter} whitespace-nowrap`,
                 cell: (row) => (
-                    <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(row);
-                        }}
-                        disabled={deleteGroupMutation.isPending}
-                    >
-                        <Trash2 className="mr-2 h-4 w-4"/>
-                        Delete
-                    </Button>
+                    <div className={CELL_WRAP_GAP(row)}>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="min-w-[100px] px-4 py-2"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                openEdit(row);
+                            }}
+                            disabled={updateGroupMutation.isPending}
+                        >
+                            <Pencil className="mr-2 h-4 w-4"/>
+                            Edit
+                        </Button>
+
+                        <Button
+                            variant="destructive"
+                            size="sm"
+                            className="min-w-[100px] px-4 py-2"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(row);
+                            }}
+                            disabled={deleteGroupMutation.isPending}
+                        >
+                            <Trash2 className="mr-2 h-4 w-4"/>
+                            Delete
+                        </Button>
+                    </div>
                 ),
             },
         ];
 
-        // ✅ Role based column hiding
+        // ✅ LO: hide LO/Branch/Region + Action column
         if (isLO) {
-            // No need to show Branch, Region, and Loan Officer
-            return base.filter((c) => !["lo_id", "branch_id", "region_id"].includes(c.key));
+            return base.filter(
+                (c) => !["lo_id", "branch_id", "region_id", "action"].includes(c.key)
+            );
         }
+
+        // ✅ BM: hide Branch & Region
         if (isBM) {
-            // No need to show Branch and Region
             return base.filter((c) => !["branch_id", "region_id"].includes(c.key));
         }
+
         return base;
     }, [
         officerInfoById,
         branchMap,
         regionMap,
         deleteGroupMutation.isPending,
+        updateGroupMutation.isPending,
         istToday,
         isLO,
         isBM,
     ]);
 
-    // ✅ Search keys should match visible columns
     const searchKeys = useMemo(() => {
         if (isLO) return ["group_name", "meeting_day"];
         if (isBM) return ["group_name", "meeting_day", "lo_id"];
@@ -383,13 +425,28 @@ export default function GroupManagement() {
                     enablePagination
                     initialPageSize={10}
                     rowKey={(r) => r.group_id}
-                    rowClassName={(row) =>
-                        isMeetingToday(row)
-                            ? "bg-emerald-50/70 dark:bg-emerald-900/20"
-                            : ""
-                    }
                 />
             </CardContent>
+
+            {/* ✅ Edit dialog */}
+            <EditGroupDialog
+                open={editOpen}
+                onOpenChange={(v) => {
+                    setEditOpen(v);
+                    if (!v) setSelectedGroup(null);
+                }}
+                group={selectedGroup}
+                isLO={isLO}
+                isBM={isBM}
+                isRM={isRM}
+                myBranchId={myBranchId}
+                myRegionId={myRegionId}
+                eligibleLoanOfficers={eligibleLoanOfficersForCreate}
+                officerLabel={officerLabel}
+                days={DAYS}
+                updateGroupMutation={updateGroupMutation}
+                toast={toast}
+            />
         </Card>
     );
 }

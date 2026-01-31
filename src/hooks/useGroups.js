@@ -23,7 +23,7 @@ function getProfileDataSafe() {
  * - region_id
  * - branch_id
  * - lo_id
- * - user_id   (NEW: employee_id -> mapped in backend to LO -> groups)
+ * - user_id   (employee_id -> mapped in backend to LO -> groups)
  */
 export function useGroups(filters = {}) {
     const queryClient = useQueryClient();
@@ -34,7 +34,7 @@ export function useGroups(filters = {}) {
     const profileRegionId = profile?.region_id ?? profile?.regionId ?? null;
     const profileBranchId = profile?.branch_id ?? profile?.branchId ?? null;
 
-    // IMPORTANT: this should be employees.employee_id (your backend maps user_id -> loan_officers.employee_id)
+    // employee_id (backend maps user_id -> loan_officers.employee_id)
     const profileUserId = profile?.user_id ?? profile?.userId ?? null;
 
     const isRM = role === "regional_manager";
@@ -47,23 +47,13 @@ export function useGroups(filters = {}) {
     const fLoId = filters?.lo_id ?? filters?.loId ?? null;
     const fUserId = filters?.user_id ?? filters?.userId ?? null;
 
-    // ✅ Effective filters:
-    // - RM gets region_id by default
-    // - BM gets branch_id by default
-    // - LO gets user_id by default
-    // - Admin-like has no defaults (only whatever caller passes)
     const effectiveFilters = {
         region_id: fRegion ?? (isRM ? profileRegionId : null),
         branch_id: fBranch ?? (isBM ? profileBranchId : null),
-
-        // Admin/Manager can filter by lo_id when they want:
         lo_id: fLoId ?? null,
-
-        // LO should filter via user_id (employee_id)
         user_id: fUserId ?? (isLO ? profileUserId : null),
     };
 
-    // remove null/undefined/"" filters so request params remain clean
     const params = Object.fromEntries(
         Object.entries(effectiveFilters).filter(([, v]) => v !== null && v !== undefined && v !== "")
     );
@@ -87,18 +77,21 @@ export function useGroups(filters = {}) {
     // POST /groups
     const createGroupMutation = useMutation({
         mutationFn: async (payload) => {
-            // payload: { group_name, lo_id, region_id, branch_id, meeting_day }
-            // Frontend-controlled defaults:
             const finalPayload = {
                 ...payload,
                 region_id: isRM ? profileRegionId : payload?.region_id,
                 branch_id: isBM ? profileBranchId : payload?.branch_id,
-                // for LO, you can choose how you want to create:
-                // - either pass lo_id explicitly from UI selection
-                // - or map from employee_id on backend (if you implement it later)
             };
-
             const res = await api.post("/groups", finalPayload);
+            return res.data;
+        },
+        onSuccess: () => queryClient.invalidateQueries({queryKey: GROUPS_KEY}),
+    });
+
+    // ✅ PUT /groups/{group_id}
+    const updateGroupMutation = useMutation({
+        mutationFn: async ({group_id, payload}) => {
+            const res = await api.put(`/groups/${group_id}`, payload);
             return res.data;
         },
         onSuccess: () => queryClient.invalidateQueries({queryKey: GROUPS_KEY}),
@@ -129,6 +122,7 @@ export function useGroups(filters = {}) {
         refetch,
 
         createGroupMutation,
+        updateGroupMutation,
         deleteGroupMutation,
         assignLoanOfficerMutation,
 
@@ -137,16 +131,11 @@ export function useGroups(filters = {}) {
     };
 }
 
-/**
- * Get a single group by id
- * GET /groups/{group_id}
- */
 export function useGroup(groupId, {enabled = true} = {}) {
     return useQuery({
         queryKey: [...GROUPS_KEY, groupId],
         enabled: enabled && !!groupId,
         queryFn: async () => {
-            // ✅ remove trailing slash to match FastAPI route
             const res = await api.get(`/groups/${groupId}`);
             return res.data;
         },
@@ -155,10 +144,6 @@ export function useGroup(groupId, {enabled = true} = {}) {
     });
 }
 
-/**
- * Get group summary (group + members + counts)
- * GET /groups/{group_id}/summary
- */
 export function useGroupSummary(groupId, {enabled = true} = {}) {
     return useQuery({
         queryKey: [...GROUPS_KEY, groupId, "summary"],

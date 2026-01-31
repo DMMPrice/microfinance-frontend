@@ -13,6 +13,8 @@ import {
 
 import {RefreshCw, Search as SearchIcon, Eye, Pencil, Trash2} from "lucide-react";
 
+import {getISTCurrentMonthRange} from "@/Helpers/dateTimeIST.js";
+
 import {useLoanMaster} from "@/hooks/useLoans.js";
 import {useLoanOfficers} from "@/hooks/useLoanOfficers.js";
 
@@ -40,6 +42,11 @@ export default function LoansAllSection({onOpenSummary, onEditLoan, onDeleteLoan
         }));
     }, [loQ.loanOfficers]);
 
+    const monthRange = useMemo(() => getISTCurrentMonthRange(), []);
+    const defaultFrom = monthRange.from_date;
+    const defaultTo = monthRange.to_date;
+
+
     const loNameMap = useMemo(() => {
         const map = {};
         (loQ.loanOfficers || []).forEach((x) => {
@@ -51,8 +58,8 @@ export default function LoansAllSection({onOpenSummary, onEditLoan, onDeleteLoan
     // Draft UI state
     const [searchDraft, setSearchDraft] = useState("");
     const [statusDraft, setStatusDraft] = useState("ALL");
-    const [fromDraft, setFromDraft] = useState("");
-    const [toDraft, setToDraft] = useState("");
+    const [fromDraft, setFromDraft] = useState(defaultFrom);
+    const [toDraft, setToDraft] = useState(defaultTo);
     const [loDraft, setLoDraft] = useState("ALL");
 
     // Backend pagination
@@ -63,8 +70,8 @@ export default function LoansAllSection({onOpenSummary, onEditLoan, onDeleteLoan
     const [applied, setApplied] = useState({
         search: "",
         status: "",
-        disburse_from: "",
-        disburse_to: "",
+        disburse_from: defaultFrom,
+        disburse_to: defaultTo,
         lo_id: "",
     });
 
@@ -118,15 +125,15 @@ export default function LoansAllSection({onOpenSummary, onEditLoan, onDeleteLoan
     const clearFilters = () => {
         setSearchDraft("");
         setStatusDraft("ALL");
-        setFromDraft("");
-        setToDraft("");
+        setFromDraft(defaultFrom);
+        setToDraft(defaultTo);
         setLoDraft("ALL");
         setOffset(0);
         setApplied({
             search: "",
             status: "",
-            disburse_from: "",
-            disburse_to: "",
+            disburse_from: defaultFrom,
+        disburse_to: defaultTo,
             lo_id: "",
         });
     };

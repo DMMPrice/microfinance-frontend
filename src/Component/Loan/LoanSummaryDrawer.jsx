@@ -16,6 +16,8 @@ import {
     useCollectLoanCharge,
 } from "@/hooks/useLoans";
 
+import {getUserCtx} from "@/lib/http.js";
+
 function money(n) {
     const x = Number(n || 0);
     return x.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
@@ -35,6 +37,11 @@ function canResume(status) {
 }
 
 export default function LoanSummaryDrawer({open, onOpenChange, loanId}) {
+    const userCtx = typeof getUserCtx === "function" ? getUserCtx() : {};
+    const role = String(userCtx?.role || "").toLowerCase();
+    const isLoanOfficer =
+        role === "loan_officer" || role === "loan officer" || role === "loan-officer";
+
     const {data, isLoading, isError, error} = useLoanSummary(loanId);
     const chargesQ = useLoanCharges(loanId);
 
@@ -44,7 +51,10 @@ export default function LoanSummaryDrawer({open, onOpenChange, loanId}) {
 
     const [collectOpenId, setCollectOpenId] = useState(null);
 
-    const charges = useMemo(() => (Array.isArray(chargesQ.data) ? chargesQ.data : []), [chargesQ.data]);
+    const charges = useMemo(
+        () => (Array.isArray(chargesQ.data) ? chargesQ.data : []),
+        [chargesQ.data]
+    );
 
     const pendingCharges = useMemo(() => {
         return charges.filter((c) => !c.is_collected && !c.is_waived && Number(c.amount || 0) > 0);
@@ -57,272 +67,222 @@ export default function LoanSummaryDrawer({open, onOpenChange, loanId}) {
                     <SheetTitle>Loan Summary</SheetTitle>
                 </SheetHeader>
 
-                {isLoading && (
-                    <div className="space-y-3 mt-4">
-                        <Skeleton className="h-6 w-2/3"/>
-                        <Skeleton className="h-24 w-full"/>
-                        <Skeleton className="h-24 w-full"/>
+                {isLoading ? (
+                    <div className="space-y-4 mt-4">
+                        <Skeleton className="h-6 w-40"/>
+                        <Skeleton className="h-20 w-full"/>
+                        <Skeleton className="h-20 w-full"/>
                     </div>
-                )}
-
-                {isError && (
+                ) : isError ? (
                     <div className="mt-4 text-sm text-destructive">
-                        {error?.response?.data?.detail || error?.message || "Failed to load summary"}
+                        {error?.response?.data?.detail || error?.message || "Failed to load loan summary"}
                     </div>
-                )}
-
-                {data && (
+                ) : !data ? (
+                    <div className="mt-4 text-sm text-muted-foreground">No loan data</div>
+                ) : (
                     <div className="mt-4 space-y-4">
-                        {/* Header */}
-                        <div className="flex items-start justify-between gap-3">
-                            <div>
-                                <div className="text-lg font-semibold">{data.loan_account_no}</div>
-                                <div className="text-sm text-muted-foreground">
-                                    {data.member_name} • {data.group_name}
+                        {/* Header summary */}
+                        <div className="rounded-xl border p-3 space-y-2">
+                            <div className="flex items-center justify-between gap-2">
+                                <div className="text-sm">
+                                    <div className="font-semibold">Loan #{data.loan_id}</div>
+                                    <div className="text-xs text-muted-foreground">
+                                        Account: {data.loan_account_no || "-"}
+                                    </div>
                                 </div>
-                            </div>
-
-                            <div className="flex items-center gap-2">
                                 <Badge variant="secondary">{data.status}</Badge>
                             </div>
                         </div>
 
                         {/* Pause/Resume actions */}
-                        <div className="flex flex-wrap items-center gap-2">
-                            <Button
-                                variant="outline"
-                                disabled={!canPause(data.status) || pauseMut.isPending}
-                                onClick={async () => {
-                                    try {
-                                        await pauseMut.mutateAsync({loan_id: data.loan_id, payload: {}});
-                                        toast({title: "Loan paused ✅"});
-                                    } catch (e) {
-                                        toast({
-                                            title: "Pause failed",
-                                            description: e?.response?.data?.detail || e?.message,
-                                            variant: "destructive",
-                                        });
-                                    }
-                                }}
-                            >
-                                {pauseMut.isPending ? "Pausing..." : "Pause"}
-                            </Button>
-
-                            <Button
-                                variant="outline"
-                                disabled={!canResume(data.status) || resumeMut.isPending}
-                                onClick={async () => {
-                                    try {
-                                        await resumeMut.mutateAsync({loan_id: data.loan_id, payload: {}});
-                                        toast({title: "Loan resumed ✅"});
-                                    } catch (e) {
-                                        toast({
-                                            title: "Resume failed",
-                                            description: e?.response?.data?.detail || e?.message,
-                                            variant: "destructive",
-                                        });
-                                    }
-                                }}
-                            >
-                                {resumeMut.isPending ? "Resuming..." : "Resume"}
-                            </Button>
-                        </div>
-
-                        {/* Summary KPIs */}
-                        <div className="grid grid-cols-2 gap-3">
-                            <K title="Principal" value={money(data.principal_amount)}/>
-                            <K title="Interest Total" value={money(data.interest_amount_total)}/>
-                            <K title="Total Disbursed" value={money(data.total_disbursed_amount)}/>
-                            <K title="Total Paid" value={money(data.total_paid)}/>
-                            <K title="Outstanding" value={money(data.outstanding)}/>
-                            <K title="Advance Balance" value={money(data.advance_balance)}/>
-                        </div>
-
-                        {/* Next installment */}
-                        <div className="rounded-lg border p-3">
-                            <div className="text-sm font-semibold">Next Installment</div>
-                            <div className="text-sm text-muted-foreground mt-1">
-                                Due Date: <span className="text-foreground">{data.next_due_date || "-"}</span>
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                                Due Amount:{" "}
-                                <span className="text-foreground">
-                  {data.next_due_amount != null ? money(data.next_due_amount) : "-"}
-                </span>
-                            </div>
-                        </div>
-
-                        {/* Charges section */}
-                        <div className="rounded-lg border p-3 space-y-3">
-                            <div className="flex items-center justify-between">
-                                <div className="text-sm font-semibold">Charges</div>
-                                {chargesQ.isLoading ? (
-                                    <span className="text-xs text-muted-foreground">Loading…</span>
-                                ) : (
-                                    <Badge variant="outline">
-                                        Pending: {pendingCharges.length}
-                                    </Badge>
-                                )}
-                            </div>
-
-                            {chargesQ.isError ? (
-                                <div className="text-sm text-destructive">
-                                    {chargesQ.error?.response?.data?.detail || chargesQ.error?.message || "Failed to load charges"}
-                                </div>
-                            ) : null}
-
-                            {charges.length === 0 && !chargesQ.isLoading ? (
-                                <div className="text-sm text-muted-foreground">No charges found.</div>
-                            ) : null}
-
-                            {/* Simple charges table */}
-                            {charges.length > 0 ? (
-                                <div className="border rounded-md overflow-hidden">
-                                    <table className="w-full text-sm">
-                                        <thead className="bg-muted/40">
-                                        <tr>
-                                            <th className="px-3 py-2 text-left">Type</th>
-                                            <th className="px-3 py-2 text-right">Amount</th>
-                                            <th className="px-3 py-2 text-center">Status</th>
-                                            <th className="px-3 py-2 text-right">Action</th>
-                                        </tr>
-                                        </thead>
-                                        <tbody>
-                                        {charges.map((c) => {
-                                            const collected = !!c.is_collected;
-                                            const waived = !!c.is_waived;
-                                            const disabled = collected || waived;
-
-                                            return (
-                                                <tr key={c.charge_id} className="border-t">
-                                                    <td className="px-3 py-2">{c.charge_type}</td>
-                                                    <td className="px-3 py-2 text-right">{money(c.amount)}</td>
-                                                    <td className="px-3 py-2 text-center">
-                                                        {collected ? (
-                                                            <Badge variant="secondary">COLLECTED</Badge>
-                                                        ) : waived ? (
-                                                            <Badge variant="outline">WAIVED</Badge>
-                                                        ) : (
-                                                            <Badge variant="destructive">PENDING</Badge>
-                                                        )}
-                                                    </td>
-                                                    <td className="px-3 py-2 text-right">
-                                                        <Button
-                                                            size="sm"
-                                                            variant="outline"
-                                                            disabled={disabled}
-                                                            onClick={() => setCollectOpenId(c.charge_id)}
-                                                        >
-                                                            Collect
-                                                        </Button>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            ) : null}
-
-                            {/* Inline collect form (minimal) */}
-                            {collectOpenId ? (
-                                <CollectChargeInline
-                                    charge={charges.find((x) => x.charge_id === collectOpenId)}
-                                    loading={collectMut.isPending}
-                                    onClose={() => setCollectOpenId(null)}
-                                    onSubmit={async (payload) => {
+                        {!isLoanOfficer ? (
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Button
+                                    variant="outline"
+                                    disabled={!canPause(data.status) || pauseMut.isPending}
+                                    onClick={async () => {
                                         try {
-                                            await collectMut.mutateAsync({
-                                                loan_id: data.loan_id,
-                                                charge_id: collectOpenId,
-                                                payload,
-                                            });
-                                            toast({title: "Charge collected ✅"});
-                                            setCollectOpenId(null);
+                                            await pauseMut.mutateAsync({loan_id: data.loan_id, payload: {}});
+                                            toast({title: "Loan paused ✅"});
                                         } catch (e) {
                                             toast({
-                                                title: "Collect failed",
+                                                title: "Pause failed",
                                                 description: e?.response?.data?.detail || e?.message,
                                                 variant: "destructive",
                                             });
                                         }
                                     }}
-                                />
-                            ) : null}
+                                >
+                                    {pauseMut.isPending ? "Pausing..." : "Pause"}
+                                </Button>
+
+                                <Button
+                                    variant="outline"
+                                    disabled={!canResume(data.status) || resumeMut.isPending}
+                                    onClick={async () => {
+                                        try {
+                                            await resumeMut.mutateAsync({loan_id: data.loan_id, payload: {}});
+                                            toast({title: "Loan resumed ✅"});
+                                        } catch (e) {
+                                            toast({
+                                                title: "Resume failed",
+                                                description: e?.response?.data?.detail || e?.message,
+                                                variant: "destructive",
+                                            });
+                                        }
+                                    }}
+                                >
+                                    {resumeMut.isPending ? "Resuming..." : "Resume"}
+                                </Button>
+                            </div>
+                        ) : (
+                            <div className="text-xs text-muted-foreground">
+                                Pause/Resume is not available for Loan Officer role.
+                            </div>
+                        )}
+
+                        {/* Summary KPIs */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="rounded-xl border p-3">
+                                <div className="text-xs text-muted-foreground">Principal</div>
+                                <div className="font-semibold">{money(data.principal_amount)}</div>
+                            </div>
+                            <div className="rounded-xl border p-3">
+                                <div className="text-xs text-muted-foreground">Outstanding</div>
+                                <div className="font-semibold">{money(data.outstanding_amount)}</div>
+                            </div>
+                            <div className="rounded-xl border p-3">
+                                <div className="text-xs text-muted-foreground">Paid</div>
+                                <div className="font-semibold">{money(data.total_paid)}</div>
+                            </div>
+                            <div className="rounded-xl border p-3">
+                                <div className="text-xs text-muted-foreground">Installment (weekly)</div>
+                                <div className="font-semibold">{money(data.installment_amount)}</div>
+                            </div>
+                        </div>
+
+                        {/* Charges section */}
+                        <div className="rounded-xl border p-3 space-y-3">
+                            <div className="flex items-center justify-between">
+                                <div className="font-semibold">Loan Charges</div>
+                                {chargesQ.isLoading ? (
+                                    <Skeleton className="h-5 w-20"/>
+                                ) : (
+                                    <Badge variant="secondary">
+                                        Pending: {pendingCharges.length}
+                                    </Badge>
+                                )}
+                            </div>
+
+                            {chargesQ.isLoading ? (
+                                <div className="space-y-2">
+                                    <Skeleton className="h-9 w-full"/>
+                                    <Skeleton className="h-9 w-full"/>
+                                </div>
+                            ) : chargesQ.isError ? (
+                                <div className="text-sm text-destructive">
+                                    {chargesQ.error?.response?.data?.detail ||
+                                        chargesQ.error?.message ||
+                                        "Failed to load charges"}
+                                </div>
+                            ) : charges.length === 0 ? (
+                                <div className="text-sm text-muted-foreground">No charges</div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {charges.map((c) => {
+                                        const isPending = !c.is_collected && !c.is_waived && Number(c.amount || 0) > 0;
+                                        return (
+                                            <div key={c.charge_id} className="rounded-lg border p-2">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <div className="text-sm">
+                                                        <div className="font-medium">
+                                                            {c.charge_name || c.charge_type || `Charge #${c.charge_id}`}
+                                                        </div>
+                                                        <div className="text-xs text-muted-foreground">
+                                                            Amount: ₹{money(c.amount)}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-2">
+                                                        {c.is_collected ? (
+                                                            <Badge variant="secondary">Collected</Badge>
+                                                        ) : c.is_waived ? (
+                                                            <Badge variant="secondary">Waived</Badge>
+                                                        ) : (
+                                                            <Badge variant="outline">Pending</Badge>
+                                                        )}
+
+                                                        {isPending ? (
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                disabled={collectMut.isPending}
+                                                                onClick={() => setCollectOpenId(c.charge_id)}
+                                                            >
+                                                                Collect
+                                                            </Button>
+                                                        ) : null}
+                                                    </div>
+                                                </div>
+
+                                                {collectOpenId === c.charge_id ? (
+                                                    <div className="mt-3 space-y-2">
+                                                        <Label className="text-xs">Payment date</Label>
+                                                        <Input
+                                                            type="datetime-local"
+                                                            defaultValue={toISODateTimeLocal()}
+                                                            onChange={(e) => {
+                                                                c._pay_dt = e.target.value;
+                                                            }}
+                                                        />
+
+                                                        <div className="flex items-center gap-2">
+                                                            <Button
+                                                                size="sm"
+                                                                onClick={async () => {
+                                                                    try {
+                                                                        await collectMut.mutateAsync({
+                                                                            loan_id: data.loan_id,
+                                                                            payload: {
+                                                                                charge_id: c.charge_id,
+                                                                                payment_date: c._pay_dt || toISODateTimeLocal(),
+                                                                            },
+                                                                        });
+                                                                        toast({title: "Charge collected ✅"});
+                                                                        setCollectOpenId(null);
+                                                                        chargesQ.refetch?.();
+                                                                    } catch (e) {
+                                                                        toast({
+                                                                            title: "Collect failed",
+                                                                            description: e?.response?.data?.detail || e?.message,
+                                                                            variant: "destructive",
+                                                                        });
+                                                                    }
+                                                                }}
+                                                                disabled={collectMut.isPending}
+                                                            >
+                                                                {collectMut.isPending ? "Collecting..." : "Confirm"}
+                                                            </Button>
+
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                onClick={() => setCollectOpenId(null)}
+                                                            >
+                                                                Cancel
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                ) : null}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
             </SheetContent>
         </Sheet>
-    );
-}
-
-function K({title, value}) {
-    return (
-        <div className="rounded-lg border p-3">
-            <div className="text-xs text-muted-foreground">{title}</div>
-            <div className="text-base font-semibold">{value}</div>
-        </div>
-    );
-}
-
-function CollectChargeInline({charge, loading, onClose, onSubmit}) {
-    const [mode, setMode] = useState("CASH");
-    const [receipt, setReceipt] = useState("");
-    const [remarks, setRemarks] = useState("");
-    const [amount, setAmount] = useState(() => String(charge?.amount ?? ""));
-
-    if (!charge) return null;
-
-    return (
-        <div className="rounded-md border bg-muted/10 p-3 space-y-3">
-            <div className="flex items-center justify-between">
-                <div className="text-sm font-semibold">
-                    Collect: {charge.charge_type} (₹{Number(charge.amount || 0)})
-                </div>
-                <Button size="sm" variant="ghost" onClick={onClose}>Close</Button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                    <Label>Amount Received</Label>
-                    <Input value={amount} onChange={(e) => setAmount(e.target.value)}/>
-                </div>
-
-                <div className="space-y-1">
-                    <Label>Payment Mode</Label>
-                    <Input value={mode} onChange={(e) => setMode(e.target.value)} placeholder="CASH / UPI / BANK"/>
-                </div>
-
-                <div className="space-y-1">
-                    <Label>Receipt No</Label>
-                    <Input value={receipt} onChange={(e) => setReceipt(e.target.value)}/>
-                </div>
-
-                <div className="space-y-1">
-                    <Label>Remarks</Label>
-                    <Input value={remarks} onChange={(e) => setRemarks(e.target.value)}/>
-                </div>
-            </div>
-
-            <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={onClose}>Cancel</Button>
-                <Button
-                    disabled={loading}
-                    onClick={() =>
-                        onSubmit({
-                            charge_type: charge.charge_type,
-                            payment_date: toISODateTimeLocal(),
-                            amount_received: Number(amount || 0),
-                            payment_mode: mode,
-                            receipt_no: receipt || null,
-                            remarks: remarks || null,
-                        })
-                    }
-                >
-                    {loading ? "Collecting..." : "Collect"}
-                </Button>
-            </div>
-        </div>
     );
 }

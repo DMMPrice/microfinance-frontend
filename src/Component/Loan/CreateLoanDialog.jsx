@@ -11,13 +11,6 @@ import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {Label} from "@/components/ui/label";
 import {Skeleton} from "@/components/ui/skeleton";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
 
 import {useCreateLoan} from "@/hooks/useLoans";
 import {apiClient} from "@/hooks/useApi.js";
@@ -27,6 +20,8 @@ import PreviewScheduleDialog from "./PreviewScheduleDialog";
 import {useBranches} from "@/hooks/useBranches";
 import {useGroups} from "@/hooks/useGroups";
 import {useMembers} from "@/hooks/useMembers";
+
+import SearchableSelect from "@/Utils/SearchableSelect";
 
 import {
     todayISO,
@@ -207,6 +202,21 @@ export default function CreateLoanDialog({open, onOpenChange}) {
     // ✅ hook already returns scoped groups; no manual filtering needed
     const visibleGroups = useMemo(() => (Array.isArray(groups) ? groups : []), [groups]);
 
+    // ✅ Group options for SearchableSelect
+    const groupOptions = useMemo(() => {
+        return (visibleGroups || []).map((g) => {
+            const bid = g.branch_id ?? g.branchId;
+            const bName = branchNameById[String(bid)] || (bid ? `Branch-${bid}` : "Branch");
+            const gName = g.group_name || `Group-${g.group_id}`;
+
+            return {
+                value: String(g.group_id),
+                label: `${bName} — ${gName}`,
+                keywords: `${bName} ${gName} ${g.group_id} ${bid || ""}`.trim(),
+            };
+        });
+    }, [visibleGroups, branchNameById]);
+
     const memberOptions = useMemo(() => {
         const gid = form.group_id ? String(form.group_id) : "";
         const list = (members || []).filter((m) => (!gid ? true : String(m.group_id) === gid));
@@ -225,11 +235,13 @@ export default function CreateLoanDialog({open, onOpenChange}) {
             const phone = m.phone ? `${m.phone}` : "";
             return {
                 value: String(m.member_id),
-                label: `${gName} — ${name} - ${phone}`,
+                label: `${gName} — ${name}${phone ? ` - ${phone}` : ""}`,
+                keywords: `${gName} ${name} ${phone} ${m.member_id}`.trim(),
             };
         });
     }, [members, form.group_id, groupNameById]);
 
+    // Reset member when group changes
     useEffect(() => {
         setForm((p) => ({...p, member_id: ""}));
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -465,6 +477,7 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                                 )}
                             </div>
 
+                            {/* ✅ GROUP (SearchableSelect) */}
                             <div className="space-y-2">
                                 <Label>Group</Label>
                                 {(gLoading || bLoading) ? (
@@ -472,36 +485,25 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                                 ) : (gErr || bErr) ? (
                                     <div className="text-sm text-destructive">{gErr || bErr}</div>
                                 ) : (
-                                    <Select
-                                        value={form.group_id ? String(form.group_id) : ""}
-                                        onValueChange={(v) => setForm((p) => ({...p, group_id: v}))}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select Group"/>
-                                        </SelectTrigger>
-                                        <SelectContent className="max-h-72 overflow-y-auto" position="popper">
-                                            {visibleGroups.length === 0 ? (
-                                                <div className="px-3 py-2 text-sm text-muted-foreground">
-                                                    No groups available for your scope
-                                                </div>
-                                            ) : (
-                                                visibleGroups.map((g) => {
-                                                    const bid = g.branch_id ?? g.branchId;
-                                                    const bName =
-                                                        branchNameById[String(bid)] ||
-                                                        (bid ? `Branch-${bid}` : "Branch");
-                                                    return (
-                                                        <SelectItem key={g.group_id} value={String(g.group_id)}>
-                                                            {bName} — {g.group_name}
-                                                        </SelectItem>
-                                                    );
-                                                })
-                                            )}
-                                        </SelectContent>
-                                    </Select>
+                                    <div className="space-y-2">
+                                        <SearchableSelect
+                                            value={form.group_id ? String(form.group_id) : ""}
+                                            onValueChange={(v) => setForm((p) => ({...p, group_id: v}))}
+                                            options={groupOptions}
+                                            placeholder="Select Group"
+                                            searchPlaceholder="Search group..."
+                                        />
+
+                                        {visibleGroups.length === 0 && (
+                                            <div className="text-xs text-muted-foreground">
+                                                No groups available for your scope
+                                            </div>
+                                        )}
+                                    </div>
                                 )}
                             </div>
 
+                            {/* ✅ MEMBER (SearchableSelect) */}
                             <div className="space-y-2">
                                 <Label>Member</Label>
                                 {mLoading ? (
@@ -509,29 +511,22 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                                 ) : mErr ? (
                                     <div className="text-sm text-destructive">{mErr}</div>
                                 ) : (
-                                    <Select
-                                        value={form.member_id ? String(form.member_id) : ""}
-                                        onValueChange={(v) => setForm((p) => ({...p, member_id: v}))}
-                                        disabled={!form.group_id}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue
-                                                placeholder={form.group_id ? "Select Member" : "Select Group first"}/>
-                                        </SelectTrigger>
-                                        <SelectContent className="max-h-72 overflow-y-auto" position="popper">
-                                            {memberOptions.length === 0 ? (
-                                                <div className="px-3 py-2 text-sm text-muted-foreground">
-                                                    No members found for this group
-                                                </div>
-                                            ) : (
-                                                memberOptions.map((o) => (
-                                                    <SelectItem key={o.value} value={o.value}>
-                                                        {o.label}
-                                                    </SelectItem>
-                                                ))
-                                            )}
-                                        </SelectContent>
-                                    </Select>
+                                    <div className="space-y-2">
+                                        <SearchableSelect
+                                            value={form.member_id ? String(form.member_id) : ""}
+                                            onValueChange={(v) => setForm((p) => ({...p, member_id: v}))}
+                                            options={memberOptions}
+                                            placeholder={form.group_id ? "Select Member" : "Select Group first"}
+                                            searchPlaceholder="Search member..."
+                                            disabled={!form.group_id}
+                                        />
+
+                                        {form.group_id && memberOptions.length === 0 && (
+                                            <div className="text-xs text-muted-foreground">
+                                                No members found for this group
+                                            </div>
+                                        )}
+                                    </div>
                                 )}
                             </div>
 
@@ -555,14 +550,17 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                                         <Input value={form.annual_interest_percent} disabled/>
                                         <div className="text-xs text-muted-foreground">
                                             Weekly rate:{" "}
-                                            <span
-                                                className="font-medium text-foreground">{calc.weeklyInterestPercent || 0}%</span>
+                                            <span className="font-medium text-foreground">
+                                                {calc.weeklyInterestPercent || 0}%
+                                            </span>
                                             {" "}· Total Interest:{" "}
-                                            <span
-                                                className="font-medium text-foreground">{calc.totalInterestAmount || 0}</span>
+                                            <span className="font-medium text-foreground">
+                                                {calc.totalInterestAmount || 0}
+                                            </span>
                                             {" "}· Weekly Installment:{" "}
-                                            <span
-                                                className="font-medium text-foreground">{calc.installmentPerWeek || 0}</span>
+                                            <span className="font-medium text-foreground">
+                                                {calc.installmentPerWeek || 0}
+                                            </span>
                                         </div>
                                     </>
                                 )}
@@ -604,10 +602,13 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                         <div className="mt-4 flex items-center justify-between gap-2">
                             <div className="text-sm text-muted-foreground">
                                 Preview schedule from{" "}
-                                <span
-                                    className="font-medium text-foreground">{form.first_installment_date || "-"}</span>
+                                <span className="font-medium text-foreground">
+                                    {form.first_installment_date || "-"}
+                                </span>
                                 {" "}· Charges collected on{" "}
-                                <span className="font-medium text-foreground">{form.disburse_date || "-"}</span>
+                                <span className="font-medium text-foreground">
+                                    {form.disburse_date || "-"}
+                                </span>
                             </div>
 
                             <Button
