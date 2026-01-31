@@ -56,9 +56,9 @@ export function useMembers(filters = {}) {
             filters?.branchId ??
             (isBM ? profileBranchId : null),
 
-        lo_id:
-            filters?.lo_id ??
-            filters?.loId ??
+        employee_id:
+            filters?.employee_id ??
+            filters?.employee_id ??
             (isLO ? profileUserId : null),
 
         group_id:

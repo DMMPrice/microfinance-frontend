@@ -16,6 +16,28 @@ import {buildMaps, getMemberInfo, filterMemberRows} from "@/Component/Members/me
 export default function MemberManagement({groups = [], branches = [], officers = [], regions = []}) {
     const {toast} = useToast();
 
+
+    // ✅ Role-based permission: loan_officer can view table but cannot add members
+    const role = useMemo(() => {
+        const tryParse = (k) => {
+            try {
+                const raw = localStorage.getItem(k);
+                return raw ? JSON.parse(raw) : null;
+            } catch {
+                return null;
+            }
+        };
+
+        // Common keys used across the app
+        const ud = tryParse("userData");
+        const u = tryParse("user");
+
+        return (ud?.role || u?.role || "").toString().toLowerCase();
+    }, []);
+
+    const isLoanOfficer = role === "loan_officer";
+
+
     const {
         members = [],
         isLoading,
@@ -231,7 +253,12 @@ export default function MemberManagement({groups = [], branches = [], officers =
                     <CardDescription>Create and manage members (borrowers)</CardDescription>
                 </div>
 
-                <Button size="lg" disabled={groups.length === 0} onClick={openCreate}>
+                <Button
+                    size="lg"
+                    disabled={groups.length === 0 || isLoanOfficer}
+                    onClick={openCreate}
+                    title={isLoanOfficer ? "Add permission restricted for Loan Officer" : "Add Member"}
+                >
                     <Plus className="mr-2 h-5 w-5"/>
                     Add Member
                 </Button>
