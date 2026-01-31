@@ -386,27 +386,24 @@ export default function CollectionEntryPage() {
     }
 
     /* -------------------- table renderer (re-used) -------------------- */
-    function RenderGroupTable({items}) {
+    /* -------------------- table renderer (re-used) -------------------- */
+    const renderGroupTable = (items) => {
         // ✅ Excel-style totals row (under columns)
-        const totals = useMemo(() => {
-            let dueTotal = 0;
-            let enteredTotal = 0;
-            let submittedTotal = 0;
+        let dueTotal = 0;
+        let enteredTotal = 0;
+        let submittedTotal = 0;
 
-            for (const r of items || []) {
-                const k = `${r.installment_no}:${r.loan_id}`;
-                const f = rowForm[k] || {};
-                const due = Number(r.due_left ?? 0);
-                const entered = Number(f.amount_received ?? 0);
-                const isDone = !!posted[k];
+        for (const r of items || []) {
+            const k = `${r.installment_no}:${r.loan_id}`;
+            const f = rowForm[k] || {};
+            const due = Number(r.due_left ?? 0);
+            const entered = Number(f.amount_received ?? 0);
+            const isDone = !!posted[k];
 
-                dueTotal += Number.isFinite(due) ? due : 0;
-                enteredTotal += Number.isFinite(entered) ? entered : 0;
-                if (isDone) submittedTotal += Number.isFinite(entered) ? entered : 0;
-            }
-
-            return { dueTotal, enteredTotal, submittedTotal };
-        }, [items, rowForm, posted]);
+            dueTotal += Number.isFinite(due) ? due : 0;
+            enteredTotal += Number.isFinite(entered) ? entered : 0;
+            if (isDone) submittedTotal += Number.isFinite(entered) ? entered : 0;
+        }
 
         return (
             <div className="w-full overflow-x-auto">
@@ -427,7 +424,7 @@ export default function CollectionEntryPage() {
                     </thead>
 
                     <tbody>
-                    {items.map((r) => {
+                    {(items || []).map((r) => {
                         const key = `${r.installment_no}:${r.loan_id}`;
                         const f = rowForm[key] || {};
                         const isPosting = !!posting[key];
@@ -469,16 +466,27 @@ export default function CollectionEntryPage() {
 
                                                 // if user typed invalid char -> keep cleaned, warn
                                                 if (cleaned !== raw) {
-                                                    setAmountError(key, "Only numbers are allowed.");
+                                                    setAmountError(key, "Only numbers and dot allowed");
                                                 } else {
                                                     setAmountError(key, "");
+                                                }
+
+                                                // validate max
+                                                const max = Number(r.due_left ?? 0);
+                                                const n = Number(cleaned);
+                                                if (Number.isFinite(max) && Number.isFinite(n) && n > max) {
+                                                    setAmountError(key, `Max ${max.toFixed(2)}`);
+                                                } else {
+                                                    // clear max error only if it was max error
+                                                    if ((amountErrors[key] || "").startsWith("Max ")) setAmountError(key, "");
                                                 }
 
                                                 updateForm(key, { amount_received: cleaned });
                                             }}
                                             placeholder="0.00"
-                                            disabled={isDone}
+                                            disabled={isDone || isPosting || collectAllRunning}
                                         />
+
                                         {amountErrors[key] ? (
                                             <div className="text-xs text-red-600">{amountErrors[key]}</div>
                                         ) : null}
@@ -487,19 +495,17 @@ export default function CollectionEntryPage() {
 
                                 <td className="p-2 border">
                                     <Select
-                                        value={f.payment_mode || "CASH"}
-                                        onValueChange={(v) => updateForm(key, {payment_mode: v})}
-                                        disabled={isDone}
+                                        value={f.mode || "CASH"}
+                                        onValueChange={(v) => updateForm(key, { mode: v })}
+                                        disabled={isDone || isPosting || collectAllRunning}
                                     >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Mode"/>
+                                        <SelectTrigger className="h-9">
+                                            <SelectValue placeholder="Select mode" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {MODE_OPTIONS.map((m) => (
-                                                <SelectItem key={m} value={m}>
-                                                    {m}
-                                                </SelectItem>
-                                            ))}
+                                            <SelectItem value="CASH">CASH</SelectItem>
+                                            <SelectItem value="UPI">UPI</SelectItem>
+                                            <SelectItem value="BANK">BANK</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </td>
@@ -507,33 +513,37 @@ export default function CollectionEntryPage() {
                                 <td className="p-2 border">
                                     <Input
                                         value={f.receipt_no ?? ""}
-                                        onChange={(e) => updateForm(key, {receipt_no: e.target.value})}
-                                        placeholder="Receipt"
-                                        disabled={isDone}
+                                        onChange={(e) => updateForm(key, { receipt_no: e.target.value })}
+                                        placeholder="Receipt No"
+                                        disabled={isDone || isPosting || collectAllRunning}
                                     />
                                 </td>
 
                                 <td className="p-2 border">
                                     <Input
                                         type="datetime-local"
-                                        value={f.payment_date ?? ""}
-                                        onChange={(e) => updateForm(key, {payment_date: e.target.value})}
-                                        disabled={isDone}
+                                        value={f.collected_at ?? ""}
+                                        onChange={(e) => updateForm(key, { collected_at: e.target.value })}
+                                        disabled={isDone || isPosting || collectAllRunning}
                                     />
                                 </td>
 
                                 <td className="p-2 border">
                                     <Input
                                         value={f.remarks ?? ""}
-                                        onChange={(e) => updateForm(key, {remarks: e.target.value})}
+                                        onChange={(e) => updateForm(key, { remarks: e.target.value })}
                                         placeholder="Remarks"
-                                        disabled={isDone}
+                                        disabled={isDone || isPosting || collectAllRunning}
                                     />
                                 </td>
 
-                                <td className="p-2 border text-center">
+                                <td className="p-2 border">
                                     <div className="flex items-center justify-center gap-2">
-                                        <Button size="sm" onClick={() => submitRow(r)} disabled={isPosting || isDone || collectAllRunning}>
+                                        <Button
+                                            size="sm"
+                                            onClick={() => submitRow(r)}
+                                            disabled={isDone || isPosting || collectAllRunning}
+                                        >
                                             {isDone ? (
                                                 <>
                                                     <CheckCircle2 className="h-4 w-4"/>
@@ -567,25 +577,25 @@ export default function CollectionEntryPage() {
                             </tr>
                         );
                     })}
-                    
+
                     {/* ✅ Totals row (Excel-style) */}
                     <tr className="bg-muted/40 font-semibold border-t">
                         <td className="p-2 border">TOTAL</td>
                         <td className="p-2 border" />
                         <td className="p-2 border" />
-                        <td className="p-2 border text-right">{totals.dueTotal.toFixed(2)}</td>
-                        <td className="p-2 border text-right">{totals.enteredTotal.toFixed(2)}</td>
+                        <td className="p-2 border text-right">{dueTotal.toFixed(2)}</td>
+                        <td className="p-2 border text-right">{enteredTotal.toFixed(2)}</td>
                         <td className="p-2 border" />
                         <td className="p-2 border" />
                         <td className="p-2 border" />
                         <td className="p-2 border" />
-                        <td className="p-2 border text-right">{totals.submittedTotal.toFixed(2)}</td>
+                        <td className="p-2 border text-right">{submittedTotal.toFixed(2)}</td>
                     </tr>
 </tbody>
                 </table>
             </div>
         );
-    }
+    };
 
     return (
         <div className="space-y-4">
@@ -732,7 +742,7 @@ export default function CollectionEntryPage() {
                                     </AccordionTrigger>
 
                                     <AccordionContent>
-                                        <RenderGroupTable items={g.items}/>
+                                        {renderGroupTable(g.items)}
                                     </AccordionContent>
                                 </AccordionItem>
                             ))}
@@ -772,7 +782,7 @@ export default function CollectionEntryPage() {
 
                     <div className="max-h-[75vh] overflow-auto pr-1">
                         {selectedGroup ? (
-                            <RenderGroupTable items={selectedGroup.items}/>
+                            renderGroupTable(selectedGroup.items)
                         ) : (
                             <p className="text-sm text-muted-foreground">No group selected.</p>
                         )}

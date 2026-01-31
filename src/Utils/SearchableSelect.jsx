@@ -42,7 +42,12 @@ export default function SearchableSelect({
     }, [options, value]);
 
     return (
-        <Popover open={open} onOpenChange={setOpen}>
+        // ✅ Important for Dialog usage:
+        // Radix Dialog is modal + scroll-locked. PopoverContent renders in a Portal
+        // (outside the DialogContent DOM tree), so mouse-wheel scrolling can get
+        // captured by the Dialog overlay.
+        // Setting modal={false} ensures the dropdown can receive wheel events.
+        <Popover modal={false} open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
                 <Button
                     type="button"
@@ -63,13 +68,15 @@ export default function SearchableSelect({
                 className="w-[--radix-popover-trigger-width] p-0"
                 align="start"
                 sideOffset={5}
+                // Prevent wheel/touch scroll from bubbling to the Dialog overlay
+                onWheelCapture={(e) => e.stopPropagation()}
             >
                 <Command>
                     <CommandInput placeholder={searchPlaceholder} />
 
                     <CommandList
-                        style={{ maxHeight: "256px", overflowY: "auto" }}
-                        className="overflow-x-hidden"
+                        // ✅ Dedicated scroll container for long option lists
+                        className="max-h-64 overflow-y-auto overflow-x-hidden"
                     >
                         <CommandEmpty>No results found.</CommandEmpty>
 
