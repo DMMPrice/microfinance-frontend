@@ -51,6 +51,34 @@ function todayYYYYMMDD() {
     return `${yyyy}-${mm}-${dd}`;
 }
 
+
+function isOverdueDate(dueDateLike) {
+    // Overdue = due date strictly before today (local)
+    if (!dueDateLike) return false;
+
+    // Try native Date parsing first (supports ISO strings)
+    let d = new Date(dueDateLike);
+
+    // Fallback for plain 'YYYY-MM-DD'
+    if (Number.isNaN(d.getTime())) {
+        const s = String(dueDateLike).trim();
+        const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (m) {
+            const yyyy = Number(m[1]);
+            const mm = Number(m[2]);
+            const dd = Number(m[3]);
+            d = new Date(yyyy, mm - 1, dd);
+        }
+    }
+
+    if (Number.isNaN(d.getTime())) return false;
+
+    const dueStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    return dueStart < todayStart;
+}
+
 const MODE_OPTIONS = ["CASH", "UPI", "BANK", "CARD", "OTHER"];
 
 /** ✅ CSV helpers */
@@ -435,11 +463,28 @@ export default function CollectionEntryPage() {
                                 <td className="p-2 border">
                                     <div className="font-medium">{r.member_name}</div>
                                     <div className="text-xs text-muted-foreground">
-                                        Loan A/c:{" "}
-                                        <span className="font-medium">
-                        {r.loan_account_no || `#${r.loan_id}`}
-                      </span>{" "}
-                                        • Advance: {Number(r.advance_balance || 0).toFixed(2)}
+                                        {(() => {
+                                            const overdue = isOverdueDate(r.due_date || r.installment_due_date);
+                                            const accNo = r.loan_account_no || `#${r.loan_id}`;
+
+                                            return (
+                                                <>
+                                                    Loan A/c:{" "}
+                                                    <span className="inline-flex items-center gap-2">
+                                                        {overdue && (
+                                                            <span className="relative flex h-3 w-3">
+                                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75" />
+                                                                <span className="relative inline-flex h-3 w-3 rounded-full bg-red-600" />
+                                                            </span>
+                                                        )}
+                                                        <span className={overdue ? "text-red-600 font-semibold" : "font-medium"}>
+                                                            {accNo}
+                                                        </span>
+                                                    </span>{" "}
+                                                    • Advance: {Number(r.advance_balance || 0).toFixed(2)}
+                                                </>
+                                            );
+                                        })()}
                                     </div>
                                 </td>
 

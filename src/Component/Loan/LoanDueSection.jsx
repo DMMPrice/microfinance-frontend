@@ -31,6 +31,32 @@ function todayLocalISODate() {
     return `${yyyy}-${mm}-${dd}`;
 }
 
+function isOverdueDate(dueDateLike) {
+    // Overdue = due date strictly before today (local)
+    if (!dueDateLike) return false;
+
+    // Try native Date parsing first (supports ISO strings)
+    let d = new Date(dueDateLike);
+
+    // Fallback for plain 'YYYY-MM-DD' (safest in browsers)
+    if (Number.isNaN(d.getTime())) {
+        const s = String(dueDateLike).trim();
+        const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (m) {
+            const yyyy = Number(m[1]);
+            const mm = Number(m[2]);
+            const dd = Number(m[3]);
+            d = new Date(yyyy, mm - 1, dd);
+        }
+    }
+
+    if (Number.isNaN(d.getTime())) return false;
+
+    const dueStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    return dueStart < todayStart;
+}
 
 function getAmountDue(row) {
     if (!row) return null;
@@ -156,7 +182,6 @@ export default function LoanDueSection({onOpenSummary}) {
         setAsOnApplied(t);
     }, []);
 
-
     const loQ = useLoanOfficers();
     const dueQ = useDueInstallments(asOnApplied);
 
@@ -176,15 +201,7 @@ export default function LoanDueSection({onOpenSummary}) {
         return [];
     }, [dueQ.data]);
 
-    // ✅ Loan officer dropdown options:
-    // - super_admin/admin: ALL loan officers
-    // - regional_manager: loan officers in same region_id
-    // - branch_manager: loan officers in same branch_id
-    // - loan_officer: only LOs present in due rows (keeps it relevant)
-    //
-    // Also: Sort by branch_id then name (for master list).
     const loOptions = useMemo(() => {
-        // MASTER list path
         if (useMasterLOList) {
             const list = (loQ.loanOfficers || []).filter((x) => {
                 const emp = x?.employee || {};
@@ -194,12 +211,12 @@ export default function LoanDueSection({onOpenSummary}) {
                 if (role === "super_admin" || role === "admin") return true;
 
                 if (role === "regional_manager") {
-                    if (ctxRegionId == null) return true; // fail-open if profile missing
+                    if (ctxRegionId == null) return true;
                     return loRegionId === ctxRegionId;
                 }
 
                 if (role === "branch_manager") {
-                    if (ctxBranchId == null) return true; // fail-open if profile missing
+                    if (ctxBranchId == null) return true;
                     return loBranchId === ctxBranchId;
                 }
 
@@ -224,7 +241,6 @@ export default function LoanDueSection({onOpenSummary}) {
                 .map(({_branchSort, ...rest}) => rest);
         }
 
-        // DUE-rows path (loan_officer)
         const ids = new Set(
             (rows || [])
                 .map((r) => r.lo_id ?? r.loan_officer_id)
@@ -242,10 +258,9 @@ export default function LoanDueSection({onOpenSummary}) {
             .map(({_branchSort, ...rest}) => rest);
     }, [useMasterLOList, loQ.loanOfficers, rows, loNameMap, role, ctxBranchId, ctxRegionId]);
 
-    // ✅ If selected LO disappears (date change, refresh, role filter) → reset
     useEffect(() => {
         if (loDraft === "ALL") return;
-        const exists = loOptions.some((o) => String(o.lo_id) === String(loDraft));
+        const exists = loOptions.some((o) => String(o.lo_id) === String(o.loDraft));
         if (!exists) setLoDraft("ALL");
     }, [loDraft, loOptions]);
 
@@ -276,10 +291,30 @@ export default function LoanDueSection({onOpenSummary}) {
 
     const columns = useMemo(
         () => [
+            // ✅ UPDATED: blinking dot BEFORE Loan A/C No (based on due date)
             {
                 key: "loan_account_no",
                 header: "Loan A/C No",
-                cell: (r) => <div className="font-medium">{r.loan_account_no ?? "-"}</div>,
+                cell: (r) => {
+                    const due = r.due_date ?? r.installment_due_date;
+                    const overdue = isOverdueDate(due);
+
+                    return (
+                        <div className="flex items-center justify-center gap-2 font-medium">
+                            {overdue && (
+                                <span className="relative flex h-3 w-3">
+                                    <span
+                                        className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"/>
+                                    <span
+                                        className="relative inline-flex h-3 w-3 rounded-full bg-red-600"/>
+                                </span>
+                            )}
+                            <span className={overdue ? "text-red-600 font-semibold" : ""}>
+                                {r.loan_account_no ?? "-"}
+                            </span>
+                        </div>
+                    );
+                },
             },
             {
                 key: "member_name",
