@@ -1,16 +1,10 @@
 // src/hooks/useGroups.js
 import {useQuery, useMutation, useQueryClient} from "@tanstack/react-query";
-import {api} from "@/lib/http.js"; // axios instance with auth header
+import {api, getUserCtx} from "@/lib/http.js"; // axios instance + user ctx
 
 const GROUPS_KEY = ["groups"];
 
-function getProfileDataSafe() {
-    try {
-        return JSON.parse(localStorage.getItem("profileData") || "{}");
-    } catch {
-        return {};
-    }
-}
+const normalizeRole = (r) => String(r ?? "").trim().toLowerCase();
 
 /**
  * useGroups(filters)
@@ -27,19 +21,22 @@ function getProfileDataSafe() {
  */
 export function useGroups(filters = {}) {
     const queryClient = useQueryClient();
-    const profile = getProfileDataSafe();
 
-    const role = String(profile?.role ?? "").trim().toLowerCase();
+    // ✅ Use centralized ctx builder (authData + profileData)
+    const ctx = getUserCtx();
+    const profile = ctx?.profileData ?? {};
 
-    const profileRegionId = profile?.region_id ?? profile?.regionId ?? null;
-    const profileBranchId = profile?.branch_id ?? profile?.branchId ?? null;
+    const role = normalizeRole(ctx?.role ?? profile?.role);
+
+    const profileRegionId = ctx?.regionId ?? profile?.region_id ?? profile?.regionId ?? null;
+    const profileBranchId = ctx?.branchId ?? profile?.branch_id ?? profile?.branchId ?? null;
 
     // employee_id (backend maps user_id -> loan_officers.employee_id)
-    const profileUserId = profile?.user_id ?? profile?.userId ?? null;
+    const profileUserId = profile?.user_id ?? profile?.userId ?? ctx?.userId ?? null;
 
-    const isRM = role === "regional_manager";
-    const isBM = role === "branch_manager";
-    const isLO = role === "loan_officer";
+    const isRM = ["regional_manager", "regional manager", "rm"].includes(role);
+    const isBM = ["branch_manager", "branch manager", "bm"].includes(role);
+    const isLO = ["loan_officer", "loan officer", "lo"].includes(role);
 
     // caller filters (accept both snake_case and camelCase)
     const fRegion = filters?.region_id ?? filters?.regionId ?? null;

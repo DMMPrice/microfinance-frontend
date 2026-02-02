@@ -1,6 +1,6 @@
 // src/hooks/useBranches.js
 import {useQuery, useMutation, useQueryClient} from "@tanstack/react-query";
-import {api} from "@/lib/http.js";
+import {api, getUserCtx} from "@/lib/http.js";
 import {useMemo} from "react";
 
 const BRANCHES_KEY = ["branches"];
@@ -8,29 +8,16 @@ const BRANCHES_KEY = ["branches"];
 const normalizeRole = (r) => String(r ?? "").trim().toLowerCase();
 const toKey = (v) => (v == null ? null : String(v)); // ✅ normalize ids
 
-function getProfileDataSafe() {
-    try {
-        return JSON.parse(localStorage.getItem("profileData") || "{}");
-    } catch {
-        return {};
-    }
-}
-
 export function useBranches(regionId = null) {
     const queryClient = useQueryClient();
 
-    const profile = getProfileDataSafe();
-    const role = normalizeRole(profile?.role);
+    // ✅ Use centralized ctx builder (authData + profileData)
+    const ctx = getUserCtx();
+    const profile = ctx?.profileData ?? {};
+    const role = normalizeRole(ctx?.role ?? profile?.role);
 
-    const profileRegionId =
-        profile?.region_id ??
-        profile?.regionId ??
-        null;
-
-    const profileBranchId =
-        profile?.branch_id ??
-        profile?.branchId ??
-        null;
+    const profileRegionId = ctx?.regionId ?? profile?.region_id ?? profile?.regionId ?? null;
+    const profileBranchId = ctx?.branchId ?? profile?.branch_id ?? profile?.branchId ?? null;
 
     const isRegionalManager = ["regional_manager", "regional manager", "rm"].includes(role);
     const isBranchManager = ["branch_manager", "branch manager", "bm"].includes(role);

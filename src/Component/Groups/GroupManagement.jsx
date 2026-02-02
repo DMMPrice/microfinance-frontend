@@ -9,7 +9,7 @@ import {
     CardTitle,
 } from "@/components/ui/card.tsx";
 import {Badge} from "@/components/ui/badge.tsx";
-import {Pencil, Trash2} from "lucide-react";
+import {Pencil, Trash2, ArrowUpDown} from "lucide-react";
 import {useToast} from "@/hooks/use-toast.ts";
 
 import {useGroups} from "@/hooks/useGroups.js";
@@ -32,6 +32,7 @@ import {
 
 import CreateGroupDialog from "./CreateGroupDialog.jsx";
 import EditGroupDialog from "./EditGroupDialog.jsx";
+import GroupsKpiRow from "./GroupsKpiRow.jsx";
 import {getISTWeekday} from "@/Helpers/dateTimeIST.js";
 
 const DAYS = [
@@ -57,6 +58,9 @@ export default function GroupManagement() {
     // ✅ edit dialog state
     const [editOpen, setEditOpen] = useState(false);
     const [selectedGroup, setSelectedGroup] = useState(null);
+
+    // ✅ controlled sort state for AdvancedTable
+    const [tableSort, setTableSort] = useState({key: "meeting_day", dir: "asc"});
 
     const {toast} = useToast();
 
@@ -166,33 +170,27 @@ export default function GroupManagement() {
         return [];
     }, [groups, isAdmin, isLO, isBM, isRM, myLoId, myBranchId, myRegionId]);
 
-    // ✅ default sort by meeting day
-    const sortedGroups = useMemo(() => {
-        const arr = Array.isArray(roleScopedGroups) ? [...roleScopedGroups] : [];
-        arr.sort((a, b) => {
-            const da = dayIndex(a?.meeting_day);
-            const db = dayIndex(b?.meeting_day);
-            if (da !== db) return da - db;
-            return String(a?.group_name || "").localeCompare(String(b?.group_name || ""));
-        });
-        return arr;
-    }, [roleScopedGroups]);
-
     /* =========================
-       ✅ Create dialog LO list
+       ✅ FIX: eligibleLoanOfficersForCreate (MISSING BEFORE)
     ========================= */
     const eligibleLoanOfficersForCreate = useMemo(() => {
         const list = loanOfficers || [];
+
+        // Branch Manager: only same branch officers
         if (isBM && myBranchId != null) {
             return list.filter(
                 (lo) => String(lo.employee?.branch_id) === String(myBranchId)
             );
         }
+
+        // Regional Manager: only same region officers
         if (isRM && myRegionId != null) {
             return list.filter(
                 (lo) => String(lo.employee?.region_id) === String(myRegionId)
             );
         }
+
+        // Admin/others: all
         return list;
     }, [loanOfficers, isBM, isRM, myBranchId, myRegionId]);
 
@@ -218,7 +216,8 @@ export default function GroupManagement() {
         } catch (err) {
             toast({
                 title: "Failed to delete group",
-                description: err?.response?.data?.detail || err?.message || "Unexpected error",
+                description:
+                    err?.response?.data?.detail || err?.message || "Unexpected error",
                 variant: "destructive",
             });
         }
@@ -236,12 +235,16 @@ export default function GroupManagement() {
     const headerCenter = "text-center";
     const tdCenter = "text-center align-middle";
 
-    // ✅ IMPORTANT: padding applied INSIDE cell content (works even if AdvancedTable ignores tdClassName)
-    const CELL_PAD = "px-5 py-4"; // increase/decrease here
+    // ✅ padding applied INSIDE cell content
+    const CELL_PAD = "px-5 py-4";
     const CELL_WRAP = (row) =>
-        `w-full ${CELL_PAD} flex justify-center items-center text-center ${highlightCell(row)}`;
+        `w-full ${CELL_PAD} flex justify-center items-center text-center ${highlightCell(
+            row
+        )}`;
     const CELL_WRAP_GAP = (row) =>
-        `w-full ${CELL_PAD} flex justify-center items-center text-center gap-2 ${highlightCell(row)}`;
+        `w-full ${CELL_PAD} flex justify-center items-center text-center gap-2 ${highlightCell(
+            row
+        )}`;
 
     /* =========================
        ✅ Columns
@@ -257,9 +260,11 @@ export default function GroupManagement() {
                 tdClassName: () => tdCenter,
                 cell: (row) => (
                     <div className={CELL_WRAP(row)}>
-            <span className={isMeetingToday(row) ? "font-bold" : "font-medium"}>
-              {row.group_name}
-            </span>
+                        <span
+                            className={isMeetingToday(row) ? "font-bold" : "font-medium"}
+                        >
+                            {row.group_name}
+                        </span>
                     </div>
                 ),
                 sortValue: (row) => row.group_name,
@@ -286,7 +291,9 @@ export default function GroupManagement() {
                 tdClassName: () => tdCenter,
                 cell: (row) => {
                     const info = officerInfoById.get(Number(row.lo_id));
-                    return <div className={CELL_WRAP(row)}>{info?.name || "Unknown"}</div>;
+                    return (
+                        <div className={CELL_WRAP(row)}>{info?.name || "Unknown"}</div>
+                    );
                 },
                 sortValue: (row) => {
                     const info = officerInfoById.get(Number(row.lo_id));
@@ -298,7 +305,9 @@ export default function GroupManagement() {
                 header: "Branch",
                 className: headerCenter,
                 tdClassName: () => tdCenter,
-                cell: (row) => <div className={CELL_WRAP(row)}>{getBranchName(row.branch_id)}</div>,
+                cell: (row) => (
+                    <div className={CELL_WRAP(row)}>{getBranchName(row.branch_id)}</div>
+                ),
                 sortValue: (row) => getBranchName(row.branch_id),
             },
             {
@@ -306,7 +315,9 @@ export default function GroupManagement() {
                 header: "Region",
                 className: headerCenter,
                 tdClassName: () => tdCenter,
-                cell: (row) => <div className={CELL_WRAP(row)}>{getRegionName(row.region_id)}</div>,
+                cell: (row) => (
+                    <div className={CELL_WRAP(row)}>{getRegionName(row.region_id)}</div>
+                ),
                 sortValue: (row) => getRegionName(row.region_id),
             },
             {
@@ -349,14 +360,12 @@ export default function GroupManagement() {
             },
         ];
 
-        // ✅ LO: hide LO/Branch/Region + Action column
         if (isLO) {
             return base.filter(
                 (c) => !["lo_id", "branch_id", "region_id", "action"].includes(c.key)
             );
         }
 
-        // ✅ BM: hide Branch & Region
         if (isBM) {
             return base.filter((c) => !["branch_id", "region_id"].includes(c.key));
         }
@@ -378,6 +387,50 @@ export default function GroupManagement() {
         if (isBM) return ["group_name", "meeting_day", "lo_id"];
         return ["group_name", "meeting_day", "lo_id", "branch_id", "region_id"];
     }, [isLO, isBM]);
+
+    const sortButtons = (
+        <div className="flex flex-wrap items-center gap-2">
+            <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                    setTableSort((prev) => {
+                        const key = "meeting_day";
+                        if (prev.key !== key) return {key, dir: "asc"};
+                        return {key, dir: prev.dir === "asc" ? "desc" : "asc"};
+                    })
+                }
+                className="min-w-[170px] justify-center"
+            >
+                <ArrowUpDown className="h-4 w-4 mr-2"/>
+                Meeting Day
+                <span className="ml-2 text-xs text-muted-foreground">
+                    ({tableSort.key === "meeting_day" ? tableSort.dir.toUpperCase() : "—"})
+                </span>
+            </Button>
+
+            {!isLO ? (
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                        setTableSort((prev) => {
+                            const key = "lo_id";
+                            if (prev.key !== key) return {key, dir: "asc"};
+                            return {key, dir: prev.dir === "asc" ? "desc" : "asc"};
+                        })
+                    }
+                    className="min-w-[170px] justify-center"
+                >
+                    <ArrowUpDown className="h-4 w-4 mr-2"/>
+                    Loan Officer
+                    <span className="ml-2 text-xs text-muted-foreground">
+                        ({tableSort.key === "lo_id" ? tableSort.dir.toUpperCase() : "—"})
+                    </span>
+                </Button>
+            ) : null}
+        </div>
+    );
 
     return (
         <Card>
@@ -412,10 +465,12 @@ export default function GroupManagement() {
             </CardHeader>
 
             <CardContent>
+                <GroupsKpiRow groups={roleScopedGroups} isLoading={isLoading} />
+
                 <AdvancedTable
                     title={null}
                     description={null}
-                    data={sortedGroups}
+                    data={roleScopedGroups}
                     columns={columns}
                     isLoading={isLoading}
                     emptyText="No groups found."
@@ -423,12 +478,15 @@ export default function GroupManagement() {
                     searchPlaceholder="Search group / meeting day..."
                     searchKeys={searchKeys}
                     enablePagination
-                    initialPageSize={10}
+                    initialPageSize={5}
                     rowKey={(r) => r.group_id}
+                    headerRight={sortButtons}
+                    sortState={tableSort}
+                    onSortStateChange={setTableSort}
+                    initialSort={{key: "meeting_day", dir: "asc"}}
                 />
             </CardContent>
 
-            {/* ✅ Edit dialog */}
             <EditGroupDialog
                 open={editOpen}
                 onOpenChange={(v) => {

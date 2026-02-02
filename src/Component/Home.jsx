@@ -259,6 +259,7 @@ export default function Home() {
                                     title={title}
                                     subtitle={subtitle}
                                     breadcrumbs={breadcrumbs}
+                                    showReload
                                 />
                             </div>
                         </div>

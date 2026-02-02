@@ -2,13 +2,19 @@
 import {useMemo, useState} from "react";
 import {useAuth} from "@/contexts/AuthContext.jsx";
 import {Button} from "@/components/ui/button.tsx";
-import {LogOut, ChevronRight, User} from "lucide-react";
+import {LogOut, ChevronRight, User, RefreshCcw} from "lucide-react";
 import {Link, useNavigate} from "react-router-dom";
 import {ConfirmDialog} from "@/Utils/ConfirmDialog.jsx";
 import ProfileModal from "@/Utils/ProfileModal.jsx";
 
 import {useRegions} from "@/hooks/useRegions";
 import {useBranches} from "@/hooks/useBranches";
+
+// ✅ same as HeaderBar
+import {useQueryClient} from "@tanstack/react-query";
+
+const isElectron =
+    typeof navigator !== "undefined" && /Electron/i.test(navigator.userAgent);
 
 /**
  * DashboardHeader (Breadcrumb + Dynamic)
@@ -20,12 +26,19 @@ export default function DashboardHeader({
                                             breadcrumbs = null,
                                             rightContent = null,
                                             showLogout = true,
+
+                                            // ✅ NEW: show refresh button
+                                            showReload = false,
                                         }) {
     const {user, logout} = useAuth();
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
 
     const [logoutOpen, setLogoutOpen] = useState(false);
     const [profileOpen, setProfileOpen] = useState(false);
+
+    // ✅ NEW: reload animation state
+    const [reloading, setReloading] = useState(false);
 
     /* ---------------- Profile data ---------------- */
 
@@ -47,7 +60,6 @@ export default function DashboardHeader({
 
     const {getRegionName} = useRegions();
 
-    // If regionId is missing for BM/LO, try other shapes
     const regionIdForBranches =
         profileData?.region_id ??
         profileData?.region?.region_id ??
@@ -57,7 +69,6 @@ export default function DashboardHeader({
 
     const {getBranchName} = useBranches(regionIdForBranches);
 
-    // Prefer stored names, else resolve from hooks
     const regionName =
         profileData?.region_name ||
         profileData?.region?.region_name ||
@@ -102,34 +113,79 @@ export default function DashboardHeader({
         navigate("/login");
     };
 
+    /* ---------------- ✅ Reload logic (animated) ---------------- */
+
+    const handleManualRefresh = async () => {
+        if (reloading) return;
+
+        setReloading(true);
+        try {
+            if (isElectron) {
+                // invalidateQueries can be async; awaiting keeps spinner consistent
+                await queryClient.invalidateQueries();
+            } else {
+                // browser refresh - spinner will show briefly before reload
+                window.location.reload();
+            }
+        } finally {
+            // In browser reload this won't really run because page reloads,
+            // but in Electron it will stop spinner correctly.
+            setReloading(false);
+        }
+    };
+
     /* ---------------- Buttons ---------------- */
+
+    const ReloadBtn = showReload ? (
+        <Button
+            size="icon"
+            variant="outline"
+            onClick={handleManualRefresh}
+            disabled={reloading}
+            title={reloading ? "Reloading..." : "Reload"}
+            aria-label="Reload"
+            className="
+        rounded-full
+        border-border
+        text-muted-foreground
+        hover:text-foreground
+        hover:bg-muted/50
+        shadow-none
+      "
+        >
+            <RefreshCcw
+                className={[
+                    "h-4 w-4",
+                    "transition-transform",
+                    reloading ? "animate-spin" : "active:rotate-180",
+                ].join(" ")}
+            />
+        </Button>
+    ) : null;
 
     const ProfileBtn = (
         <div className="flex items-center gap-2">
-            {/* Styled REGION / BRANCH badge */}
             {profileContext ? (
                 <div
                     className="
-                        flex items-center gap-1.5
-                        rounded-full
-                        border border-border/60
-                        bg-muted/70
-                        px-3 py-1
-                        text-xs
-                        font-medium
-                        text-muted-foreground
-                        max-w-[260px]
-                        truncate
-                    "
+            flex items-center gap-1.5
+            rounded-full
+            border border-border/60
+            bg-muted/70
+            px-3 py-1
+            text-xs
+            font-medium
+            text-muted-foreground
+            max-w-[260px]
+            truncate
+          "
                     title={`${profileContext.value} ${profileContext.type}`}
                 >
-                    <span className="truncate">
-                        {profileContext.value}
-                    </span>
+                    <span className="truncate">{profileContext.value}</span>
                     <span className="opacity-60">·</span>
                     <span className="uppercase tracking-wide text-[10px] opacity-70">
-                        {profileContext.type}
-                    </span>
+            {profileContext.type}
+          </span>
                 </div>
             ) : null}
 
@@ -150,6 +206,7 @@ export default function DashboardHeader({
     const RightArea = (
         <div className="flex items-center gap-2">
             {rightContent}
+            {ReloadBtn}
             {ProfileBtn}
             {LogoutBtn}
         </div>
@@ -169,8 +226,8 @@ export default function DashboardHeader({
                         </Link>
                     ) : (
                         <span className={last ? "text-foreground font-medium" : ""}>
-                            {b.label}
-                        </span>
+              {b.label}
+            </span>
                     );
 
                 return (

@@ -11,6 +11,7 @@ import MemberFilters from "@/Component/Members/MemberFilters.jsx";
 import MemberTable from "@/Component/Members/MemberTable.jsx";
 import MemberDialog from "@/Component/Members/MemberDialog.jsx";
 import {buildMaps, getMemberInfo, filterMemberRows} from "@/Component/Members/memberUtils.js";
+import MembersKpiRow from "@/Component/Members/MembersKpiRow.jsx";
 
 
 export default function MemberManagement({groups = [], branches = [], officers = [], regions = []}) {
@@ -265,6 +266,7 @@ export default function MemberManagement({groups = [], branches = [], officers =
             </CardHeader>
 
             <CardContent className="space-y-4">
+                <MembersKpiRow role={role} rows={filteredRows} groups={groups} />
                 {isError && (
                     <div className="text-sm text-destructive">
                         {error?.response?.data?.detail || error?.message || "Failed to load Members"}
