@@ -492,9 +492,7 @@ export default function LoanViewPage() {
                                 emptyText="No installments exist for this loan."
                                 enableSearch
                                 enablePagination
-                                initialPageSize={10}
-                                enableExport
-                                exportFileName={`schedule_${summary?.loan_account_no || activeLoanRef || "loan"}.xlsx`}
+                                initialPageSize={5}
                                 rowKey={(r, idx) => r.installment_id ?? `${activeLoanRef}-sch-${idx}`}
                             />
                         </TabsContent>

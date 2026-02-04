@@ -26,7 +26,7 @@ export default function MemberTable({
         () => [
             {
                 key: "borrower",
-                header: "Borrower",
+                header: "Borrower Name",
                 tdClassName: "text-left whitespace-normal",
                 sortValue: (row) => row?.m?.full_name || "",
                 cell: (row) => {

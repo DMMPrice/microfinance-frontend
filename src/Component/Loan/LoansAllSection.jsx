@@ -1,4 +1,5 @@
-import React, {useMemo, useState} from "react";
+// src/Component/Loan/LoansAllSection.jsx
+import React, {useEffect, useMemo, useState} from "react";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {Badge} from "@/components/ui/badge";
@@ -19,6 +20,7 @@ import {useLoanMaster} from "@/hooks/useLoans.js";
 import {useLoanOfficers} from "@/hooks/useLoanOfficers.js";
 
 import AdvancedTable from "@/Utils/AdvancedTable.jsx";
+import {getProfileData, getUserRole, getUserBranchId} from "@/hooks/useApi.js";
 
 const STATUS_OPTIONS = ["ALL", "DISBURSED", "ACTIVE", "CLOSED", "CANCELLED"];
 
@@ -28,24 +30,62 @@ function formatMoney(v) {
     return n.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
 }
 
+/** Safe numeric */
+function numOrNull(v) {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+}
+
+/** Resolve LO id from profileData (backend shape varies) */
+function getMyLoId() {
+    try {
+        const profile = getProfileData?.() || {};
+        const loId =
+            profile?.lo_id ??
+            profile?.loan_officer_id ??
+            profile?.loanOfficerId ??
+            profile?.loan_officer?.id ??
+            profile?.loan_officer?.lo_id;
+        return loId != null && String(loId).trim() !== "" ? String(loId) : "";
+    } catch {
+        return "";
+    }
+}
+
 export default function LoansAllSection({onOpenSummary, onEditLoan, onDeleteLoan}) {
-    // LO
+    // --- Role / scope context (helper file) ---
+    const role = useMemo(() => String(getUserRole?.() || "").toLowerCase(), []);
+    const myBranchId = useMemo(() => numOrNull(getUserBranchId?.()), []);
+    const myLoId = useMemo(() => getMyLoId(), []);
+
+    const isLoanOfficer = role === "loan_officer";
+    const isBranchManager = role === "branch_manager";
+
+    // LO list (used only when dropdown should be shown)
     const loQ = useLoanOfficers();
 
+    // ✅ LO options:
+    // - admin/regional/super_admin -> all
+    // - branch_manager -> only LOs under same branch
+    // - loan_officer -> dropdown not shown (but we still keep map for table names)
     const loOptions = useMemo(() => {
         const list = loQ.loanOfficers || [];
-        return list.map((x) => ({
-            lo_id: x.lo_id,
+
+        const filtered = isBranchManager && myBranchId != null
+            ? list.filter((x) => {
+                const emp = x?.employee || {};
+                const b = numOrNull(emp.branch_id ?? emp.branchId);
+                return b == null ? true : b === myBranchId;
+            })
+            : list;
+
+        return filtered.map((x) => ({
+            lo_id: String(x.lo_id),
             label: x?.employee?.full_name
-                ? `${x.employee.full_name} (LO-${x.lo_id})`
+                ? `${x.employee.full_name}`
                 : `LO-${x.lo_id}`,
         }));
-    }, [loQ.loanOfficers]);
-
-    const monthRange = useMemo(() => getISTCurrentMonthRange(), []);
-    const defaultFrom = monthRange.from_date;
-    const defaultTo = monthRange.to_date;
-
+    }, [loQ.loanOfficers, isBranchManager, myBranchId]);
 
     const loNameMap = useMemo(() => {
         const map = {};
@@ -55,15 +95,24 @@ export default function LoansAllSection({onOpenSummary, onEditLoan, onDeleteLoan
         return map;
     }, [loQ.loanOfficers]);
 
+    // Month default range
+    const monthRange = useMemo(() => getISTCurrentMonthRange(), []);
+    const defaultFrom = monthRange.from_date;
+    const defaultTo = monthRange.to_date;
+
     // Draft UI state
     const [searchDraft, setSearchDraft] = useState("");
     const [statusDraft, setStatusDraft] = useState("ALL");
     const [fromDraft, setFromDraft] = useState(defaultFrom);
     const [toDraft, setToDraft] = useState(defaultTo);
-    const [loDraft, setLoDraft] = useState("ALL");
+
+    // ✅ LO filter draft:
+    // - loan_officer => forced to myLoId (dropdown hidden)
+    // - others => default ALL
+    const [loDraft, setLoDraft] = useState(isLoanOfficer ? (myLoId || "ALL") : "ALL");
 
     // Backend pagination
-    const [limit, setLimit] = useState(25);
+    const [limit, setLimit] = useState(5);
     const [offset, setOffset] = useState(0);
 
     // Applied filters (trigger query)
@@ -72,8 +121,17 @@ export default function LoansAllSection({onOpenSummary, onEditLoan, onDeleteLoan
         status: "",
         disburse_from: defaultFrom,
         disburse_to: defaultTo,
-        lo_id: "",
+        lo_id: isLoanOfficer ? (myLoId || "") : "",
     });
+
+    // ✅ Ensure LO is forced for loan_officer even if component mounts before profile is ready
+    useEffect(() => {
+        if (!isLoanOfficer) return;
+        const forced = myLoId || "";
+        setLoDraft(forced || "ALL");
+        setApplied((prev) => ({...prev, lo_id: forced}));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isLoanOfficer, myLoId]);
 
     const filters = useMemo(
         () => ({
@@ -81,7 +139,7 @@ export default function LoansAllSection({onOpenSummary, onEditLoan, onDeleteLoan
             status: applied.status || undefined,
             disburse_from: applied.disburse_from || undefined,
             disburse_to: applied.disburse_to || undefined,
-            lo_id: applied.lo_id || undefined,
+            lo_id: applied.lo_id || undefined, // ✅ forced for LO user
             limit,
             offset,
         }),
@@ -113,12 +171,16 @@ export default function LoansAllSection({onOpenSummary, onEditLoan, onDeleteLoan
 
     const applyFilters = () => {
         setOffset(0);
+
+        // ✅ If loan_officer, ignore UI loDraft and force myLoId
+        const nextLo = isLoanOfficer ? (myLoId || "") : (loDraft === "ALL" ? "" : loDraft);
+
         setApplied({
             search: searchDraft.trim(),
             status: statusDraft === "ALL" ? "" : statusDraft,
             disburse_from: fromDraft || "",
             disburse_to: toDraft || "",
-            lo_id: loDraft === "ALL" ? "" : loDraft,
+            lo_id: nextLo,
         });
     };
 
@@ -127,21 +189,24 @@ export default function LoansAllSection({onOpenSummary, onEditLoan, onDeleteLoan
         setStatusDraft("ALL");
         setFromDraft(defaultFrom);
         setToDraft(defaultTo);
-        setLoDraft("ALL");
+
+        // ✅ Preserve forced LO behavior
+        const forcedLo = isLoanOfficer ? (myLoId || "") : "";
+        setLoDraft(isLoanOfficer ? (myLoId || "ALL") : "ALL");
+
         setOffset(0);
         setApplied({
             search: "",
             status: "",
             disburse_from: defaultFrom,
-        disburse_to: defaultTo,
-            lo_id: "",
+            disburse_to: defaultTo,
+            lo_id: forcedLo,
         });
     };
 
     // Table columns (AdvancedTable)
     const columns = useMemo(
         () => [
-            // ✅ Loan account no instead of Loan ID
             {
                 key: "loan_account_no",
                 header: "Loan A/C No",
@@ -214,7 +279,6 @@ export default function LoansAllSection({onOpenSummary, onEditLoan, onDeleteLoan
                 hideable: false,
                 sortValue: () => 0,
                 cell: (r) => {
-                    // ✅ IMPORTANT: summary/edit/delete should use real loan_id
                     const loanId = r.loan_id ?? r.id ?? null;
 
                     return (
@@ -291,37 +355,43 @@ export default function LoansAllSection({onOpenSummary, onEditLoan, onDeleteLoan
                             </Select>
                         </div>
 
-                        {/* Loan Officer */}
-                        <div className="xl:col-span-3">
-                            <Select value={loDraft} onValueChange={setLoDraft}>
-                                <SelectTrigger className="w-full">
-                                    <SelectValue
-                                        placeholder={loQ.isLoading ? "Loading Loan Officers..." : "Loan Officer"}
-                                    />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="ALL">All Loan Officers</SelectItem>
-                                    {loQ.isLoading ? (
-                                        <div className="px-3 py-2">
-                                            <Skeleton className="h-4 w-full"/>
-                                        </div>
-                                    ) : loQ.isError ? (
-                                        <div className="px-3 py-2 text-sm text-destructive">
-                                            Failed to load Loan Officers
-                                        </div>
-                                    ) : (
-                                        loOptions.map((o) => (
-                                            <SelectItem key={o.lo_id} value={String(o.lo_id)}>
-                                                {o.label}
-                                            </SelectItem>
-                                        ))
-                                    )}
-                                </SelectContent>
-                            </Select>
-                        </div>
+                        {/* ✅ Loan Officer dropdown:
+                            - hidden for loan_officer (not required)
+                            - shown for others
+                            - branch_manager sees ONLY his branch LOs
+                        */}
+                        {!isLoanOfficer && (
+                            <div className="xl:col-span-3">
+                                <Select value={loDraft} onValueChange={setLoDraft}>
+                                    <SelectTrigger className="w-full">
+                                        <SelectValue
+                                            placeholder={loQ.isLoading ? "Loading Loan Officers..." : "Loan Officer"}
+                                        />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="ALL">All Loan Officers</SelectItem>
+                                        {loQ.isLoading ? (
+                                            <div className="px-3 py-2">
+                                                <Skeleton className="h-4 w-full"/>
+                                            </div>
+                                        ) : loQ.isError ? (
+                                            <div className="px-3 py-2 text-sm text-destructive">
+                                                Failed to load Loan Officers
+                                            </div>
+                                        ) : (
+                                            loOptions.map((o) => (
+                                                <SelectItem key={o.lo_id} value={String(o.lo_id)}>
+                                                    {o.label}
+                                                </SelectItem>
+                                            ))
+                                        )}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
 
                         {/* Date range */}
-                        <div className="xl:col-span-3">
+                        <div className={isLoanOfficer ? "xl:col-span-6" : "xl:col-span-3"}>
                             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                 <Input
                                     type="date"
@@ -367,9 +437,15 @@ export default function LoansAllSection({onOpenSummary, onEditLoan, onDeleteLoan
                         <Badge variant="outline">
                             Status: <span className="ml-1 font-semibold">{applied.status || "ALL"}</span>
                         </Badge>
+
+                        {/* ✅ LO badge: for loan_officer show "ME", else applied lo_id */}
                         <Badge variant="outline">
-                            LO: <span className="ml-1 font-semibold">{applied.lo_id || "ALL"}</span>
+                            LO:{" "}
+                            <span className="ml-1 font-semibold">
+                                {isLoanOfficer ? "ME" : (applied.lo_id || "ALL")}
+                            </span>
                         </Badge>
+
                         <Badge variant="outline">
                             Range:{" "}
                             <span className="ml-1 font-semibold">
@@ -384,15 +460,14 @@ export default function LoansAllSection({onOpenSummary, onEditLoan, onDeleteLoan
             <div className="w-full overflow-x-auto">
                 <AdvancedTable
                     title="All Loans"
-                    description="Browse all loans with filters (including Loan Officer) and open summary."
+                    description="Browse all loans with filters and open summary."
                     data={rows}
                     columns={columns}
                     isLoading={q.isLoading}
                     errorText={q.isError ? "No loans loaded (API error)." : ""}
                     emptyText="No loans found for the selected filters."
                     enableSearch={false}
-                    enablePagination={false} // backend prev/next
-                    enableColumnToggle
+                    enablePagination={false}
                     stickyHeader
                     rowKey={(r) => String(r.loan_id ?? r.id ?? r.loan_account_no ?? Math.random())}
                 />
@@ -423,7 +498,7 @@ export default function LoansAllSection({onOpenSummary, onEditLoan, onDeleteLoan
                             <SelectValue placeholder="Rows"/>
                         </SelectTrigger>
                         <SelectContent>
-                            {[10, 25, 50, 100].map((n) => (
+                            {[5, 10, 25, 50, 100].map((n) => (
                                 <SelectItem key={n} value={String(n)}>
                                     {n} rows
                                 </SelectItem>

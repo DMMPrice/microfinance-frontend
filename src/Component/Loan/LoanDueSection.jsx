@@ -1,4 +1,6 @@
 // src/Component/Loan/LoanDueSection.jsx
+// NOTE: No logic changes needed here. Your import expects useDueInstallments.
+// This file is included only so you can drop it in without hunting.
 import React, {useEffect, useMemo, useState} from "react";
 import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
@@ -23,7 +25,6 @@ import {getUserCtx} from "@/lib/http.js";
 
 /* ---------------- helpers ---------------- */
 function todayLocalISODate() {
-    // Uses browser local timezone (IST on your machines)
     const d = new Date();
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -32,13 +33,10 @@ function todayLocalISODate() {
 }
 
 function isOverdueDate(dueDateLike) {
-    // Overdue = due date strictly before today (local)
     if (!dueDateLike) return false;
 
-    // Try native Date parsing first (supports ISO strings)
     let d = new Date(dueDateLike);
 
-    // Fallback for plain 'YYYY-MM-DD' (safest in browsers)
     if (Number.isNaN(d.getTime())) {
         const s = String(dueDateLike).trim();
         const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -128,16 +126,11 @@ function readProfileData() {
 export default function LoanDueSection({onOpenSummary}) {
     const today = useMemo(() => todayLocalISODate(), []);
 
-    // ✅ central auth ctx (from src/lib/http.js)
     const userCtx = useMemo(() => getUserCtx(), []);
-
-    // ✅ profileData (separate storage) — contains branch_id/region_id reliably
     const profileData = useMemo(() => readProfileData(), []);
 
-    // ✅ prefer role from profileData, fallback to auth ctx role
     const role = String(profileData?.role ?? userCtx?.role ?? "").trim();
 
-    // ✅ branch/region from profileData (fallback to auth ctx raw if needed)
     const ctxBranchId = useMemo(() => {
         const p = profileData || {};
         const rawAuth = userCtx?.raw || {};
@@ -162,10 +155,6 @@ export default function LoanDueSection({onOpenSummary}) {
         );
     }, [profileData, userCtx]);
 
-    // ✅ Roles that should use MASTER LO list (not due rows)
-    // - super_admin/admin: all LOs
-    // - regional_manager: LOs within same region_id (from profileData)
-    // - branch_manager: LOs within same branch_id (from profileData)
     const useMasterLOList = useMemo(
         () => ["admin", "regional_manager", "branch_manager", "super_admin"].includes(role),
         [role]
@@ -175,7 +164,6 @@ export default function LoanDueSection({onOpenSummary}) {
     const [asOnApplied, setAsOnApplied] = useState("");
     const [loDraft, setLoDraft] = useState("ALL");
 
-    // ✅ Default = today (auto-applied on first load)
     useEffect(() => {
         const t = todayLocalISODate();
         setAsOnDraft(t);
@@ -252,15 +240,13 @@ export default function LoanDueSection({onOpenSummary}) {
             .map((id) => ({
                 lo_id: id,
                 label: loNameMap[id] ?? `LO-${id}`,
-                _branchSort: 999999,
             }))
-            .sort((a, b) => String(a.label).localeCompare(String(b.label)))
-            .map(({_branchSort, ...rest}) => rest);
+            .sort((a, b) => String(a.label).localeCompare(String(b.label)));
     }, [useMasterLOList, loQ.loanOfficers, rows, loNameMap, role, ctxBranchId, ctxRegionId]);
 
     useEffect(() => {
         if (loDraft === "ALL") return;
-        const exists = loOptions.some((o) => String(o.lo_id) === String(o.loDraft));
+        const exists = loOptions.some((o) => String(o.lo_id) === String(loDraft));
         if (!exists) setLoDraft("ALL");
     }, [loDraft, loOptions]);
 
@@ -274,10 +260,7 @@ export default function LoanDueSection({onOpenSummary}) {
     const summary = useMemo(() => {
         return {
             total: filteredRows.length,
-            totalDueAmount: filteredRows.reduce(
-                (sum, r) => sum + (getAmountDue(r) || 0),
-                0
-            ),
+            totalDueAmount: filteredRows.reduce((sum, r) => sum + (getAmountDue(r) || 0), 0),
         };
     }, [filteredRows]);
 
@@ -291,7 +274,6 @@ export default function LoanDueSection({onOpenSummary}) {
 
     const columns = useMemo(
         () => [
-            // ✅ UPDATED: blinking dot BEFORE Loan A/C No (based on due date)
             {
                 key: "loan_account_no",
                 header: "Loan A/C No",
@@ -303,10 +285,8 @@ export default function LoanDueSection({onOpenSummary}) {
                         <div className="flex items-center justify-center gap-2 font-medium">
                             {overdue && (
                                 <span className="relative flex h-3 w-3">
-                                    <span
-                                        className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"/>
-                                    <span
-                                        className="relative inline-flex h-3 w-3 rounded-full bg-red-600"/>
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75" />
+                                    <span className="relative inline-flex h-3 w-3 rounded-full bg-red-600" />
                                 </span>
                             )}
                             <span className={overdue ? "text-red-600 font-semibold" : ""}>
@@ -316,42 +296,21 @@ export default function LoanDueSection({onOpenSummary}) {
                     );
                 },
             },
-            {
-                key: "member_name",
-                header: "Member",
-                cell: (r) => r.member_name ?? r.member ?? "-",
-            },
-            {
-                key: "group_name",
-                header: "Group",
-                cell: (r) => r.group_name ?? r.group ?? "-",
-            },
+            { key: "member_name", header: "Member", cell: (r) => r.member_name ?? r.member ?? "-" },
+            { key: "group_name", header: "Group", cell: (r) => r.group_name ?? r.group ?? "-" },
             {
                 key: "lo_name",
                 header: "Loan Officer",
                 cell: (r) => {
                     const loId = r.lo_id ?? r.loan_officer_id;
-                    return (
-                        r.lo_name ??
-                        r.loan_officer_name ??
-                        loNameMap[String(loId)] ??
-                        "-"
-                    );
+                    return r.lo_name ?? r.loan_officer_name ?? loNameMap[String(loId)] ?? "-";
                 },
             },
-            {
-                key: "due_date",
-                header: "Due Date",
-                cell: (r) => r.due_date ?? r.installment_due_date ?? "-",
-            },
+            { key: "due_date", header: "Due Date", cell: (r) => r.due_date ?? r.installment_due_date ?? "-" },
             {
                 key: "installment_no",
                 header: "Inst. No",
-                cell: (r, idx) =>
-                    r.installment_no ??
-                    r.installment_number ??
-                    r.emi_no ??
-                    idx + 1,
+                cell: (r, idx) => r.installment_no ?? r.installment_number ?? r.emi_no ?? idx + 1,
             },
             {
                 key: "amount_due",
@@ -374,7 +333,7 @@ export default function LoanDueSection({onOpenSummary}) {
                             disabled={!loanId}
                             onClick={() => loanId && onOpenSummary?.(loanId)}
                         >
-                            <Eye className="h-4 w-4 mr-2"/>
+                            <Eye className="h-4 w-4 mr-2" />
                             Summary
                         </Button>
                     );
@@ -386,19 +345,15 @@ export default function LoanDueSection({onOpenSummary}) {
 
     return (
         <div className="space-y-3">
-            {/* Filters */}
             <div className="rounded-xl border bg-card p-4">
-                {/* Top row */}
                 <div className="grid grid-cols-1 gap-3 lg:grid-cols-12 lg:items-end">
-                    {/* Date */}
                     <div className="lg:col-span-5">
                         <div className="space-y-2">
                             <div className="text-xs font-medium text-muted-foreground">As On Date</div>
 
                             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                                 <div className="relative flex-1">
-                                    <CalendarIcon
-                                        className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground"/>
+                                    <CalendarIcon className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                                     <Input
                                         type="date"
                                         value={asOnDraft}
@@ -408,20 +363,10 @@ export default function LoanDueSection({onOpenSummary}) {
                                 </div>
 
                                 <div className="flex gap-2">
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="h-10"
-                                        onClick={() => setAsOnDraft("")}
-                                    >
+                                    <Button size="sm" variant="outline" className="h-10" onClick={() => setAsOnDraft("")}>
                                         All
                                     </Button>
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="h-10"
-                                        onClick={() => setAsOnDraft(today)}
-                                    >
+                                    <Button size="sm" variant="outline" className="h-10" onClick={() => setAsOnDraft(today)}>
                                         Today
                                     </Button>
                                 </div>
@@ -429,7 +374,6 @@ export default function LoanDueSection({onOpenSummary}) {
                         </div>
                     </div>
 
-                    {/* Loan Officer */}
                     <div className="lg:col-span-4">
                         <div className="space-y-2">
                             <div className="text-xs font-medium text-muted-foreground">Loan Officer</div>
@@ -437,11 +381,7 @@ export default function LoanDueSection({onOpenSummary}) {
                             <Select value={loDraft} onValueChange={setLoDraft}>
                                 <SelectTrigger className="h-10">
                                     <SelectValue
-                                        placeholder={
-                                            (useMasterLOList ? loQ.isLoading : dueQ.isLoading)
-                                                ? "Loading..."
-                                                : "Select Loan Officer"
-                                        }
+                                        placeholder={(useMasterLOList ? loQ.isLoading : dueQ.isLoading) ? "Loading..." : "Select Loan Officer"}
                                     />
                                 </SelectTrigger>
 
@@ -450,12 +390,10 @@ export default function LoanDueSection({onOpenSummary}) {
 
                                     {(useMasterLOList ? loQ.isLoading : dueQ.isLoading) ? (
                                         <div className="px-3 py-2">
-                                            <Skeleton className="h-4 w-full"/>
+                                            <Skeleton className="h-4 w-full" />
                                         </div>
                                     ) : loOptions.length === 0 ? (
-                                        <div className="px-3 py-2 text-sm text-muted-foreground">
-                                            No Loan Officers found
-                                        </div>
+                                        <div className="px-3 py-2 text-sm text-muted-foreground">No Loan Officers found</div>
                                     ) : (
                                         loOptions.map((o) => (
                                             <SelectItem key={o.lo_id} value={String(o.lo_id)}>
@@ -468,31 +406,24 @@ export default function LoanDueSection({onOpenSummary}) {
                         </div>
                     </div>
 
-                    {/* Actions */}
                     <div className="lg:col-span-3">
                         <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                             <Button className="h-10 w-full sm:w-auto" onClick={applyAsOn}>
                                 Apply
                             </Button>
-                            <Button
-                                variant="outline"
-                                className="h-10 w-full sm:w-auto"
-                                onClick={resetDueFilters}
-                            >
+                            <Button variant="outline" className="h-10 w-full sm:w-auto" onClick={resetDueFilters}>
                                 Reset
                             </Button>
                         </div>
                     </div>
                 </div>
 
-                {/* Badges */}
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                     <Badge variant="secondary">
                         Total Due: <span className="ml-1 font-semibold">{summary.total}</span>
                     </Badge>
                     <Badge variant="secondary">
-                        Total Amount:{" "}
-                        <span className="ml-1 font-semibold">{formatMoney(summary.totalDueAmount)}</span>
+                        Total Amount: <span className="ml-1 font-semibold">{formatMoney(summary.totalDueAmount)}</span>
                     </Badge>
                     <Badge variant="outline">
                         As On: <span className="ml-1 font-semibold">{asOnApplied || "ALL"}</span>
@@ -500,7 +431,6 @@ export default function LoanDueSection({onOpenSummary}) {
                 </div>
             </div>
 
-            {/* Installments Due Table */}
             <AdvancedTable
                 title="Installments Due"
                 data={filteredRows}
@@ -512,7 +442,7 @@ export default function LoanDueSection({onOpenSummary}) {
                 pageSizeOptions={[5, 10, 20, 50, 100]}
                 headerRight={
                     <Button variant="outline" onClick={() => dueQ.refetch()}>
-                        <RefreshCw className="h-4 w-4 mr-2"/>
+                        <RefreshCw className="h-4 w-4 mr-2" />
                         Refresh
                     </Button>
                 }

@@ -113,11 +113,9 @@ export default function AdvancedTable({
                                           exportVisibleOnly = true,
                                           exportTitleRow = null,
                                           exportMetaRows = [],
-
-                                          // ✅ NEW: Sort Provision
-                                          initialSort = null,              // { key: "meeting_day", dir: "asc" }
-                                          sortState = null,                // controlled sort state
-                                          onSortStateChange = null,        // setSort from parent
+                                          initialSort = null,
+                                          sortState = null,
+                                          onSortStateChange = null,
                                       }) {
     const [q, setQ] = useState("");
     const [pageSize, setPageSize] = useState(initialPageSize);
