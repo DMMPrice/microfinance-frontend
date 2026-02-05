@@ -126,3 +126,46 @@ export function getISTCurrentMonthRange(date = new Date()) {
 
     return {from_date, to_date};
 }
+
+/**
+ * Safely convert a datetime value into epoch milliseconds.
+ * Accepts ISO strings (e.g. "2026-01-22T04:04:42.503329"), Date, number.
+ * Returns 0 for invalid values so sorting stays stable.
+ */
+export function toEpochMs(value) {
+    if (!value) return 0;
+
+    // Already a number (epoch ms)
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+
+    // Date instance
+    if (value instanceof Date) {
+        const t = value.getTime();
+        return Number.isFinite(t) ? t : 0;
+    }
+
+    // String
+    if (typeof value === "string") {
+        const t = Date.parse(value);
+        return Number.isFinite(t) ? t : 0;
+    }
+
+    return 0;
+}
+
+/**
+ * Sort an array by a date field in DESC order (latest first).
+ * Works for plain objects or wrapped rows (e.g. { m: {...} }).
+ *
+ * @param {Array} list
+ * @param {string} key - date field name (default "created_on")
+ * @param {string|null} nestedKey - optional nested container key (e.g. "m")
+ */
+export function sortByDateKeyDesc(list = [], key = "created_on", nestedKey = null) {
+    const arr = Array.isArray(list) ? list : [];
+    return [...arr].sort((a, b) => {
+        const av = nestedKey ? a?.[nestedKey]?.[key] : (a?.[key] ?? a?.m?.[key]);
+        const bv = nestedKey ? b?.[nestedKey]?.[key] : (b?.[key] ?? b?.m?.[key]);
+        return toEpochMs(bv) - toEpochMs(av);
+    });
+}

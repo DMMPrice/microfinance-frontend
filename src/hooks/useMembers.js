@@ -1,6 +1,8 @@
 // src/hooks/useMembers.js
+import {useMemo} from "react";
 import {useQuery, useMutation, useQueryClient} from "@tanstack/react-query";
 import {api} from "@/lib/http";
+import {sortByDateKeyDesc} from "@/Helpers/dateTimeIST";
 
 const MEMBERS_KEY = ["members"];
 
@@ -76,7 +78,7 @@ export function useMembers(filters = {}) {
     // LIST MEMBERS
     // -----------------------
     const {
-        data: members = [],
+        data: rawMembers = [],
         isLoading,
         isError,
         error,
@@ -93,6 +95,12 @@ export function useMembers(filters = {}) {
         keepPreviousData: true,
         refetchOnWindowFocus: false,
     });
+
+    // ✅ Default sort: created_on DESC (latest first)
+    const members = useMemo(() => {
+        return sortByDateKeyDesc(rawMembers, "created_on");
+    }, [rawMembers]);
+
 
     // -----------------------
     // CREATE MEMBER
