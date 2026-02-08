@@ -223,3 +223,77 @@ export function useAdminPassbook({
         },
     });
 }
+
+/* =========================================================
+   7) Branch Cashbook (Loan Ledger Logs + Daily/Weekly Summary)
+   GET /reports/cashbook/branch/loan-ledger-logs?branch_id=..&from_date=..&to_date=..
+========================================================= */
+export function useBranchLoanLedgerLogs({
+                                           branchId,
+                                           fromDate,
+                                           toDate,
+                                           includeCharges = true,
+                                           includeOtherLogs = true,
+                                           includeExpenses = true,
+                                           includeEmptyDays = true,
+                                           viewMode = "DAILY", // DAILY | WEEKLY
+                                           weekStart = "MON",  // MON | SUN
+                                           txnType,
+                                           loanId,
+                                           groupId,
+                                           search,
+                                           limit = 200,
+                                           offset = 0,
+                                           enabled = false,
+                                       }) {
+    const f = normalizeDate(fromDate);
+    const t = normalizeDate(toDate);
+
+    return useQuery({
+        queryKey: [
+            "reports",
+            "cashbook",
+            "branch",
+            "loan-ledger-logs",
+            branchId || null,
+            f,
+            t,
+            includeCharges ? "1" : "0",
+            includeOtherLogs ? "1" : "0",
+            includeExpenses ? "1" : "0",
+            includeEmptyDays ? "1" : "0",
+            String(viewMode || "DAILY").toUpperCase(),
+            String(weekStart || "MON").toUpperCase(),
+            txnType ? String(txnType).toUpperCase() : null,
+            loanId || null,
+            groupId || null,
+            search || null,
+            limit,
+            offset,
+        ],
+        enabled: !!enabled && !!branchId && !!f && !!t,
+        keepPreviousData: true,
+        queryFn: async () => {
+            const qs = buildQS({
+                branch_id: branchId,
+                from_date: f,
+                to_date: t,
+                include_charges: includeCharges ? "true" : "false",
+                include_other_logs: includeOtherLogs ? "true" : "false",
+                include_expenses: includeExpenses ? "true" : "false",
+                include_empty_days: includeEmptyDays ? "true" : "false",
+                view_mode: String(viewMode || "DAILY").toUpperCase(),
+                week_start: String(weekStart || "MON").toUpperCase(),
+                txn_type: txnType ? String(txnType).toUpperCase() : undefined,
+                loan_id: loanId,
+                group_id: groupId,
+                search,
+                limit,
+                offset,
+            });
+
+            const {data} = await apiClient.get(`/reports/cashbook/branch/loan-ledger-logs?${qs}`);
+            return data;
+        },
+    });
+}

@@ -13,6 +13,8 @@ import {Input} from "@/components/ui/input";
 import {Label} from "@/components/ui/label";
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@/components/ui/select";
 
+import SimpleDatePicker from "@/Utils/SimpleDatePicker"; // ✅ NEW
+
 import {
     getUserRole,
     getUserRegionId,
@@ -35,11 +37,6 @@ export function ExpenseFormDialog({
                                   }) {
     const title = mode === "create" ? "Add Expense" : "Edit Expense";
 
-    /* =========================================================
-       ✅ Role based branch filtering
-       - Regional Manager -> only branches of own region
-       - Branch Manager   -> only own branch
-    ========================================================= */
     const role = getUserRole();
     const myRegionId = getUserRegionId();
     const myBranchId = getUserBranchId();
@@ -63,7 +60,6 @@ export function ExpenseFormDialog({
         return branches;
     }, [branches, isRegionalManager, isBranchManager, myRegionId, myBranchId]);
 
-    // ✅ Auto-pick branch if only one option (Branch Manager, or Region with one branch)
     useEffect(() => {
         if (!open) return;
         if (visibleBranches.length === 1) {
@@ -95,7 +91,7 @@ export function ExpenseFormDialog({
                         <Select
                             value={String(form.branch_id || "")}
                             onValueChange={(v) => setForm((p) => ({...p, branch_id: v}))}
-                            disabled={isBranchManager} // ✅ lock for branch manager
+                            disabled={isBranchManager}
                         >
                             <SelectTrigger><SelectValue placeholder="Select branch"/></SelectTrigger>
                             <SelectContent>
@@ -104,25 +100,8 @@ export function ExpenseFormDialog({
                                         {b.branch_name}
                                     </SelectItem>
                                 ))}
-                                {visibleBranches.length === 0 ? (
-                                    <SelectItem value="__none__" disabled>
-                                        {(isBranchManager || isRegionalManager)
-                                            ? "No branches available for your access"
-                                            : "No branches found"}
-                                    </SelectItem>
-                                ) : null}
                             </SelectContent>
                         </Select>
-
-                        {isBranchManager ? (
-                            <p className="text-xs text-muted-foreground">
-                                Branch is locked to your assigned branch.
-                            </p>
-                        ) : isRegionalManager ? (
-                            <p className="text-xs text-muted-foreground">
-                                Showing branches only from your region.
-                            </p>
-                        ) : null}
                     </div>
 
                     {/* Category */}
@@ -134,7 +113,7 @@ export function ExpenseFormDialog({
                                 setForm((p) => ({
                                     ...p,
                                     category_id: v,
-                                    subcategory_id: "", // reset subcat
+                                    subcategory_id: "",
                                 }))
                             }
                         >
@@ -159,8 +138,7 @@ export function ExpenseFormDialog({
                         >
                             <SelectTrigger>
                                 <SelectValue
-                                    placeholder={form.category_id ? "Select subcategory" : "Select category first"}
-                                />
+                                    placeholder={form.category_id ? "Select subcategory" : "Select category first"}/>
                             </SelectTrigger>
                             <SelectContent>
                                 {filteredSubcats.length === 0 ? (
@@ -176,13 +154,13 @@ export function ExpenseFormDialog({
                         </Select>
                     </div>
 
-                    {/* Date */}
+                    {/* ✅ Expense Date (ShadCN calendar, IST display) */}
                     <div className="space-y-1">
                         <Label>Expense Date</Label>
-                        <Input
-                            type="date"
+                        <SimpleDatePicker
                             value={form.expense_date || ""}
-                            onChange={(e) => setForm((p) => ({...p, expense_date: e.target.value}))}
+                            onChange={(iso) => setForm((p) => ({...p, expense_date: iso}))}
+                            placeholder="Pick date"
                         />
                     </div>
 
@@ -197,7 +175,7 @@ export function ExpenseFormDialog({
                         />
                     </div>
 
-                    {/* Ref */}
+                    {/* Reference */}
                     <div className="space-y-1 md:col-span-2">
                         <Label>Reference No (optional)</Label>
                         <Input
@@ -207,7 +185,7 @@ export function ExpenseFormDialog({
                         />
                     </div>
 
-                    {/* Desc */}
+                    {/* Description */}
                     <div className="space-y-1 md:col-span-2">
                         <Label>Description (optional)</Label>
                         <Input
