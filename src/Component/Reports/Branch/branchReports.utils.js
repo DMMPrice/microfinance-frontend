@@ -6,8 +6,15 @@ import { getISTCurrentMonthRange, formatToIST } from "@/Helpers/dateTimeIST.js";
  * We'll map it to {from, to} for this page.
  */
 export function getDefaultMonthRange() {
-  const { from_date, to_date } = getISTCurrentMonthRange();
-  return { from: from_date, to: to_date };
+  const r = (typeof getISTCurrentMonthRange === "function" ? getISTCurrentMonthRange() : {}) || {};
+
+  // ✅ Support both helper return shapes:
+  // 1) {from_date, to_date}
+  // 2) {from, to}
+  const from = r.from_date ?? r.from ?? "";
+  const to = r.to_date ?? r.to ?? "";
+
+  return { from, to };
 }
 
 export function pad2(n) {

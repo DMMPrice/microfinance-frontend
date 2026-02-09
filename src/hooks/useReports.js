@@ -1,5 +1,5 @@
 // src/hooks/useReports.js
-import {useQuery} from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import {apiClient} from "@/hooks/useApi.js";
 
 /* ---------------- helpers ---------------- */
@@ -223,59 +223,48 @@ export function useAdminPassbook({
         },
     });
 }
-
-/* =========================================================
-   7) Branch Cashbook (Loan Ledger Logs + Daily/Weekly Summary)
-   GET /reports/cashbook/branch/loan-ledger-logs?branch_id=..&from_date=..&to_date=..
-========================================================= */
+// ============================================================
+// Branch Cashbook (Loan Ledger + Expenses)
+// ============================================================
 export function useBranchLoanLedgerLogs({
-                                           branchId,
-                                           fromDate,
-                                           toDate,
-                                           includeCharges = true,
-                                           includeOtherLogs = true,
-                                           includeExpenses = true,
-                                           includeEmptyDays = true,
-                                           viewMode = "DAILY", // DAILY | WEEKLY
-                                           weekStart = "MON",  // MON | SUN
-                                           txnType,
-                                           loanId,
-                                           groupId,
-                                           search,
-                                           limit = 200,
-                                           offset = 0,
-                                           enabled = false,
-                                       }) {
+    branchId,
+    fromDate,
+    toDate,
+    includeCharges = true,
+    includeOtherLogs = true,
+    includeExpenses = true,
+    includeEmptyDays = true,
+    viewMode = "DAILY",
+    weekStart = "MON",
+    search,
+    limit = 200,
+    offset = 0,
+    enabled = true,
+}) {
+    const b = branchId ? String(branchId) : "";
     const f = normalizeDate(fromDate);
     const t = normalizeDate(toDate);
 
     return useQuery({
         queryKey: [
-            "reports",
-            "cashbook",
-            "branch",
-            "loan-ledger-logs",
-            branchId || null,
+            "branchLoanLedgerLogs",
+            b,
             f,
             t,
-            includeCharges ? "1" : "0",
-            includeOtherLogs ? "1" : "0",
-            includeExpenses ? "1" : "0",
-            includeEmptyDays ? "1" : "0",
-            String(viewMode || "DAILY").toUpperCase(),
-            String(weekStart || "MON").toUpperCase(),
-            txnType ? String(txnType).toUpperCase() : null,
-            loanId || null,
-            groupId || null,
-            search || null,
+            includeCharges,
+            includeOtherLogs,
+            includeExpenses,
+            includeEmptyDays,
+            viewMode,
+            weekStart,
+            search || "",
             limit,
             offset,
         ],
-        enabled: !!enabled && !!branchId && !!f && !!t,
-        keepPreviousData: true,
+        enabled: enabled && !!b && !!f && !!t,
         queryFn: async () => {
             const qs = buildQS({
-                branch_id: branchId,
+                branch_id: b,
                 from_date: f,
                 to_date: t,
                 include_charges: includeCharges ? "true" : "false",
@@ -284,15 +273,25 @@ export function useBranchLoanLedgerLogs({
                 include_empty_days: includeEmptyDays ? "true" : "false",
                 view_mode: String(viewMode || "DAILY").toUpperCase(),
                 week_start: String(weekStart || "MON").toUpperCase(),
-                txn_type: txnType ? String(txnType).toUpperCase() : undefined,
-                loan_id: loanId,
-                group_id: groupId,
-                search,
+                search: search?.trim() ? search.trim() : undefined,
                 limit,
                 offset,
             });
 
-            const {data} = await apiClient.get(`/reports/cashbook/branch/loan-ledger-logs?${qs}`);
+            const { data } = await apiClient.get(`/reports/cashbook/branch/loan-ledger-logs?${qs}`);
+            return data;
+        },
+    });
+}
+
+// ============================================================
+// Rebuild balances before running reports (POST /reports/balances/rebuild)
+// ============================================================
+export function useRebuildBalances() {
+    return useMutation({
+        mutationKey: ["rebuildBalances"],
+        mutationFn: async (payload) => {
+            const { data } = await apiClient.post(`/reports/balances/rebuild`, payload);
             return data;
         },
     });
