@@ -1,18 +1,54 @@
 // src/Component/Reports/BranchReports/BranchReportsSummary.jsx
 import React from "react";
-import { Badge } from "@/components/ui/badge";
-import { formatINR } from "./branchReports.utils";
+import StatCard from "@/Utils/StatCard.jsx";
+import {formatINR} from "./branchReports.utils";
+import {
+    Wallet,
+    ArrowDownCircle,
+    ArrowUpCircle,
+    Landmark,
+    ListOrdered,
+} from "lucide-react";
 
-export default function BranchReportsSummary({ summary, txCount }) {
-  if (!summary) return null;
+export default function BranchReportsSummary({summary, txCount}) {
+    if (!summary) return null;
 
-  return (
-    <div className="flex flex-wrap gap-2 rounded-lg border bg-muted/30 p-3">
-      <Badge variant="secondary">Opening: ₹{formatINR(summary.opening)}</Badge>
-      <Badge variant="outline">Credit: ₹{formatINR(summary.totalCredit)}</Badge>
-      <Badge variant="outline">Debit: ₹{formatINR(summary.totalDebit)}</Badge>
-      <Badge variant="secondary">Closing: ₹{formatINR(summary.closing)}</Badge>
-      <Badge variant="outline">Txns: {txCount}</Badge>
-    </div>
-  );
+    return (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <StatCard
+                title="Opening Balance"
+                value={`₹${formatINR(summary.opening)}`}
+                Icon={Wallet}
+                variant="blue"
+            />
+
+            <StatCard
+                title="Total Credit"
+                value={`₹${formatINR(summary.totalCredit)}`}
+                Icon={ArrowDownCircle}
+                variant="green"
+            />
+
+            <StatCard
+                title="Total Debit"
+                value={`₹${formatINR(summary.totalDebit)}`}
+                Icon={ArrowUpCircle}
+                variant="red"
+            />
+
+            <StatCard
+                title="Closing Balance"
+                value={`₹${formatINR(summary.closing)}`}
+                Icon={Landmark}
+                variant="purple"
+            />
+
+            <StatCard
+                title="Transactions"
+                value={txCount}
+                Icon={ListOrdered}
+                variant="amber"
+            />
+        </div>
+    );
 }

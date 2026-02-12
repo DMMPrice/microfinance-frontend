@@ -113,6 +113,7 @@ export default function AdvancedTable({
                                           exportVisibleOnly = true,
                                           exportTitleRow = null,
                                           exportMetaRows = [],
+                                          onExportExcelCustom = null,
                                           initialSort = null,
                                           sortState = null,
                                           onSortStateChange = null,
@@ -177,19 +178,14 @@ export default function AdvancedTable({
         const query = q.trim().toLowerCase();
         if (!enableSearch || !query) return base;
 
-        const keysToSearch = (searchKeys?.length
-                ? searchKeys
-                : columns.map((c) => c.key)
-        ).filter(Boolean);
+        const keysToSearch = (searchKeys?.length ? searchKeys : columns.map((c) => c.key)).filter(Boolean);
 
         return base.filter((row) => {
             return keysToSearch.some((k) => {
                 const col = columns.find((c) => c.key === k);
                 if (!col) return false;
 
-                const raw =
-                    typeof col.sortValue === "function" ? col.sortValue(row) : row?.[k];
-
+                const raw = typeof col.sortValue === "function" ? col.sortValue(row) : row?.[k];
                 return safeText(raw).toLowerCase().includes(query);
             });
         });
@@ -202,9 +198,7 @@ export default function AdvancedTable({
         const col = columns.find((c) => c.key === sort.key);
         if (!col) return filtered;
 
-        const getter =
-            col.sortValue ||
-            ((row) => (col.key in (row || {}) ? row[col.key] : ""));
+        const getter = col.sortValue || ((row) => (col.key in (row || {}) ? row[col.key] : ""));
 
         const copy = [...filtered];
         copy.sort((ra, rb) => {
@@ -224,9 +218,7 @@ export default function AdvancedTable({
 
     // Pagination
     const total = sorted.length;
-    const totalPages = enablePagination
-        ? Math.max(1, Math.ceil(total / pageSize))
-        : 1;
+    const totalPages = enablePagination ? Math.max(1, Math.ceil(total / pageSize)) : 1;
 
     React.useEffect(() => {
         if (page > totalPages) setPage(totalPages);
@@ -258,9 +250,7 @@ export default function AdvancedTable({
         try {
             const XLSX = await import("xlsx");
 
-            const headers = visibleColumnsForExport.map((c) =>
-                safeText(c.header ?? c.key),
-            );
+            const headers = visibleColumnsForExport.map((c) => safeText(c.header ?? c.key));
 
             const rows = exportRows.map((row, idx) => {
                 return visibleColumnsForExport.map((c) => {
@@ -280,9 +270,7 @@ export default function AdvancedTable({
             if (exportTitleRow) aoa.push([exportTitleRow]);
 
             if (Array.isArray(exportMetaRows) && exportMetaRows.length > 0) {
-                exportMetaRows.forEach((r) =>
-                    aoa.push(Array.isArray(r) ? r : [safeText(r)]),
-                );
+                exportMetaRows.forEach((r) => aoa.push(Array.isArray(r) ? r : [safeText(r)]));
                 aoa.push([]);
             }
 
@@ -311,7 +299,7 @@ export default function AdvancedTable({
             downloadBlob(
                 out,
                 exportFileName,
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             );
         } catch (e) {
             console.error("Excel export failed:", e);
@@ -353,7 +341,25 @@ export default function AdvancedTable({
                             <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={onExportExcel}
+                                onClick={() => {
+                                    // ✅ if custom format provided, use it; else default export
+                                    if (typeof onExportExcelCustom === "function") {
+                                        onExportExcelCustom({
+                                            title,
+                                            description,
+                                            data: exportRows,                 // respects exportScope
+                                            columns: visibleColumnsForExport, // respects exportVisibleOnly
+                                            exportFileName,
+                                            exportSheetName,
+                                            exportTitleRow,
+                                            exportMetaRows,
+                                            sort,
+                                            query: q,
+                                        });
+                                        return;
+                                    }
+                                    onExportExcel();
+                                }}
                                 disabled={isLoading || total === 0}
                             >
                                 <Download className="h-4 w-4 mr-2"/>

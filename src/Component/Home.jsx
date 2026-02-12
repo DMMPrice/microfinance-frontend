@@ -25,7 +25,6 @@ import SettingPage from "@/Component/Settings/Page.jsx";
 
 // ✅ NEW: Reports Pages (create placeholders now)
 import BranchReportsPage from "@/Component/Reports/Branch/Page.jsx";
-import GroupReportsPage from "@/Component/Reports/Group/Page.jsx";
 
 /* -------------------- Route meta for header -------------------- */
 const ROUTE_META = [
@@ -141,16 +140,6 @@ const ROUTE_META = [
             {label: "Home", to: "/dashboard"},
             {label: "Reports"},
             {label: "Branch Reports"},
-        ],
-    },
-    {
-        pattern: "/dashboard/reports/groups",
-        title: "Group Reports",
-        subtitle: "Group-wise reporting & exports",
-        breadcrumbs: [
-            {label: "Home", to: "/dashboard"},
-            {label: "Reports"},
-            {label: "Group Reports"},
         ],
     },
 
@@ -379,14 +368,6 @@ export default function Home() {
                                 element={
                                     <Guard role={role} allowedRoles={REPORTS_ROLES}>
                                         <BranchReportsPage/>
-                                    </Guard>
-                                }
-                            />
-                            <Route
-                                path="reports/groups"
-                                element={
-                                    <Guard role={role} allowedRoles={REPORTS_ROLES}>
-                                        <GroupReportsPage/>
                                     </Guard>
                                 }
                             />

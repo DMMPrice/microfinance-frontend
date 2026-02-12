@@ -191,16 +191,6 @@ const navigationItems = [
                     ROLES.BRANCH_MANAGER,
                 ],
             },
-            {
-                title: "Group Reports",
-                url: "/dashboard/reports/groups",
-                allowedRoles: [
-                    ROLES.ADMIN,
-                    ROLES.SUPER_ADMIN,
-                    ROLES.REGIONAL_MANAGER,
-                    ROLES.BRANCH_MANAGER,
-                ],
-            },
         ],
     },
 

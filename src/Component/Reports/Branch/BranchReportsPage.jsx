@@ -122,7 +122,6 @@ export default function BranchReportsPage() {
                 });
             }
         } catch (e) {
-            // extract backend message safely (axios/fetch variants)
             const msg =
                 e?.response?.data?.detail ||
                 e?.response?.data?.message ||
@@ -136,9 +135,6 @@ export default function BranchReportsPage() {
                 description: String(msg),
                 variant: "destructive",
             });
-
-            // If you want: stop loading report when rebuild fails
-            // return;
 
             console.error("Failed to rebuild balances", e);
         } finally {
@@ -166,6 +162,13 @@ export default function BranchReportsPage() {
         search: search?.trim() ? search.trim() : undefined,
         enabled: load && reportType === "LOAN_LEDGER",
     });
+
+    // ✅ Selected branch name (for UI / export)
+    const selectedBranchName = useMemo(() => {
+        if (!branchId) return "";
+        const hit = branchOptions.find((b) => String(b.id) === String(branchId));
+        return hit?.name || "";
+    }, [branchId, branchOptions]);
 
     const data = reportType === "PASSBOOK" ? passbookQ.data : loanLedgerQ.data;
     const reportLoading = reportType === "PASSBOOK" ? passbookQ.isLoading : loanLedgerQ.isLoading;
@@ -215,9 +218,7 @@ export default function BranchReportsPage() {
             <CardHeader className="space-y-1">
                 <CardTitle className="text-xl">Branch Reports</CardTitle>
                 <CardDescription>
-                    {reportType === "PASSBOOK"
-                        ? "Branch passbook (running balance)"
-                        : "Branch cashbook (loan ledger + expenses)"}
+                    {reportType === "PASSBOOK" ? "Branch passbook" : "Branch cashbook"}
                 </CardDescription>
             </CardHeader>
 
@@ -228,75 +229,61 @@ export default function BranchReportsPage() {
                         setReportType(v);
                         setLoad(false);
                     }}
-
                     branchId={branchId}
                     setBranchId={(v) => {
                         setBranchId(v);
                         setLoad(false);
                     }}
-
                     fromDate={fromDate}
                     setFromDate={(v) => {
                         setFromDate(v);
                         setLoad(false);
                     }}
-
                     toDate={toDate}
                     setToDate={(v) => {
                         setToDate(v);
                         setLoad(false);
                     }}
-
                     maxToDate={maxToDate}
-
                     branchesLoading={branchesLoading}
                     branchOptions={branchOptions}
                     branchSelectDisabled={branchSelectDisabled}
                     branchLockedReason={branchLockedReason}
-
                     onThisMonth={setThisMonth}
                     onLoad={handleLoad}
-
                     loading={loading}
                     loadDisabled={!canLoad}
-
                     showLoanFilters={reportType === "LOAN_LEDGER"}
                     search={search}
                     setSearch={(v) => {
                         setSearch(v);
                         setLoad(false);
                     }}
-
                     viewMode={viewMode}
                     setViewMode={(v) => {
                         setViewMode(v);
                         setLoad(false);
                     }}
-
                     weekStart={weekStart}
                     setWeekStart={(v) => {
                         setWeekStart(v);
                         setLoad(false);
                     }}
-
                     includeCharges={includeCharges}
                     setIncludeCharges={(fn) => {
                         setIncludeCharges(fn);
                         setLoad(false);
                     }}
-
                     includeExpenses={includeExpenses}
                     setIncludeExpenses={(fn) => {
                         setIncludeExpenses(fn);
                         setLoad(false);
                     }}
-
                     includeOtherLogs={includeOtherLogs}
                     setIncludeOtherLogs={(fn) => {
                         setIncludeOtherLogs(fn);
                         setLoad(false);
                     }}
-
                     includeEmptyDays={includeEmptyDays}
                     setIncludeEmptyDays={(fn) => {
                         setIncludeEmptyDays(fn);
@@ -309,6 +296,7 @@ export default function BranchReportsPage() {
                 <BranchReportsTables
                     reportType={reportType}
                     branchId={branchId}
+                    branchName={selectedBranchName} // ✅ branch name
                     fromDate={fromDate}
                     toDate={toDate}
                     viewMode={viewMode}
