@@ -592,7 +592,7 @@ export default function LoansAllSection({onOpenSummary, onEditLoan, onDeleteLoan
 
             <div className="w-full overflow-x-auto">
                 <AdvancedTable
-                    title="All Loans"
+                    title="Loan Master Sheet"
                     description="Browse all loans with filters and open summary."
                     data={rows}
                     columns={columns}

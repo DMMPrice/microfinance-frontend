@@ -119,7 +119,7 @@ export default function LoansPage() {
             {/* Tabs */}
             <Tabs value={tab} onValueChange={setTab} className="w-full">
                 <TabsList className="w-full md:w-auto overflow-x-auto">
-                    <TabsTrigger value="all">All Loans</TabsTrigger>
+                    <TabsTrigger value="all">Loans Master</TabsTrigger>
                     <TabsTrigger value="due">Installments Due</TabsTrigger>
                 </TabsList>
             </Tabs>
