@@ -31,14 +31,29 @@ jobs:
         run: |
           npm run build:win
 
+      # ✅ Debug: show where electron-builder created outputs
+      - name: Locate build outputs
+        shell: pwsh
+        run: |
+          Write-Host "Searching for build outputs..."
+          Get-ChildItem -Path . -Recurse -File `
+            -Include *.exe,*.msi,*.zip,latest.yml,latest*.yml,*.blockmap `
+            | Select-Object FullName
+
+      # ✅ Upload from common output folders + fallback to anywhere
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: micro-finance-app-windows
           path: |
-            dist/**/*.exe
-            dist/**/*.msi
-            dist/**/*.zip
-            dist/**/latest.yml
-            dist/**/latest*.yml
-            dist/**/*.blockmap
+            dist/**/*
+            release/**/*
+            out/**/*
+            build/**/*
+            dist_electron/**/*
+            **/*.exe
+            **/*.msi
+            **/*.zip
+            **/latest.yml
+            **/latest*.yml
+            **/*.blockmap
