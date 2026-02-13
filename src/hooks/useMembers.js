@@ -30,7 +30,7 @@ function getProfileDataSafe() {
  * Auto-applies:
  * - RM -> region_id from profileData
  * - BM -> branch_id from profileData
- * - LO -> lo_id = profileData.user_id
+ * - LO -> lo_id from profileData (employee_id preferred, fallback user_id)
  */
 export function useMembers(filters = {}) {
     const queryClient = useQueryClient();
@@ -40,7 +40,18 @@ export function useMembers(filters = {}) {
     const role = String(profile?.role ?? "").trim(); // "regional_manager"
     const profileRegionId = profile?.region_id ?? profile?.regionId ?? null;
     const profileBranchId = profile?.branch_id ?? profile?.branchId ?? null;
-    const profileUserId = profile?.user_id ?? profile?.userId ?? null;
+
+    // 🔥 LO identity:
+    // If your profileData stores employee_id for LO, use it.
+    // Else fallback to user_id if that’s how backend maps lo_id.
+    const profileLoId =
+        profile?.employee_id ??
+        profile?.employeeId ??
+        profile?.lo_id ??
+        profile?.loId ??
+        profile?.user_id ??
+        profile?.userId ??
+        null;
 
     const isRM = role === "regional_manager";
     const isBM = role === "branch_manager";
@@ -58,10 +69,11 @@ export function useMembers(filters = {}) {
             filters?.branchId ??
             (isBM ? profileBranchId : null),
 
-        employee_id:
-            filters?.employee_id ??
-            filters?.employee_id ??
-            (isLO ? profileUserId : null),
+        // ✅ FIX: use lo_id (NOT employee_id)
+        lo_id:
+            filters?.lo_id ??
+            filters?.loId ??
+            (isLO ? profileLoId : null),
 
         group_id:
             filters?.group_id ??
@@ -88,7 +100,7 @@ export function useMembers(filters = {}) {
         queryFn: async () => {
             const res = await api.get("/members/", {
                 headers: authHeader(),
-                params, // ✅ send query params: group_id/lo_id/branch_id/region_id
+                params, // ✅ now includes lo_id properly
             });
             return res.data;
         },
@@ -101,7 +113,6 @@ export function useMembers(filters = {}) {
         return sortByDateKeyDesc(rawMembers, "created_on");
     }, [rawMembers]);
 
-
     // -----------------------
     // CREATE MEMBER
     // -----------------------
@@ -112,7 +123,9 @@ export function useMembers(filters = {}) {
                 ...payload,
                 region_id: isRM ? profileRegionId : payload?.region_id,
                 branch_id: isBM ? profileBranchId : payload?.branch_id,
-                lo_id: isLO ? profileUserId : payload?.lo_id,
+
+                // ✅ FIX: use lo_id (NOT employee_id)
+                lo_id: isLO ? profileLoId : payload?.lo_id,
             };
 
             const res = await api.post("/members", finalPayload, {
@@ -190,7 +203,6 @@ export function useMembers(filters = {}) {
         deleteMember: deleteMemberMutation.mutateAsync,
         isDeleting: deleteMemberMutation.isPending,
 
-        // helpful debug / UI
         appliedParams: params,
         role,
     };

@@ -13,13 +13,13 @@ import {Label} from "@/components/ui/label";
 import {Skeleton} from "@/components/ui/skeleton";
 
 import {useCreateLoan} from "@/hooks/useLoans";
-import {apiClient} from "@/hooks/useApi.js";
+import {apiClient, getUserBranchId} from "@/hooks/useApi.js";
 import {toast} from "@/components/ui/use-toast";
 import PreviewScheduleDialog from "./PreviewScheduleDialog";
 
-import {useBranches} from "@/hooks/useBranches";
 import {useGroups} from "@/hooks/useGroups";
 import {useMembers} from "@/hooks/useMembers";
+import {useLoanOfficers} from "@/hooks/useLoanOfficers";
 
 import SearchableSelect from "@/Utils/SearchableSelect";
 
@@ -118,10 +118,20 @@ const DEFAULT_BOOK_PRICE = 0;
 export default function CreateLoanDialog({open, onOpenChange}) {
     const createLoan = useCreateLoan();
 
+    // ✅ Branch scope from profileData (NO UI)
+    const branchId = useMemo(() => {
+        const bid = getUserBranchId();
+        return bid != null ? String(bid) : "";
+    }, []);
+
     const defaults = useMemo(() => {
         const today = todayISO();
         return {
             loan_account_no: "",
+
+            // ✅ NOW: store selected LO's lo_id (3/4/6/8/...)
+            loan_officer_id: "",
+
             group_id: "",
             member_id: "",
             product_id: 1,
@@ -130,7 +140,6 @@ export default function CreateLoanDialog({open, onOpenChange}) {
             duration_weeks: 12,
             principal_amount: "",
 
-            // from settings (TOTAL % for duration)
             annual_interest_percent: "",
 
             processing_fee_percent: DEFAULT_PROCESSING_PCT,
@@ -159,37 +168,56 @@ export default function CreateLoanDialog({open, onOpenChange}) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [form.disburse_date, open]);
 
-    // ✅ Hooks: branches, groups, members (RBAC handled inside hooks)
-    const {
-        branches,
-        isLoading: bLoading,
-        error: bError,
-    } = useBranches();
+    const {groups, isLoading: gLoading, error: gError} = useGroups();
+
+    // ✅ IMPORTANT: Members are now fetched using lo_id after LO selection
+    const {members, isLoading: mLoading, error: mError} = useMembers({
+        branch_id: branchId || null,
+        lo_id: form.loan_officer_id || null,
+        group_id: form.group_id || null,
+    });
 
     const {
-        groups,
-        isLoading: gLoading,
-        error: gError,
-    } = useGroups();
+        loanOfficers,
+        isLoading: loLoading,
+        error: loError,
+    } = useLoanOfficers();
 
-    const {
-        members,
-        isLoading: mLoading,
-        error: mError,
-    } = useMembers();
-
-    const bErr = safeHookError(bError);
     const gErr = safeHookError(gError);
     const mErr = safeHookError(mError);
+    const loErr = safeHookError(loError);
 
-    const branchNameById = useMemo(() => {
-        const map = {};
-        (branches || []).forEach((b) => {
-            const id = b.branch_id ?? b.id;
-            if (id != null) map[String(id)] = b.branch_name || b.name || `Branch-${id}`;
+    // ✅ Loan Officer options (filter by branch) + store lo_id
+    // API shape:
+    // [{ lo_id, employee_id, employee: { branch_id, full_name, phone, user:{username,email,is_active} } }]
+    const loanOfficerOptions = useMemo(() => {
+        const list = Array.isArray(loanOfficers) ? loanOfficers : [];
+        const scoped = !branchId
+            ? list
+            : list.filter((x) => String(x?.employee?.branch_id ?? "") === branchId);
+
+        const sortKey = (x) =>
+            String(x?.employee?.full_name || x?.employee?.user?.username || "").toLowerCase();
+
+        scoped.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+
+        return scoped.map((x) => {
+            const loId = x?.lo_id; // ✅ VALUE MUST BE lo_id
+            const employeeId = x?.employee_id ?? x?.employee?.employee_id ?? "";
+            const fullName = x?.employee?.full_name || "Loan Officer";
+            const username = x?.employee?.user?.username ? ` (${x.employee.user.username})` : "";
+            const phone = x?.employee?.phone ? ` - ${x.employee.phone}` : "";
+            const email = x?.employee?.user?.email || "";
+
+            return {
+                value: String(loId),
+                label: `${fullName}${username}${phone}`,
+                keywords: `${fullName} ${x?.employee?.user?.username || ""} ${phone} ${email} lo_id:${loId} employee_id:${employeeId}`
+                    .replace(/\s+/g, " ")
+                    .trim(),
+            };
         });
-        return map;
-    }, [branches]);
+    }, [loanOfficers, branchId]);
 
     const groupNameById = useMemo(() => {
         const map = {};
@@ -199,35 +227,54 @@ export default function CreateLoanDialog({open, onOpenChange}) {
         return map;
     }, [groups]);
 
-    // ✅ hook already returns scoped groups; no manual filtering needed
-    const visibleGroups = useMemo(() => (Array.isArray(groups) ? groups : []), [groups]);
+    // ✅ Filter groups by Branch + selected Loan Officer (lo_id)
+    const visibleGroups = useMemo(() => {
+        const list = Array.isArray(groups) ? groups : [];
+        const oid = form.loan_officer_id ? String(form.loan_officer_id) : "";
 
-    // ✅ Group options for SearchableSelect
+        return list.filter((g) => {
+            const gBid = g.branch_id ?? g.branchId ?? g.branch?.branch_id ?? g.branch?.id;
+
+            // ✅ include lo_id possibilities
+            const gOid =
+                g.lo_id ??
+                g.loId ??
+                g.loan_officer_id ??
+                g.loanOfficerId ??
+                g.assigned_loan_officer_id ??
+                g.created_by_lo_id ??
+                g.created_by_employee_id ??
+                g.created_by_user_id;
+
+            const okBranch = !branchId ? true : String(gBid ?? "") === branchId;
+            const okOfficer = !oid ? true : String(gOid ?? "") === oid;
+
+            return okBranch && okOfficer;
+        });
+    }, [groups, branchId, form.loan_officer_id]);
+
     const groupOptions = useMemo(() => {
         return (visibleGroups || []).map((g) => {
-            const bid = g.branch_id ?? g.branchId;
-            const bName = branchNameById[String(bid)] || (bid ? `Branch-${bid}` : "Branch");
             const gName = g.group_name || `Group-${g.group_id}`;
-
             return {
                 value: String(g.group_id),
-                label: `${bName} — ${gName}`,
-                keywords: `${bName} ${gName} ${g.group_id} ${bid || ""}`.trim(),
+                label: gName,
+                keywords: `${gName} ${g.group_id}`.trim(),
             };
         });
-    }, [visibleGroups, branchNameById]);
+    }, [visibleGroups]);
 
     const memberOptions = useMemo(() => {
         const gid = form.group_id ? String(form.group_id) : "";
         const list = (members || []).filter((m) => (!gid ? true : String(m.group_id) === gid));
 
-        const sortKey = (m) => {
-            const gName = (groupNameById[String(m.group_id)] || "").toLowerCase();
-            const name = (m.full_name || "").toLowerCase();
-            return `${gName}__${name}`;
-        };
-
-        list.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+        list.sort((a, b) => {
+            const ga = (groupNameById[String(a.group_id)] || "").toLowerCase();
+            const gb = (groupNameById[String(b.group_id)] || "").toLowerCase();
+            const na = (a.full_name || "").toLowerCase();
+            const nb = (b.full_name || "").toLowerCase();
+            return `${ga}__${na}`.localeCompare(`${gb}__${nb}`);
+        });
 
         return list.map((m) => {
             const gName = groupNameById[String(m.group_id)] || `Group-${m.group_id}`;
@@ -241,7 +288,13 @@ export default function CreateLoanDialog({open, onOpenChange}) {
         });
     }, [members, form.group_id, groupNameById]);
 
-    // Reset member when group changes
+    // ✅ Reset group & member when loan officer changes
+    useEffect(() => {
+        setForm((p) => ({...p, group_id: "", member_id: ""}));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [form.loan_officer_id]);
+
+    // ✅ Reset member when group changes
     useEffect(() => {
         setForm((p) => ({...p, member_id: ""}));
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -347,6 +400,8 @@ export default function CreateLoanDialog({open, onOpenChange}) {
     const onSubmit = async () => {
         if (!form.loan_account_no?.trim())
             return toast({title: "Loan A/C No is required", variant: "destructive"});
+        if (!form.loan_officer_id)
+            return toast({title: "Loan Officer is required", variant: "destructive"});
         if (!form.group_id) return toast({title: "Group is required", variant: "destructive"});
         if (!form.member_id) return toast({title: "Member is required", variant: "destructive"});
         if (!form.principal_amount)
@@ -365,7 +420,6 @@ export default function CreateLoanDialog({open, onOpenChange}) {
 
             principal_amount: Number(form.principal_amount),
 
-            // ✅ send computed disbursement charges
             insurance_fee: money2(calc.insuranceFeeAmt),
             processing_fee: money2(calc.processingFeeAmt),
             book_price: money2(calc.bookPriceAmt),
@@ -403,6 +457,16 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                 <DialogContent className="max-w-4xl h-[85vh] overflow-hidden flex flex-col">
                     <DialogHeader className="space-y-2">
                         <DialogTitle>Create Loan</DialogTitle>
+
+                        {branchId ? (
+                            <div className="text-xs text-muted-foreground">
+                                Branch scope: <span className="font-medium text-foreground">{branchId}</span>
+                            </div>
+                        ) : (
+                            <div className="text-xs text-destructive">
+                                Branch scope missing: profileData.branch_id is not set.
+                            </div>
+                        )}
 
                         <div className="rounded-xl border bg-muted/20 px-3 py-2">
                             {settingsLoading ? (
@@ -477,33 +541,63 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                                 )}
                             </div>
 
-                            {/* ✅ GROUP (SearchableSelect) */}
+                            {/* ✅ LOAN OFFICER (value = lo_id) */}
                             <div className="space-y-2">
-                                <Label>Group</Label>
-                                {(gLoading || bLoading) ? (
+                                <Label>Loan Officer</Label>
+                                {!branchId ? (
+                                    <div className="text-sm text-destructive">
+                                        profileData.branch_id not found. Please store branch_id in profileData at login.
+                                    </div>
+                                ) : loLoading ? (
                                     <Skeleton className="h-10 w-full"/>
-                                ) : (gErr || bErr) ? (
-                                    <div className="text-sm text-destructive">{gErr || bErr}</div>
+                                ) : loErr ? (
+                                    <div className="text-sm text-destructive">{loErr}</div>
                                 ) : (
                                     <div className="space-y-2">
                                         <SearchableSelect
-                                            value={form.group_id ? String(form.group_id) : ""}
-                                            onValueChange={(v) => setForm((p) => ({...p, group_id: v}))}
-                                            options={groupOptions}
-                                            placeholder="Select Group"
-                                            searchPlaceholder="Search group..."
+                                            value={form.loan_officer_id ? String(form.loan_officer_id) : ""}
+                                            onValueChange={(v) => setForm((p) => ({...p, loan_officer_id: v}))}
+                                            options={loanOfficerOptions}
+                                            placeholder="Select Loan Officer"
+                                            searchPlaceholder="Search officer..."
+                                            disabled={!branchId}
                                         />
-
-                                        {visibleGroups.length === 0 && (
+                                        {branchId && loanOfficerOptions.length === 0 && (
                                             <div className="text-xs text-muted-foreground">
-                                                No groups available for your scope
+                                                No loan officers found for Branch ID {branchId}
                                             </div>
                                         )}
                                     </div>
                                 )}
                             </div>
 
-                            {/* ✅ MEMBER (SearchableSelect) */}
+                            {/* ✅ GROUP (depends on Loan Officer) */}
+                            <div className="space-y-2">
+                                <Label>Group</Label>
+                                {gLoading ? (
+                                    <Skeleton className="h-10 w-full"/>
+                                ) : gErr ? (
+                                    <div className="text-sm text-destructive">{gErr}</div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        <SearchableSelect
+                                            value={form.group_id ? String(form.group_id) : ""}
+                                            onValueChange={(v) => setForm((p) => ({...p, group_id: v}))}
+                                            options={groupOptions}
+                                            placeholder={!form.loan_officer_id ? "Select Loan Officer first" : "Select Group"}
+                                            searchPlaceholder="Search group..."
+                                            disabled={!form.loan_officer_id}
+                                        />
+                                        {form.loan_officer_id && visibleGroups.length === 0 && (
+                                            <div className="text-xs text-muted-foreground">
+                                                No groups found for this loan officer
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* ✅ MEMBER (fetched via useMembers({lo_id, group_id})) */}
                             <div className="space-y-2">
                                 <Label>Member</Label>
                                 {mLoading ? (
@@ -520,7 +614,6 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                                             searchPlaceholder="Search member..."
                                             disabled={!form.group_id}
                                         />
-
                                         {form.group_id && memberOptions.length === 0 && (
                                             <div className="text-xs text-muted-foreground">
                                                 No members found for this group

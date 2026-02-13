@@ -1,0 +1,44 @@
+name: Build Electron App (Windows)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          npm ci
+
+      - name: Build Windows (electron-builder)
+        shell: pwsh
+        run: |
+          npm run build:win
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: micro-finance-app-windows
+          path: |
+            dist/**/*.exe
+            dist/**/*.msi
+            dist/**/*.zip
+            dist/**/latest.yml
+            dist/**/latest*.yml
+            dist/**/*.blockmap
