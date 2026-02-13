@@ -205,8 +205,6 @@ export function useLoanMaster(filters = {}) {
     disburse_from: normalizeDate(filters.disburse_from) || undefined,
     disburse_to: normalizeDate(filters.disburse_to) || undefined,
     search: normalizeSearch(filters.search) || undefined,
-    limit: filters.limit ?? 50,
-    offset: filters.offset ?? 0,
   };
 
   // ✅ enforce role-based scope (branch_manager / loan_officer)

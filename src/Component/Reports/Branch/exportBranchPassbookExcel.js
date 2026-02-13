@@ -80,24 +80,45 @@ function bold(cell) {
 }
 
 /* =========================
-   classification (edit if needed)
+   classification (UPDATED)
+   - split Charge Collected into:
+     BOOK_PRICE, INSURANCE_FEE, PROCESSING_FEE
 ========================= */
 function classifyTxn(r) {
     const t = safe(r?.txn_type || r?.type || "").toLowerCase();
-    const ref = safe(r?.ref_table || "").toLowerCase();
+    const ref = safe(r?.ref_table || r?.ref_type || r?.charge_type || "").toLowerCase();
     const narration = safe(r?.remark || r?.narration || "").toLowerCase();
 
+    // Loan Disbursed
     if (t.includes("disbur") || narration.includes("disbur")) return "Loan Disbursed";
 
-    if (
+    // Charges (detect charge-ish)
+    const isCharge =
         t.includes("charge") ||
         narration.includes("charge") ||
-        ref.includes("charge") ||
         narration.includes("processing fee") ||
-        narration.includes("insurance")
-    )
-        return "Charge Collected";
+        narration.includes("insurance") ||
+        narration.includes("book") ||
+        ref.includes("fee") ||
+        ref.includes("charge") ||
+        ref.includes("book_price") ||
+        ref.includes("insurance_fee") ||
+        ref.includes("processing_fee");
 
+    if (isCharge) {
+        if (ref.includes("book_price") || narration.includes("book price") || narration.includes("book")) {
+            return "Charge Collected - BOOK_PRICE";
+        }
+        if (ref.includes("insurance_fee") || narration.includes("insurance")) {
+            return "Charge Collected - INSURANCE_FEE";
+        }
+        if (ref.includes("processing_fee") || narration.includes("processing")) {
+            return "Charge Collected - PROCESSING_FEE";
+        }
+        return "Charge Collected - OTHER";
+    }
+
+    // Installment Collection
     if (
         t.includes("install") ||
         t.includes("emi") ||
@@ -105,8 +126,9 @@ function classifyTxn(r) {
         narration.includes("install") ||
         narration.includes("emi") ||
         narration.includes("repay")
-    )
+    ) {
         return "Installment Collection";
+    }
 
     return "Other";
 }
@@ -121,9 +143,7 @@ function normalizeRows(rows) {
             const credit = num(r?.credit);
             const debit = num(r?.debit);
             const category = classifyTxn(r);
-            const {loanAccNo, memberName, groupName, description} = parseRemark(
-                r?.remark || r?.narration || ""
-            );
+            const {loanAccNo, memberName, groupName, description} = parseRemark(r?.remark || r?.narration || "");
             return {
                 raw: r,
                 date,
@@ -157,8 +177,13 @@ function clusterRows(rows) {
 
     const priority = {
         "Loan Disbursed": 1,
-        "Charge Collected": 2,
-        "Installment Collection": 3,
+
+        "Charge Collected - BOOK_PRICE": 2,
+        "Charge Collected - INSURANCE_FEE": 3,
+        "Charge Collected - PROCESSING_FEE": 4,
+        "Charge Collected - OTHER": 5,
+
+        "Installment Collection": 6,
         Other: 99,
     };
 
@@ -168,19 +193,18 @@ function clusterRows(rows) {
         return (priority[a.category] || 50) - (priority[b.category] || 50);
     });
 
+    // keep "(x transactions)" like your current format
     return grouped.map((g) => ({
         date: g.date,
         category: g.category,
-        description: `${g.category} (${g.count} txns)`,
+        description: `${g.category} (${g.count} transactions)`,
         credit: g.credit,
         debit: g.debit,
     }));
 }
 
 /* =========================
-   cash-in-hand (UPDATED)
-   - add opening column
-   - remove net column
+   cash-in-hand
 ========================= */
 function startOfWeek(dt, weekStart = "MON") {
     const d = new Date(dt.getTime());
@@ -314,12 +338,8 @@ function styleGreyRow(ws, rowNo, colCount) {
     }
 }
 
-/* unchanged buildClusteredSheet(...) from your code */
-
 /* =========================
-   Cash sheet table (UPDATED)
-   - add opening column
-   - remove net column
+   Cash sheet table
 ========================= */
 function addCashTable(ws, startRow, title, rows, {highlightWeekends = false} = {}) {
     ws.mergeCells(startRow, 1, startRow, 5);
@@ -354,7 +374,7 @@ function addCashTable(ws, startRow, title, rows, {highlightWeekends = false} = {
         r += 1;
     });
 
-    // TOTAL row (no net)
+    // TOTAL row
     const totalRow = r;
     ws.getCell(totalRow, 1).value = "TOTAL";
     ws.getCell(totalRow, 2).value = {formula: `B${headerRow + 1}`}; // opening of first row
@@ -377,7 +397,7 @@ function addCashTable(ws, startRow, title, rows, {highlightWeekends = false} = {
 }
 
 /* =========================
-   Cash sheet (UPDATED widths)
+   Cash sheet
 ========================= */
 function buildCashInHandSheet({ws, branchLabel, fromDate, toDate, rows, opening, weekStart}) {
     // Period | Opening | Cash In | Cash Out | Closing
@@ -413,85 +433,126 @@ function buildCashInHandSheet({ws, branchLabel, fromDate, toDate, rows, opening,
     startRow = addCashTable(ws, startRow, "Monthly Cash In Hand", monthly);
 }
 
-function buildClusteredSheet({ ws, branchLabel, fromDate, toDate, rows, opening }) {
-    // A Date | B Category | C Description | D Credit | E Debit | F Balance
+/* =========================
+   Clustered sheet (UPDATED)
+   - day-wise Opening/Closing rows
+========================= */
+function buildClusteredSheet({ws, branchLabel, fromDate, toDate, rows, opening}) {
     const headers = ["Date", "Category", "Description", "Credit", "Debit", "Balance"];
-    setCols(ws, [14, 22, 40, 16, 16, 18]);
+    setCols(ws, [14, 28, 42, 16, 16, 18]);
 
     ws.mergeCells(1, 1, 1, 6);
-    ws.getCell(1, 1).value = "Passbook (Clustered Summary)";
-    ws.getCell(1, 1).font = { bold: true, size: 16, name: "Arial Black" };
-    ws.getCell(1, 1).alignment = { horizontal: "center", vertical: "middle" };
+    ws.getCell(1, 1).value = "Passbook Summary";
+    ws.getCell(1, 1).font = {bold: true, size: 16, name: "Arial Black"};
+    ws.getCell(1, 1).alignment = {horizontal: "center", vertical: "middle"};
     ws.getRow(1).height = 24;
 
     ws.mergeCells(2, 1, 2, 3);
     ws.getCell(2, 1).value = `Branch: ${branchLabel || "-"}`;
-    ws.getCell(2, 1).font = { bold: true };
+    ws.getCell(2, 1).font = {bold: true};
 
     ws.mergeCells(2, 4, 2, 6);
     ws.getCell(2, 4).value = `Date: ${fromDate} to ${toDate}`;
-    ws.getCell(2, 4).font = { bold: true };
-    ws.getCell(2, 4).alignment = { horizontal: "right" };
+    ws.getCell(2, 4).font = {bold: true};
+    ws.getCell(2, 4).alignment = {horizontal: "right"};
 
     const HEADER_ROW = 3;
     ws.getRow(HEADER_ROW).values = headers;
     styleHeaderRow(ws, HEADER_ROW, 6);
 
-    const OPEN_ROW = 4;
-    ws.getCell(OPEN_ROW, 2).value = "***Opening Balance***";
-    ws.getCell(OPEN_ROW, 6).value = num(opening);
-    ws.getCell(OPEN_ROW, 6).numFmt = "#,##0.00";
-    ws.getCell(OPEN_ROW, 6).alignment = { horizontal: "right", vertical: "middle" };
-    styleGreyRow(ws, OPEN_ROW, 6);
-
     const clustered = clusterRows(rows);
-    const DATA_START = 5;
 
-    clustered.forEach((r, i) => {
-        const rowIndex = DATA_START + i;
+    // group clustered rows by date
+    const byDate = new Map();
+    for (const r of clustered) {
+        if (!byDate.has(r.date)) byDate.set(r.date, []);
+        byDate.get(r.date).push(r);
+    }
+    const dates = Array.from(byDate.keys()).sort();
 
-        ws.getCell(rowIndex, 1).value = r.date;
-        ws.getCell(rowIndex, 2).value = r.category;
-        ws.getCell(rowIndex, 3).value = r.description;
+    let rowIndex = 4;
+    let prevClosingRowRef = null;
 
-        ws.getCell(rowIndex, 4).value = num(r.credit);
-        ws.getCell(rowIndex, 5).value = num(r.debit);
+    for (const dt of dates) {
+        const dayRows = byDate.get(dt) || [];
 
-        // Balance = prev + credit - debit
-        ws.getCell(rowIndex, 6).value = {
-            formula: `F${rowIndex - 1}+D${rowIndex}-E${rowIndex}`,
-        };
+        // Opening row (for this date)
+        const OPEN_ROW = rowIndex;
+        ws.getCell(OPEN_ROW, 1).value = dt;
+        ws.getCell(OPEN_ROW, 2).value = "***Opening Balance***";
 
-        ws.getCell(rowIndex, 1).alignment = { horizontal: "center", vertical: "middle" };
-        ws.getCell(rowIndex, 2).alignment = { horizontal: "left", vertical: "middle" };
+        if (!prevClosingRowRef) {
+            ws.getCell(OPEN_ROW, 6).value = num(opening);
+        } else {
+            ws.getCell(OPEN_ROW, 6).value = {formula: `F${prevClosingRowRef}`};
+        }
 
-        [4, 5, 6].forEach((col) => {
-            ws.getCell(rowIndex, col).numFmt = "#,##0.00";
-            ws.getCell(rowIndex, col).alignment = { horizontal: "right", vertical: "middle" };
+        ws.getCell(OPEN_ROW, 6).numFmt = "#,##0.00";
+        ws.getCell(OPEN_ROW, 6).alignment = {horizontal: "right", vertical: "middle"};
+        styleGreyRow(ws, OPEN_ROW, 6);
+
+        rowIndex += 1;
+
+        const DATA_START = rowIndex;
+
+        // Data rows
+        dayRows.forEach((r) => {
+            const rIdx = rowIndex;
+
+            ws.getCell(rIdx, 1).value = r.date;
+            ws.getCell(rIdx, 2).value = r.category;
+            ws.getCell(rIdx, 3).value = r.description;
+
+            ws.getCell(rIdx, 4).value = num(r.credit);
+            ws.getCell(rIdx, 5).value = num(r.debit);
+
+            ws.getCell(rIdx, 6).value = {formula: `F${rIdx - 1}+D${rIdx}-E${rIdx}`};
+
+            ws.getCell(rIdx, 1).alignment = {horizontal: "center", vertical: "middle"};
+            ws.getCell(rIdx, 2).alignment = {horizontal: "left", vertical: "middle"};
+
+            [4, 5, 6].forEach((col) => {
+                ws.getCell(rIdx, col).numFmt = "#,##0.00";
+                ws.getCell(rIdx, col).alignment = {horizontal: "right", vertical: "middle"};
+            });
+
+            for (let c = 1; c <= 6; c++) borderAllThin(ws.getCell(rIdx, c));
+
+            rowIndex += 1;
         });
 
-        for (let c = 1; c <= 6; c++) borderAllThin(ws.getCell(rowIndex, c));
-    });
+        const lastDataRow = rowIndex - 1;
 
-    const lastDataRow = DATA_START + clustered.length - 1;
-    const CLOSE_ROW = lastDataRow + 1;
+        // Closing row (for this date)
+        const CLOSE_ROW = rowIndex;
+        ws.getCell(CLOSE_ROW, 1).value = dt;
+        ws.getCell(CLOSE_ROW, 2).value = "***Closing Balance***";
 
-    ws.getCell(CLOSE_ROW, 2).value = "***Closing Balance***";
-    ws.getCell(CLOSE_ROW, 4).value = { formula: `SUM(D${DATA_START}:D${lastDataRow})` };
-    ws.getCell(CLOSE_ROW, 5).value = { formula: `SUM(E${DATA_START}:E${lastDataRow})` };
-    ws.getCell(CLOSE_ROW, 6).value = { formula: `F${lastDataRow}` };
+        // If there were no data rows for the day (rare), closing == opening
+        if (lastDataRow < DATA_START) {
+            ws.getCell(CLOSE_ROW, 4).value = 0;
+            ws.getCell(CLOSE_ROW, 5).value = 0;
+            ws.getCell(CLOSE_ROW, 6).value = {formula: `F${OPEN_ROW}`};
+        } else {
+            ws.getCell(CLOSE_ROW, 4).value = {formula: `SUM(D${DATA_START}:D${lastDataRow})`};
+            ws.getCell(CLOSE_ROW, 5).value = {formula: `SUM(E${DATA_START}:E${lastDataRow})`};
+            ws.getCell(CLOSE_ROW, 6).value = {formula: `F${lastDataRow}`};
+        }
 
-    styleGreyRow(ws, CLOSE_ROW, 6);
+        styleGreyRow(ws, CLOSE_ROW, 6);
 
-    [4, 5, 6].forEach((col) => {
-        ws.getCell(CLOSE_ROW, col).numFmt = "#,##0.00";
-        ws.getCell(CLOSE_ROW, col).alignment = { horizontal: "right", vertical: "middle" };
-    });
+        [4, 5, 6].forEach((col) => {
+            ws.getCell(CLOSE_ROW, col).numFmt = "#,##0.00";
+            ws.getCell(CLOSE_ROW, col).alignment = {horizontal: "right", vertical: "middle"};
+        });
+
+        prevClosingRowRef = CLOSE_ROW;
+        rowIndex += 2; // blank line between days
+    }
 }
 
-
 /* =========================
-   export main (unchanged)
+   export main
 ========================= */
 export async function exportBranchPassbookExcel({
                                                     exportFileName = "branch_passbook.xlsx",
@@ -508,7 +569,7 @@ export async function exportBranchPassbookExcel({
     const branchLabel = branchName?.trim() ? branchName.trim() : safe(branchId);
     const opening = num(summary?.opening);
 
-    const wsClustered = wb.addWorksheet("Passbook (Clustered)");
+    const wsClustered = wb.addWorksheet("Passbook Summary");
     buildClusteredSheet({
         ws: wsClustered,
         branchLabel,

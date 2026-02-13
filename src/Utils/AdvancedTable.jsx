@@ -10,6 +10,9 @@ import {
     DropdownMenu,
     DropdownMenuCheckboxItem,
     DropdownMenuContent,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
+    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
@@ -117,6 +120,11 @@ export default function AdvancedTable({
                                           initialSort = null,
                                           sortState = null,
                                           onSortStateChange = null,
+
+                                          // ✅ Optional Sort dropdown (hidden by default)
+                                          enableSortDropdown = false,
+                                          sortDropdownOptions = [], // [{ key: "group_name", label: "Group Name" }, ...]
+                                          sortDropdownTitle = "Sort",
                                       }) {
     const [q, setQ] = useState("");
     const [pageSize, setPageSize] = useState(initialPageSize);
@@ -365,6 +373,58 @@ export default function AdvancedTable({
                                 <Download className="h-4 w-4 mr-2"/>
                                 Export
                             </Button>
+                        ) : null}
+
+                        {/* ✅ Optional Sort dropdown (hidden by default) */}
+                        {enableSortDropdown && Array.isArray(sortDropdownOptions) && sortDropdownOptions.length > 0 ? (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" size="sm">
+                                        <ArrowUpDown className="h-4 w-4 mr-2"/>
+                                        {sortDropdownTitle}
+                                    </Button>
+                                </DropdownMenuTrigger>
+
+                                <DropdownMenuContent align="end" className="w-64">
+                                    <div className="px-3 py-2 text-xs font-semibold text-muted-foreground">
+                                        Sort column
+                                    </div>
+
+                                    <DropdownMenuRadioGroup
+                                        value={sort?.key ?? ""}
+                                        onValueChange={(k) => {
+                                            if (!k) {
+                                                setSort({key: null, dir: "asc"});
+                                                return;
+                                            }
+                                            setSort((prev) => ({key: k, dir: prev?.dir || "asc"}));
+                                        }}
+                                    >
+                                        <DropdownMenuRadioItem value="">None</DropdownMenuRadioItem>
+                                        {sortDropdownOptions.map((op) => (
+                                            <DropdownMenuRadioItem key={op.key} value={op.key}>
+                                                {op.label}
+                                            </DropdownMenuRadioItem>
+                                        ))}
+                                    </DropdownMenuRadioGroup>
+
+                                    <DropdownMenuSeparator/>
+
+                                    <div className="px-3 py-2 text-xs font-semibold text-muted-foreground">
+                                        Order
+                                    </div>
+
+                                    <DropdownMenuRadioGroup
+                                        value={sort?.dir || "asc"}
+                                        onValueChange={(dir) => {
+                                            setSort((prev) => ({key: prev?.key ?? null, dir: dir || "asc"}));
+                                        }}
+                                    >
+                                        <DropdownMenuRadioItem value="asc">A → Z</DropdownMenuRadioItem>
+                                        <DropdownMenuRadioItem value="desc">Z → A</DropdownMenuRadioItem>
+                                    </DropdownMenuRadioGroup>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         ) : null}
 
                         {enableColumnToggle ? (
