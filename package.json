@@ -4,7 +4,7 @@
   "description": "Micro Finance Desktop App",
   "author": "Aniruddha Ghosh",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev:vite": "vite --port 8080",
