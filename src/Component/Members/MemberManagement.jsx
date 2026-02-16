@@ -1,11 +1,20 @@
 // src/Component/Home/Main Components/Members/MemberManagement.jsx
 import React, {useMemo, useState} from "react";
 import {Button} from "@/components/ui/button.tsx";
-import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@/components/ui/card.tsx";
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from "@/components/ui/card.tsx";
 import {Plus} from "lucide-react";
 import {useToast} from "@/hooks/use-toast.ts";
 import {useMembers} from "@/hooks/useMembers.js";
+import {useLoanOfficers} from "@/hooks/useLoanOfficers.js";
 import {confirmDelete} from "@/Utils/confirmDelete.js";
+
+import {getProfileData, isBranchManagerRole} from "@/hooks/useApi";
 
 import MemberFilters from "@/Component/Members/MemberFilters.jsx";
 import MemberTable from "@/Component/Members/MemberTable.jsx";
@@ -13,31 +22,17 @@ import MemberDialog from "@/Component/Members/MemberDialog.jsx";
 import {buildMaps, getMemberInfo, filterMemberRows} from "@/Component/Members/memberUtils.js";
 import MembersKpiRow from "@/Component/Members/MembersKpiRow.jsx";
 
-
 export default function MemberManagement({groups = [], branches = [], officers = [], regions = []}) {
     const {toast} = useToast();
 
-
-    // ✅ Role-based permission: loan_officer can view table but cannot add members
     const role = useMemo(() => {
-        const tryParse = (k) => {
-            try {
-                const raw = localStorage.getItem(k);
-                return raw ? JSON.parse(raw) : null;
-            } catch {
-                return null;
-            }
-        };
-
-        // Common keys used across the app
-        const ud = tryParse("userData");
-        const u = tryParse("user");
-
-        return (ud?.role || u?.role || "").toString().toLowerCase();
+        const p = getProfileData();
+        return (p?.role || "").toString().trim().toLowerCase();
     }, []);
 
     const isLoanOfficer = role === "loan_officer";
-
+    const isBranchManager = isBranchManagerRole(role);
+    const hideBranchRegion = isLoanOfficer || isBranchManager;
 
     const {
         members = [],
@@ -52,6 +47,10 @@ export default function MemberManagement({groups = [], branches = [], officers =
         isDeleting,
         refetch,
     } = useMembers();
+
+    // ✅ Ensure Loan Officer dropdown always has data
+    const {loanOfficers = []} = useLoanOfficers();
+    const officersList = (Array.isArray(officers) && officers.length > 0) ? officers : loanOfficers;
 
     // modal state
     const [open, setOpen] = useState(false);
@@ -84,8 +83,8 @@ export default function MemberManagement({groups = [], branches = [], officers =
     const [isActive, setIsActive] = useState(true);
 
     const maps = useMemo(
-        () => buildMaps({groups, branches, regions, officers}),
-        [groups, branches, regions, officers]
+        () => buildMaps({groups, branches, regions, officers: officersList}),
+        [groups, branches, regions, officersList]
     );
 
     const rows = useMemo(() => {
@@ -96,12 +95,21 @@ export default function MemberManagement({groups = [], branches = [], officers =
         return filterMemberRows(rows, {
             q,
             onlyActive,
-            filterRegionId,
-            filterBranchId,
+            filterRegionId: hideBranchRegion ? "all" : filterRegionId,
+            filterBranchId: hideBranchRegion ? "all" : filterBranchId,
             filterOfficerId,
             filterGroupId,
         });
-    }, [rows, q, onlyActive, filterRegionId, filterBranchId, filterOfficerId, filterGroupId]);
+    }, [
+        rows,
+        q,
+        onlyActive,
+        filterRegionId,
+        filterBranchId,
+        filterOfficerId,
+        filterGroupId,
+        hideBranchRegion,
+    ]);
 
     const resetForm = () => {
         setEditingId(null);
@@ -130,7 +138,6 @@ export default function MemberManagement({groups = [], branches = [], officers =
 
     const openEdit = (m) => {
         setEditingId(m.member_id);
-
         setGroupId(String(m.group_id ?? ""));
         setFullName(m.full_name ?? "");
         setFatherOrHusbandName(m.father_or_husband_name ?? "");
@@ -149,19 +156,16 @@ export default function MemberManagement({groups = [], branches = [], officers =
         const b64 = m.photo_b64 || "";
         setPhotoB64(b64);
         setPhotoPreview(b64 ? `data:image/*;base64,${b64}` : "");
-
         setOpen(true);
     };
 
     const handlePhotoUpload = async (e) => {
         const file = e.target.files?.[0];
         if (!file) return;
-
         if (!file.type.startsWith("image/")) {
             toast({title: "Please upload an image file", variant: "destructive"});
             return;
         }
-
         const reader = new FileReader();
         reader.onload = () => {
             const dataUrl = String(reader.result || "");
@@ -181,7 +185,6 @@ export default function MemberManagement({groups = [], branches = [], officers =
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-
         try {
             const payload = {
                 full_name: fullName,
@@ -227,10 +230,7 @@ export default function MemberManagement({groups = [], branches = [], officers =
             description: `This will deactivate "${m.full_name}".`,
             confirmText: "Deactivate",
         });
-
-        const fallbackOk =
-            ok === undefined ? window.confirm(`Deactivate "${m.full_name}"?`) : ok;
-
+        const fallbackOk = ok === undefined ? window.confirm(`Deactivate "${m.full_name}"?`) : ok;
         if (!fallbackOk) return;
 
         try {
@@ -266,7 +266,8 @@ export default function MemberManagement({groups = [], branches = [], officers =
             </CardHeader>
 
             <CardContent className="space-y-4">
-                <MembersKpiRow role={role} rows={filteredRows} groups={groups} />
+                <MembersKpiRow role={role} rows={filteredRows} groups={groups}/>
+
                 {isError && (
                     <div className="text-sm text-destructive">
                         {error?.response?.data?.detail || error?.message || "Failed to load Members"}
@@ -288,8 +289,9 @@ export default function MemberManagement({groups = [], branches = [], officers =
                     setFilterGroupId={setFilterGroupId}
                     regions={regions}
                     branches={branches}
-                    officers={officers}
+                    officers={officersList}   // ✅ IMPORTANT
                     groups={groups}
+                    role={role}
                 />
 
                 <MemberTable
@@ -298,9 +300,9 @@ export default function MemberManagement({groups = [], branches = [], officers =
                     onEdit={openEdit}
                     onDeactivate={handleDeactivate}
                     isDeleting={isDeleting}
+                    role={role}
                 />
 
-                {/* Modal */}
                 <MemberDialog
                     open={open}
                     onOpenChange={(v) => {

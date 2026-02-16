@@ -14,16 +14,20 @@ function getInitials(name = "") {
 }
 
 export default function MemberTable({
-    isLoading,
-    rows = [],
-    onEdit,
-    onDeactivate,
-    isDeleting,
-}) {
+                                        isLoading,
+                                        rows = [],
+                                        onEdit,
+                                        onDeactivate,
+                                        isDeleting,
+                                        role = "",
+                                    }) {
     const data = Array.isArray(rows) ? rows : [];
 
-    const columns = useMemo(
-        () => [
+    const columns = useMemo(() => {
+        const r = String(role || "").toLowerCase();
+        const hideBranchRegion = r === "loan_officer" || r === "branch_manager";
+
+        return [
             {
                 key: "borrower",
                 header: "Borrower Name",
@@ -31,23 +35,14 @@ export default function MemberTable({
                 sortValue: (row) => row?.m?.full_name || "",
                 cell: (row) => {
                     const m = row?.m || {};
-                    const hasPhoto = Boolean(
-                        m.photo_b64 && String(m.photo_b64).trim().length > 0
-                    );
-                    const avatarSrc = hasPhoto
-                        ? `data:image/*;base64,${m.photo_b64}`
-                        : "";
+                    const hasPhoto = Boolean(m.photo_b64 && String(m.photo_b64).trim().length > 0);
+                    const avatarSrc = hasPhoto ? `data:image/*;base64,${m.photo_b64}` : "";
 
                     return (
                         <div className="flex items-center gap-3">
                             <Avatar className="h-9 w-9 border">
-                                <AvatarImage
-                                    src={avatarSrc}
-                                    alt={m.full_name || "member"}
-                                />
-                                <AvatarFallback className="text-xs">
-                                    {getInitials(m.full_name)}
-                                </AvatarFallback>
+                                <AvatarImage src={avatarSrc} alt={m.full_name || "member"}/>
+                                <AvatarFallback className="text-xs">{getInitials(m.full_name)}</AvatarFallback>
                             </Avatar>
 
                             <div className="leading-tight">
@@ -78,29 +73,39 @@ export default function MemberTable({
                 sortValue: (row) => row?.info?.officer || "",
                 cell: (row) => row?.info?.officer || "—",
             },
-            {
-                key: "branch",
-                header: "Branch",
-                sortValue: (row) => row?.info?.branch || "",
-                cell: (row) => row?.info?.branch || "—",
-            },
-            {
-                key: "region",
-                header: "Region",
-                sortValue: (row) => row?.info?.region || "",
-                cell: (row) => row?.info?.region || "—",
-            },
+
+            ...(hideBranchRegion
+                ? [
+                    {
+                        key: "meeting_day",
+                        header: "Meeting Day",
+                        sortValue: (row) => row?.info?.meetingDay || "",
+                        cell: (row) => row?.info?.meetingDay || "—",
+                    },
+                ]
+                : [
+                    {
+                        key: "branch",
+                        header: "Branch",
+                        sortValue: (row) => row?.info?.branch || "",
+                        cell: (row) => row?.info?.branch || "—",
+                    },
+                    {
+                        key: "region",
+                        header: "Region",
+                        sortValue: (row) => row?.info?.region || "",
+                        cell: (row) => row?.info?.region || "—",
+                    },
+                ]),
+
             {
                 key: "status",
                 header: "Status",
                 sortValue: (row) => (row?.m?.is_active ?? true) ? 1 : 0,
                 cell: (row) => {
                     const active = Boolean(row?.m?.is_active ?? true);
-                    return active ? (
-                        <Badge variant="secondary">Active</Badge>
-                    ) : (
-                        <Badge variant="destructive">Inactive</Badge>
-                    );
+                    return active ? <Badge variant="secondary">Active</Badge> :
+                        <Badge variant="destructive">Inactive</Badge>;
                 },
             },
             {
@@ -108,17 +113,13 @@ export default function MemberTable({
                 header: "Actions",
                 tdClassName: "text-right whitespace-nowrap",
                 hideable: false,
-                sortValue: () => "", // no-op
+                sortValue: () => "",
                 cell: (row) => {
                     const m = row?.m || {};
                     return (
                         <div className="inline-flex gap-2">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => onEdit?.(m)}
-                            >
-                                <Pencil className="mr-2 h-4 w-4" />
+                            <Button variant="outline" size="sm" onClick={() => onEdit?.(m)}>
+                                <Pencil className="mr-2 h-4 w-4"/>
                                 Edit
                             </Button>
 
@@ -128,16 +129,15 @@ export default function MemberTable({
                                 disabled={Boolean(isDeleting)}
                                 onClick={() => onDeactivate?.(m)}
                             >
-                                <Trash2 className="mr-2 h-4 w-4" />
+                                <Trash2 className="mr-2 h-4 w-4"/>
                                 Deactivate
                             </Button>
                         </div>
                     );
                 },
             },
-        ],
-        [onEdit, onDeactivate, isDeleting]
-    );
+        ];
+    }, [onEdit, onDeactivate, isDeleting, role]);
 
     return (
         <AdvancedTable
@@ -148,11 +148,9 @@ export default function MemberTable({
             isLoading={Boolean(isLoading)}
             errorText={""}
             emptyText="No members found."
-            // ✅ Pagination enabled
             enablePagination={true}
             initialPageSize={5}
             pageSizeOptions={[5, 10, 20, 50]}
-            // ✅ Search is handled by MemberFilters (external)
             enableSearch={false}
             enableColumnToggle={true}
             stickyHeader={true}

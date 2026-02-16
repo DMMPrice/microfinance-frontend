@@ -1,5 +1,5 @@
 // src/Component/Home/Main Components/Members/MemberDialog.jsx
-import React from "react";
+import React, {useEffect, useMemo, useState} from "react";
 import {
     Dialog,
     DialogContent,
@@ -19,6 +19,10 @@ import autoTable from "jspdf-autotable";
 
 import SearchableSelect from "@/Utils/SearchableSelect.jsx";
 
+import {useLoanOfficers} from "@/hooks/useLoanOfficers.js";
+import {useGroups} from "@/hooks/useGroups.js";
+import {getProfileData} from "@/hooks/useApi.js";
+
 function SectionTitle({title, desc}) {
     return (
         <div className="space-y-1">
@@ -34,6 +38,32 @@ function safeFileName(name) {
         .trim()
         .replace(/\s+/g, "_");
     return n || "member";
+}
+
+// ✅ normalize meeting day (supports string/number/object)
+function normDay(v) {
+    if (v == null) return "";
+    if (typeof v === "object") return normDay(v?.name ?? v?.day ?? v?.label ?? "");
+    if (typeof v === "number") {
+        const map0 = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+        return map0[v] || "";
+    }
+    const s = String(v).trim();
+    if (!s) return "";
+    return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function groupLabelWithMeetingDay(group) {
+    // group API: group_name, meeting_day, group_id
+    const name = group?.name ?? group?.group_name ?? "";
+    const md =
+        group?.meeting_day ??
+        group?.meetingDay ??
+        group?.meeting_day_name ??
+        group?.meetingDayName ??
+        "";
+    const mdStr = normDay(md);
+    return mdStr ? `${name} (${mdStr})` : name;
 }
 
 // ✅ PDF generator
@@ -53,19 +83,17 @@ function downloadMemberPDF({
                                permanentAddress,
                                otherDetails,
                                isActive,
-                               photoPreview, // dataURL
+                               photoPreview,
                            }) {
     const doc = new jsPDF({unit: "mm", format: "a4"});
     const left = 14;
 
-    // Header
     doc.setFontSize(16);
     doc.text(title, left, 16);
 
     doc.setFontSize(10);
     doc.text(`Generated: ${new Date().toLocaleString()}`, left, 22);
 
-    // Main table
     const rows = [
         ["Full Name", fullName || "-"],
         ["Phone", phone || "-"],
@@ -95,20 +123,17 @@ function downloadMemberPDF({
         },
     });
 
-    // Photo (optional)
     if (photoPreview) {
         const y = (doc.lastAutoTable?.finalY || 28) + 10;
         doc.setFontSize(12);
         doc.text("Photo", left, y);
 
         try {
-            // try jpeg
             doc.addImage(photoPreview, "JPEG", left, y + 4, 40, 40);
-        } catch (e) {
+        } catch {
             try {
-                // fallback png
                 doc.addImage(photoPreview, "PNG", left, y + 4, 40, 40);
-            } catch (err) {
+            } catch {
                 // ignore
             }
         }
@@ -123,11 +148,14 @@ export default function MemberDialog({
                                          editingId,
                                          saving,
 
+                                         // ⛔ we won't use parent "groups" now for selection.
+                                         // We will load groups dynamically after LO selection.
+                                         // (Keep prop for compatibility if you want)
                                          groups = [],
-                                         officerNameById,
 
                                          groupId,
                                          setGroupId,
+
                                          fullName,
                                          setFullName,
                                          fatherOrHusbandName,
@@ -159,13 +187,86 @@ export default function MemberDialog({
                                          setIsActive,
                                          onSubmit,
                                      }) {
+    // ✅ profileData from useApi helper (localStorage)
+    const profile = useMemo(() => getProfileData(), []);
+    const profileBranchId = profile?.branch_id ?? null;
+
+    // ✅ Loan officers from hook
+    const {loanOfficers = [], isLoading: loLoading} = useLoanOfficers();
+
+    // ✅ Selected Loan Officer (lo_id)
+    const [selectedLoId, setSelectedLoId] = useState("");
+
+    // ✅ when dialog opens, reset if creating new
+    useEffect(() => {
+        if (!open) return;
+        if (!editingId) {
+            setSelectedLoId("");
+            setGroupId("");
+        }
+    }, [open, editingId, setGroupId]);
+
+    // ✅ Filter LO branch-wise (BM sees their branch)
+    const filteredLoanOfficers = useMemo(() => {
+        if (!profileBranchId) return loanOfficers;
+        return loanOfficers.filter((lo) => String(lo?.employee?.branch_id) === String(profileBranchId));
+    }, [loanOfficers, profileBranchId]);
+
+    // ✅ Build LO dropdown options from actual response shape
+    const loanOfficerOptions = useMemo(() => {
+        return filteredLoanOfficers.map((lo) => {
+            const loId = String(lo?.lo_id ?? "");
+            const emp = lo?.employee ?? {};
+            const user = emp?.user ?? {};
+            const full = emp?.full_name ?? "";
+            const username = user?.username ?? "";
+            const email = user?.email ?? "";
+
+            const label = full
+                ? `${full}${username ? ` (${username})` : ""}`
+                : username || email || `LO ${loId}`;
+
+            const keywords = `${loId} ${full} ${username} ${email}`.trim();
+
+            return {value: loId, label, keywords};
+        });
+    }, [filteredLoanOfficers]);
+
+    // ✅ Load groups only after LO selection
+    // useGroups supports params lo_id + branch_id (and auto-applies branch_id for BM)
+    const {
+        groups: apiGroups = [],
+        isLoading: groupsLoading,
+    } = useGroups(
+        selectedLoId
+            ? {branch_id: profileBranchId ?? undefined, lo_id: selectedLoId}
+            : {branch_id: profileBranchId ?? undefined}
+    );
+
+    // ✅ Only show groups of selected LO (backend already filters, still safe)
+    const groupsForSelectedLo = useMemo(() => {
+        if (!selectedLoId) return [];
+        return (apiGroups || []).filter((g) => String(g?.lo_id) === String(selectedLoId));
+    }, [apiGroups, selectedLoId]);
+
+    const groupOptions = useMemo(() => {
+        return groupsForSelectedLo.map((g) => {
+            const gid = String(g?.group_id ?? g?.id ?? "");
+            const label = groupLabelWithMeetingDay(g) || `Group ${gid}`;
+            return {
+                value: gid,
+                label,
+                keywords: `${gid} ${label} ${g?.meeting_day ?? ""}`.trim(),
+            };
+        });
+    }, [groupsForSelectedLo]);
+
+    const selectedGroupObj = useMemo(() => {
+        return groupsForSelectedLo.find((g) => String(g?.group_id ?? g?.id) === String(groupId)) || null;
+    }, [groupsForSelectedLo, groupId]);
+
     const handleDownloadPDF = () => {
-        // Build Group label (GroupName (LoanOfficerName))
-        const g = groups.find((x) => String(x.id ?? x.group_id) === String(groupId));
-        const gid = String(g?.id ?? g?.group_id ?? "");
-        const loId = String(g?.loanOfficerId ?? g?.lo_id ?? "");
-        const loName = officerNameById?.get(loId) || "Unknown";
-        const groupLabel = g ? `${g.name || g.group_name || `Group ${gid}`} (${loName})` : "-";
+        const groupLabel = selectedGroupObj ? groupLabelWithMeetingDay(selectedGroupObj) : "-";
 
         downloadMemberPDF({
             title: "Borrower Profile",
@@ -187,22 +288,15 @@ export default function MemberDialog({
         });
     };
 
-    const groupOptions = groups.map((group) => {
-        const gid = String(group.id ?? group.group_id);
-        const loId = String(group.loanOfficerId ?? group.lo_id);
-        const loName = officerNameById?.get(loId) || "Unknown";
-
-        return {
-            value: gid,
-            label: `${group.name || group.group_name || `Group ${gid}`} (${loName})`,
-            keywords: `${gid} ${loName}`,
-        };
-    });
+    // ✅ LO change => reset group
+    const onLoanOfficerChange = (loId) => {
+        setSelectedLoId(loId || "");
+        setGroupId(""); // must pick group again
+    };
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="w-[95vw] max-w-4xl p-0 overflow-hidden">
-                {/* Header + Actions */}
                 <DialogHeader className="px-6 pt-6 pb-4">
                     <div className="flex items-start justify-between gap-4">
                         <div>
@@ -214,14 +308,8 @@ export default function MemberDialog({
                             </p>
                         </div>
 
-                        {/* ✅ Download + Active */}
                         <div className="flex items-center gap-2">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                className="h-10"
-                                onClick={handleDownloadPDF}
-                            >
+                            <Button type="button" variant="outline" className="h-10" onClick={handleDownloadPDF}>
                                 <Download className="mr-2 h-4 w-4"/>
                                 Download PDF
                             </Button>
@@ -239,19 +327,44 @@ export default function MemberDialog({
 
                 <ScrollArea className="max-h-[72vh] px-6 pr-3 pb-6">
                     <form onSubmit={onSubmit} className="space-y-6">
-                        {/* Group */}
-                        <div className="space-y-2">
-                            <Label>Assign to Group</Label>
+                        {/* ✅ LO + Group (LO first, then group filtered by LO) */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label>Loan Officer</Label>
+                                <SearchableSelect
+                                    value={selectedLoId}
+                                    onValueChange={onLoanOfficerChange}
+                                    options={loanOfficerOptions}
+                                    placeholder={loLoading ? "Loading..." : "Select loan officer"}
+                                    searchPlaceholder="Search officer name / username / email..."
+                                    className="h-11"
+                                />
+                            </div>
 
+                            <div className="space-y-2">
+                                <Label>Assign to Group</Label>
                                 <SearchableSelect
                                     value={groupId}
                                     onValueChange={setGroupId}
                                     options={groupOptions}
-                                    placeholder="Select group"
-                                    searchPlaceholder="Search group or loan officer..."
+                                    placeholder={
+                                        !selectedLoId
+                                            ? "Select loan officer first"
+                                            : groupsLoading
+                                                ? "Loading groups..."
+                                                : "Select group"
+                                    }
+                                    searchPlaceholder="Search group / meeting day..."
                                     className="h-11"
+                                    disabled={!selectedLoId}
                                 />
+                                {!selectedLoId ? (
+                                    <div className="text-[11px] text-muted-foreground">
+                                        Please select a Loan Officer to load groups.
+                                    </div>
+                                ) : null}
                             </div>
+                        </div>
 
                         <Separator/>
 
@@ -262,7 +375,6 @@ export default function MemberDialog({
                                 desc="Primary borrower details used for identification."
                             />
 
-                            {/* Row 1: Name | Phone | DOB */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div className="space-y-2 md:col-span-1">
                                     <Label>Full Name</Label>
@@ -297,7 +409,6 @@ export default function MemberDialog({
                                 </div>
                             </div>
 
-                            {/* Row 2: Father/Husband | Mother | Pincode */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div className="space-y-2">
                                     <Label>Father / Husband Name</Label>
@@ -378,10 +489,7 @@ export default function MemberDialog({
 
                         {/* ADDRESS */}
                         <div className="space-y-4">
-                            <SectionTitle
-                                title="Address"
-                                desc="Keep address complete for field verification."
-                            />
+                            <SectionTitle title="Address" desc="Keep address complete for field verification."/>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="space-y-2">
@@ -418,23 +526,14 @@ export default function MemberDialog({
                             />
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {/* Photo */}
                                 <div className="space-y-2">
                                     <Label>Photo</Label>
                                     <div className="flex items-center gap-2">
-                                        <Input
-                                            className="h-11"
-                                            type="file"
-                                            accept="image/*"
-                                            onChange={handlePhotoUpload}
-                                        />
+                                        <Input className="h-11" type="file" accept="image/*"
+                                               onChange={handlePhotoUpload}/>
                                         {photoPreview ? (
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                className="h-11"
-                                                onClick={clearPhoto}
-                                            >
+                                            <Button type="button" variant="outline" className="h-11"
+                                                    onClick={clearPhoto}>
                                                 <X className="h-4 w-4"/>
                                             </Button>
                                         ) : (
@@ -446,19 +545,14 @@ export default function MemberDialog({
 
                                     {photoPreview && (
                                         <div className="mt-2 flex items-center gap-3 rounded-lg border p-2">
-                                            <img
-                                                src={photoPreview}
-                                                alt="preview"
-                                                className="h-14 w-14 rounded-md object-cover"
-                                            />
-                                            <div className="text-xs text-muted-foreground">
-                                                Saved as base64 (photo_b64)
+                                            <img src={photoPreview} alt="preview"
+                                                 className="h-14 w-14 rounded-md object-cover"/>
+                                            <div className="text-xs text-muted-foreground">Saved as base64 (photo_b64)
                                             </div>
                                         </div>
                                     )}
                                 </div>
 
-                                {/* Other Details */}
                                 <div className="space-y-2">
                                     <Label>Other Details</Label>
                                     <Textarea
@@ -471,14 +565,13 @@ export default function MemberDialog({
                             </div>
                         </div>
 
-                        {/* Sticky Footer */}
                         <div className="sticky bottom-0 bg-background pt-2 pb-2">
                             <Button type="submit" className="w-full h-11" disabled={saving}>
                                 {saving ? (
                                     <span className="inline-flex items-center gap-2">
-                                        <Loader2 className="h-4 w-4 animate-spin"/>
+                    <Loader2 className="h-4 w-4 animate-spin"/>
                                         {editingId ? "Updating..." : "Creating..."}
-                                    </span>
+                  </span>
                                 ) : editingId ? (
                                     "Update Member"
                                 ) : (
