@@ -31,6 +31,33 @@ import {
 } from "./Loan Dashboard/loanCalc.js";
 
 /* ---------------------------------------------------------
+   ✅ Meeting day helpers
+--------------------------------------------------------- */
+function normDay(v) {
+    if (v == null) return "";
+    if (typeof v === "object") return normDay(v?.name ?? v?.day ?? v?.label ?? "");
+    if (typeof v === "number") {
+        const map0 = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+        return map0[v] || "";
+    }
+    const s = String(v).trim();
+    if (!s) return "";
+    return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function groupLabelWithMeetingDay(g) {
+    const name = g?.group_name || g?.name || "";
+    const md =
+        g?.meeting_day ??
+        g?.meetingDay ??
+        g?.meeting_day_name ??
+        g?.meetingDayName ??
+        "";
+    const mdStr = normDay(md);
+    return mdStr ? `${name} (${mdStr})` : name;
+}
+
+/* ---------------------------------------------------------
    ✅ Loan Account suggestions cache (LOAD ONCE + MEMORY)
 --------------------------------------------------------- */
 let LOAN_ACCOUNTS_CACHE = null;
@@ -128,10 +155,7 @@ export default function CreateLoanDialog({open, onOpenChange}) {
         const today = todayISO();
         return {
             loan_account_no: "",
-
-            // ✅ NOW: store selected LO's lo_id (3/4/6/8/...)
             loan_officer_id: "",
-
             group_id: "",
             member_id: "",
             product_id: 1,
@@ -139,9 +163,7 @@ export default function CreateLoanDialog({open, onOpenChange}) {
             first_installment_date: addDaysISO(today, 7),
             duration_weeks: 12,
             principal_amount: "",
-
             annual_interest_percent: "",
-
             processing_fee_percent: DEFAULT_PROCESSING_PCT,
             insurance_fee_percent: DEFAULT_INSURANCE_PCT,
             book_price_amount: DEFAULT_BOOK_PRICE,
@@ -170,26 +192,19 @@ export default function CreateLoanDialog({open, onOpenChange}) {
 
     const {groups, isLoading: gLoading, error: gError} = useGroups();
 
-    // ✅ IMPORTANT: Members are now fetched using lo_id after LO selection
     const {members, isLoading: mLoading, error: mError} = useMembers({
         branch_id: branchId || null,
         lo_id: form.loan_officer_id || null,
         group_id: form.group_id || null,
     });
 
-    const {
-        loanOfficers,
-        isLoading: loLoading,
-        error: loError,
-    } = useLoanOfficers();
+    const {loanOfficers, isLoading: loLoading, error: loError} = useLoanOfficers();
 
     const gErr = safeHookError(gError);
     const mErr = safeHookError(mError);
     const loErr = safeHookError(loError);
 
     // ✅ Loan Officer options (filter by branch) + store lo_id
-    // API shape:
-    // [{ lo_id, employee_id, employee: { branch_id, full_name, phone, user:{username,email,is_active} } }]
     const loanOfficerOptions = useMemo(() => {
         const list = Array.isArray(loanOfficers) ? loanOfficers : [];
         const scoped = !branchId
@@ -202,7 +217,7 @@ export default function CreateLoanDialog({open, onOpenChange}) {
         scoped.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
 
         return scoped.map((x) => {
-            const loId = x?.lo_id; // ✅ VALUE MUST BE lo_id
+            const loId = x?.lo_id;
             const employeeId = x?.employee_id ?? x?.employee?.employee_id ?? "";
             const fullName = x?.employee?.full_name || "Loan Officer";
             const username = x?.employee?.user?.username ? ` (${x.employee.user.username})` : "";
@@ -219,10 +234,11 @@ export default function CreateLoanDialog({open, onOpenChange}) {
         });
     }, [loanOfficers, branchId]);
 
+    // ✅ groupNameById now includes meeting day (used in Member dropdown label)
     const groupNameById = useMemo(() => {
         const map = {};
         (groups || []).forEach((g) => {
-            map[String(g.group_id)] = g.group_name || `Group-${g.group_id}`;
+            map[String(g.group_id)] = groupLabelWithMeetingDay(g) || `Group-${g.group_id}`;
         });
         return map;
     }, [groups]);
@@ -235,7 +251,6 @@ export default function CreateLoanDialog({open, onOpenChange}) {
         return list.filter((g) => {
             const gBid = g.branch_id ?? g.branchId ?? g.branch?.branch_id ?? g.branch?.id;
 
-            // ✅ include lo_id possibilities
             const gOid =
                 g.lo_id ??
                 g.loId ??
@@ -253,13 +268,14 @@ export default function CreateLoanDialog({open, onOpenChange}) {
         });
     }, [groups, branchId, form.loan_officer_id]);
 
+    // ✅ Group dropdown shows Meeting Day
     const groupOptions = useMemo(() => {
         return (visibleGroups || []).map((g) => {
-            const gName = g.group_name || `Group-${g.group_id}`;
+            const label = groupLabelWithMeetingDay(g) || `Group-${g.group_id}`;
             return {
                 value: String(g.group_id),
-                label: gName,
-                keywords: `${gName} ${g.group_id}`.trim(),
+                label,
+                keywords: `${label} ${g.group_id}`.trim(),
             };
         });
     }, [visibleGroups]);
@@ -541,7 +557,6 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                                 )}
                             </div>
 
-                            {/* ✅ LOAN OFFICER (value = lo_id) */}
                             <div className="space-y-2">
                                 <Label>Loan Officer</Label>
                                 {!branchId ? (
@@ -571,7 +586,6 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                                 )}
                             </div>
 
-                            {/* ✅ GROUP (depends on Loan Officer) */}
                             <div className="space-y-2">
                                 <Label>Group</Label>
                                 {gLoading ? (
@@ -597,7 +611,6 @@ export default function CreateLoanDialog({open, onOpenChange}) {
                                 )}
                             </div>
 
-                            {/* ✅ MEMBER (fetched via useMembers({lo_id, group_id})) */}
                             <div className="space-y-2">
                                 <Label>Member</Label>
                                 {mLoading ? (
