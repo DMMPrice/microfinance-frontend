@@ -119,7 +119,7 @@ export default function CollectionEntryPage() {
 
     // ✅ bulk collect all (per group modal)
     const [collectAllRunning, setCollectAllRunning] = useState(false);
-    const [collectAllProgress, setCollectAllProgress] = useState({ done: 0, total: 0 });
+    const [collectAllProgress, setCollectAllProgress] = useState({done: 0, total: 0});
 
     // ✅ amount validation warnings (per row)
     const [amountErrors, setAmountErrors] = useState({});
@@ -211,11 +211,11 @@ export default function CollectionEntryPage() {
     function setAmountError(key, msg) {
         setAmountErrors((p) => {
             if (!msg) {
-                const n = { ...(p || {}) };
+                const n = {...(p || {})};
                 delete n[key];
                 return n;
             }
-            return { ...(p || {}), [key]: msg };
+            return {...(p || {}), [key]: msg};
         });
     }
 
@@ -284,7 +284,7 @@ export default function CollectionEntryPage() {
         if (!applyFilters || rows.length === 0) return;
 
         setRowForm((prev) => {
-            const next = { ...(prev || {}) };
+            const next = {...(prev || {})};
 
             (rows || []).forEach((r) => {
                 const key = `${r.installment_no}:${r.loan_id}`;
@@ -338,10 +338,19 @@ export default function CollectionEntryPage() {
         const key = `${r.installment_no}:${r.loan_id}`;
         const f = rowForm[key] || {};
 
-        const amount = Number(f.amount_received || 0);
-        if (!amount || amount <= 0) return;
+        // ✅ allow 0 (records a "no collection" entry), block negatives/NaN/empty
+        const rawAmt = f.amount_received;
+        const amount = rawAmt === "" || rawAmt === null || rawAmt === undefined ? null : Number(rawAmt);
+        if (amount === null || Number.isNaN(amount) || amount < 0) return;
 
-        setPosting((p) => ({ ...p, [key]: true }));
+        // ✅ If amount is 0: treat as 'no collection' -> DO NOT call API.
+        // The unpaid amount will automatically carry forward in next installment's due_left.
+        if (amount === 0) {
+            setPosted((x) => ({...x, [key]: true}));
+            return;
+        }
+
+        setPosting((p) => ({...p, [key]: true}));
 
         try {
             await createPayment.mutateAsync({
@@ -355,11 +364,11 @@ export default function CollectionEntryPage() {
                 },
             });
 
-            setPosted((x) => ({ ...x, [key]: true }));
+            setPosted((x) => ({...x, [key]: true}));
         } catch (e) {
             console.error("Payment submit failed:", e);
         } finally {
-            setPosting((p) => ({ ...p, [key]: false }));
+            setPosting((p) => ({...p, [key]: false}));
         }
     }
 
@@ -378,7 +387,7 @@ export default function CollectionEntryPage() {
             return !posted[key] && amount > 0;
         });
 
-        setCollectAllProgress({ done: 0, total: queue.length });
+        setCollectAllProgress({done: 0, total: queue.length});
         setCollectAllRunning(true);
 
         try {
@@ -386,13 +395,12 @@ export default function CollectionEntryPage() {
             for (const r of queue) {
                 await submitRow(r); // ✅ one-by-one
                 done += 1;
-                setCollectAllProgress({ done, total: queue.length });
+                setCollectAllProgress({done, total: queue.length});
             }
         } finally {
             setCollectAllRunning(false);
         }
     }
-
 
 
     function downloadStatementCSV() {
@@ -473,11 +481,14 @@ export default function CollectionEntryPage() {
                                                     <span className="inline-flex items-center gap-2">
                                                         {overdue && (
                                                             <span className="relative flex h-3 w-3">
-                                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75" />
-                                                                <span className="relative inline-flex h-3 w-3 rounded-full bg-red-600" />
+                                                                <span
+                                                                    className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"/>
+                                                                <span
+                                                                    className="relative inline-flex h-3 w-3 rounded-full bg-red-600"/>
                                                             </span>
                                                         )}
-                                                        <span className={overdue ? "text-red-600 font-semibold" : "font-medium"}>
+                                                        <span
+                                                            className={overdue ? "text-red-600 font-semibold" : "font-medium"}>
                                                             {accNo}
                                                         </span>
                                                     </span>{" "}
@@ -503,7 +514,7 @@ export default function CollectionEntryPage() {
                                                 // allow empty while typing
                                                 if (raw === "") {
                                                     setAmountError(key, "");
-                                                    updateForm(key, { amount_received: "" });
+                                                    updateForm(key, {amount_received: ""});
                                                     return;
                                                 }
 
@@ -526,7 +537,7 @@ export default function CollectionEntryPage() {
                                                     if ((amountErrors[key] || "").startsWith("Max ")) setAmountError(key, "");
                                                 }
 
-                                                updateForm(key, { amount_received: cleaned });
+                                                updateForm(key, {amount_received: cleaned});
                                             }}
                                             placeholder="0.00"
                                             disabled={isDone || isPosting || collectAllRunning}
@@ -540,12 +551,12 @@ export default function CollectionEntryPage() {
 
                                 <td className="p-2 border">
                                     <Select
-                                        value={f.mode || "CASH"}
-                                        onValueChange={(v) => updateForm(key, { mode: v })}
+                                        value={f.payment_mode || "CASH"}
+                                        onValueChange={(v) => updateForm(key, {payment_mode: v})}
                                         disabled={isDone || isPosting || collectAllRunning}
                                     >
                                         <SelectTrigger className="h-9">
-                                            <SelectValue placeholder="Select mode" />
+                                            <SelectValue placeholder="Select mode"/>
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="CASH">CASH</SelectItem>
@@ -558,7 +569,7 @@ export default function CollectionEntryPage() {
                                 <td className="p-2 border">
                                     <Input
                                         value={f.receipt_no ?? ""}
-                                        onChange={(e) => updateForm(key, { receipt_no: e.target.value })}
+                                        onChange={(e) => updateForm(key, {receipt_no: e.target.value})}
                                         placeholder="Receipt No"
                                         disabled={isDone || isPosting || collectAllRunning}
                                     />
@@ -568,7 +579,7 @@ export default function CollectionEntryPage() {
                                     <Input
                                         type="datetime-local"
                                         value={f.collected_at ?? ""}
-                                        onChange={(e) => updateForm(key, { collected_at: e.target.value })}
+                                        onChange={(e) => updateForm(key, {collected_at: e.target.value})}
                                         disabled={isDone || isPosting || collectAllRunning}
                                     />
                                 </td>
@@ -576,7 +587,7 @@ export default function CollectionEntryPage() {
                                 <td className="p-2 border">
                                     <Input
                                         value={f.remarks ?? ""}
-                                        onChange={(e) => updateForm(key, { remarks: e.target.value })}
+                                        onChange={(e) => updateForm(key, {remarks: e.target.value})}
                                         placeholder="Remarks"
                                         disabled={isDone || isPosting || collectAllRunning}
                                     />
@@ -626,17 +637,17 @@ export default function CollectionEntryPage() {
                     {/* ✅ Totals row (Excel-style) */}
                     <tr className="bg-muted/40 font-semibold border-t">
                         <td className="p-2 border">TOTAL</td>
-                        <td className="p-2 border" />
-                        <td className="p-2 border" />
+                        <td className="p-2 border"/>
+                        <td className="p-2 border"/>
                         <td className="p-2 border text-right">{dueTotal.toFixed(2)}</td>
                         <td className="p-2 border text-right">{enteredTotal.toFixed(2)}</td>
-                        <td className="p-2 border" />
-                        <td className="p-2 border" />
-                        <td className="p-2 border" />
-                        <td className="p-2 border" />
+                        <td className="p-2 border"/>
+                        <td className="p-2 border"/>
+                        <td className="p-2 border"/>
+                        <td className="p-2 border"/>
                         <td className="p-2 border text-right">{submittedTotal.toFixed(2)}</td>
                     </tr>
-</tbody>
+                    </tbody>
                 </table>
             </div>
         );
@@ -813,7 +824,7 @@ export default function CollectionEntryPage() {
                             >
                                 {collectAllRunning ? (
                                     <>
-                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        <Loader2 className="h-4 w-4 animate-spin"/>
                                         <span className="ml-2">
                                             Collecting {collectAllProgress.done}/{collectAllProgress.total}
                                         </span>

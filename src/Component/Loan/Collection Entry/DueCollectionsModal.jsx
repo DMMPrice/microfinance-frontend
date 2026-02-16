@@ -126,14 +126,40 @@ export default function DueCollectionsModal({
     async function submitRow(r) {
         const key = `${r.installment_no}:${r.loan_id}`;
         const f = rowForm[key] || {};
-        const amount = Number(f.amount_received || 0);
-        if (!amount || amount <= 0) return;
+
+        // ✅ Empty = do not submit
+        const raw = (f.amount_received ?? "").toString().trim();
+        if (raw === "") {
+            setAmountError(key, "Amount is required (0 allowed).");
+            return;
+        }
+
+        const amount = Number(raw);
+
+        // ✅ block invalid / negative
+        if (!Number.isFinite(amount)) {
+            setAmountError(key, "Invalid amount.");
+            return;
+        }
+        if (amount < 0) {
+            setAmountError(key, "Amount cannot be negative.");
+            return;
+        }
+
+        setAmountError(key, "");
+
+        // ✅ If amount is 0: do not post to API. Mark as done locally.
+        // Unpaid due will automatically carry forward.
+        if (amount === 0) {
+            setPosted((x) => ({...x, [key]: true}));
+            return;
+        }
 
         setPosting((p) => ({...p, [key]: true}));
         try {
             await onSubmitRow?.(r, {
                 ...f,
-                amount_received: amount,
+                amount_received: amount, // ✅ can be 0
             });
             setPosted((x) => ({...x, [key]: true}));
         } finally {
@@ -144,11 +170,20 @@ export default function DueCollectionsModal({
 
     async function collectAllRows(allRows) {
         if (collectAllRunning) return;
+
         const queue = (allRows || []).filter((r) => {
             const key = `${r.installment_no}:${r.loan_id}`;
+            if (posted[key]) return false;
+
             const f = rowForm[key] || {};
-            const amount = Number(f.amount_received || 0);
-            return !posted[key] && amount > 0;
+            const raw = (f.amount_received ?? "").toString().trim();
+            if (raw === "") return false; // must be provided
+
+            const amount = Number(raw);
+            if (!Number.isFinite(amount)) return false;
+            if (amount < 0) return false;
+
+            return amount > 0; // ✅ submit only positive amounts
         });
 
         setCollectAllProgress({done: 0, total: queue.length});
