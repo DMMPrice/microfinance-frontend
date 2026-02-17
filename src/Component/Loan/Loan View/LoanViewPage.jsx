@@ -17,6 +17,9 @@ import {
 import {useLoanOfficerById} from "@/hooks/useLoanOfficers.js";
 import AdvancedTable from "@/Utils/AdvancedTable.jsx";
 
+// ✅ NEW: your modal
+import EditCollectionModal from "@/Component/Loan/EditCollectionModal.jsx";
+
 function money(v) {
     const n = Number(v || 0);
     return n.toFixed(2);
@@ -62,35 +65,41 @@ export default function LoanViewPage() {
     const [searchRef, setSearchRef] = useState(cleanedRef || "");
 
     // ✅ Use whatever user provided in URL/input:
-// - numeric => loan_id endpoints
-// - non-numeric => loan_account_no endpoints
+    // - numeric => loan_id endpoints
+    // - non-numeric => loan_account_no endpoints
     const [activeLoanRef, setActiveLoanRef] = useState(cleanedRef || "");
 
-// keep in sync when route param changes
+    // ✅ NEW: edit modal state
+    const [editOpen, setEditOpen] = useState(false);
+    const [editRow, setEditRow] = useState(null);
+
+    const openEdit = (row) => {
+        setEditRow(row);
+        setEditOpen(true);
+    };
+
+    // keep in sync when route param changes
     useEffect(() => {
         setActiveLoanRef(cleanedRef || "");
     }, [cleanedRef]);
 
-// ---- Load data using loan_id ----
+    // ---- Load data using loan_id / loan_account_no ----
     const {
         data: summary,
         isLoading: summaryLoading,
         isError: summaryError,
-        error: summaryErrObj,
     } = useLoanSummary(activeLoanRef);
 
     const {
         data: schedule,
         isLoading: scheduleLoading,
         isError: scheduleError,
-        error: scheduleErrObj,
     } = useLoanSchedule(activeLoanRef);
 
     const {
         data: statement,
         isLoading: statementLoading,
         isError: statementError,
-        error: statementErrObj,
     } = useLoanStatement(activeLoanRef);
 
     // ✅ IMPORTANT: if route param was numeric, replace input value with loan_account_no
@@ -274,6 +283,8 @@ export default function LoanViewPage() {
         []
     );
 
+    // ✅ UPDATED: Paid Installments columns now include Edit action.
+    // Payment ledger rows store payment_id in "ref_id".
     const paymentsTableColumns = useMemo(
         () => [
             {
@@ -302,6 +313,28 @@ export default function LoanViewPage() {
                 hideable: true,
                 sortValue: (r) => r.narration,
                 cell: (r) => <div className="whitespace-normal">{r.narration || "-"}</div>,
+            },
+
+            // ✅ NEW Actions column
+            {
+                key: "__actions",
+                header: "Actions",
+                cell: (r) => {
+                    const paymentId = r?.ref_id; // ledger PAYMENT -> payment_id
+                    return (
+                        <div className="flex justify-center">
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={!paymentId}
+                                onClick={() => openEdit(r)}
+                            >
+                                Edit
+                            </Button>
+                        </div>
+                    );
+                },
+                tdClassName: "px-3 py-3 text-center align-middle whitespace-nowrap",
             },
         ],
         []
@@ -355,7 +388,6 @@ export default function LoanViewPage() {
             </Card>
 
             {/* ✅ Resolve status when opened using Loan Account No */}
-            {/* ✅ When opened using Loan Account No, show a small loader while summary is fetching */}
             {!isId && summaryLoading ? (
                 <Card>
                     <CardHeader className="pb-2">
@@ -534,6 +566,14 @@ export default function LoanViewPage() {
                     </Tabs>
                 </CardContent>
             </Card>
+
+            {/* ✅ NEW: Mount your modal once */}
+            <EditCollectionModal
+                open={editOpen}
+                onOpenChange={setEditOpen}
+                loanId={summary?.loan_id ?? activeLoanRef}
+                row={editRow}
+            />
         </div>
     );
 }

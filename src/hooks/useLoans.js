@@ -1,6 +1,7 @@
 // src/hooks/useLoans.js
 import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import {apiClient, getProfileData, getUserRole, getUserBranchId} from "@/hooks/useApi.js";
+import { toast } from "@/components/ui/use-toast";
 
 /* -------------------- Helpers -------------------- */
 function normalizeId(v) {
@@ -583,6 +584,38 @@ export function useCollectLoanCharge() {
       // ✅ refresh charges list also
       const loanId = normalizeId(vars?.loan_id);
       if (loanId) qc.invalidateQueries({queryKey: ["loans", "charges", loanId]});
+    },
+  });
+}
+
+
+export function useEditLoanPayment() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ paymentId, payload }) => {
+      const res = await apiClient.patch(`/loans/payments/${paymentId}`, payload);
+      return res.data;
+    },
+
+    onSuccess: (_data, vars) => {
+      // ✅ invalidate the loan view queries so Paid tab + Statement refreshes
+      // Use whichever keys you already use in your project.
+      // These are common examples:
+      qc.invalidateQueries({ queryKey: ["loanStatement", vars?.loanId] });
+      qc.invalidateQueries({ queryKey: ["loanSchedule", vars?.loanId] });
+      qc.invalidateQueries({ queryKey: ["loanPayments", vars?.loanId] });
+      qc.invalidateQueries({ queryKey: ["loanById", vars?.loanId] });
+
+      toast?.({ title: "Collection updated successfully" });
+    },
+
+    onError: (err) => {
+      toast?.({
+        title: "Failed to update collection",
+        description: err?.response?.data?.detail || err?.message || String(err),
+        variant: "destructive",
+      });
     },
   });
 }

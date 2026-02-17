@@ -282,65 +282,116 @@ export default function ExpensesTab() {
     }, [subcategories]);
 
     const columns = useMemo(() => {
+        const getRow = (ctx) => ctx?.original ?? ctx?.row?.original ?? ctx;
+
+        const wrapClass = "whitespace-normal break-words max-w-[180px]";
+
         return [
             {
                 header: "Date",
                 accessorKey: "expense_date",
-                cell: ({row}) => yyyyMmDd(row.original.expense_date),
+                cell: (ctx) => {
+                    const r = getRow(ctx);
+                    return (
+                        <div className={wrapClass}>
+                            {yyyyMmDd(r?.expense_date)}
+                        </div>
+                    );
+                },
             },
             {
                 header: "Branch",
                 accessorKey: "branch_id",
-                cell: ({row}) => branchNameById.get(String(row.original.branch_id)) || row.original.branch_id,
+                cell: (ctx) => {
+                    const r = getRow(ctx);
+                    const bid = r?.branch_id;
+                    return (
+                        <div className={wrapClass}>
+                            {branchNameById.get(String(bid)) || bid || "-"}
+                        </div>
+                    );
+                },
             },
             {
                 header: "Category",
                 accessorKey: "category_id",
-                cell: ({row}) => categoryById.get(String(row.original.category_id)) || row.original.category_id,
+                cell: (ctx) => {
+                    const r = getRow(ctx);
+                    const cid = r?.category_id;
+                    return (
+                        <div className={wrapClass}>
+                            {categoryById.get(String(cid)) || cid || "-"}
+                        </div>
+                    );
+                },
             },
             {
                 header: "Subcategory",
                 accessorKey: "subcategory_id",
-                cell: ({row}) => subcatById.get(String(row.original.subcategory_id)) || row.original.subcategory_id,
+                cell: (ctx) => {
+                    const r = getRow(ctx);
+                    const sid = r?.subcategory_id;
+                    return (
+                        <div className={wrapClass}>
+                            {subcatById.get(String(sid)) || sid || "-"}
+                        </div>
+                    );
+                },
             },
             {
                 header: "Amount",
                 accessorKey: "amount",
-                cell: ({row}) => (
-                    <Badge variant="secondary" className="font-normal">
-                        {formatINR(row.original.amount)}
-                    </Badge>
-                ),
+                cell: (ctx) => {
+                    const r = getRow(ctx);
+                    return (
+                        <Badge
+                            variant="secondary"
+                            className="font-normal whitespace-normal break-words"
+                        >
+                            {formatINR(r?.amount)}
+                        </Badge>
+                    );
+                },
             },
             {
                 header: "Ref",
                 accessorKey: "reference_no",
-                cell: ({row}) => row.original.reference_no || "-",
+                cell: (ctx) => {
+                    const r = getRow(ctx);
+                    return (
+                        <div className={wrapClass}>
+                            {r?.reference_no || "-"}
+                        </div>
+                    );
+                },
             },
             {
                 header: "Actions",
                 id: "actions",
-                cell: ({row}) => (
-                    <div className="flex items-center gap-2">
-                        <Button size="icon" variant="outline" onClick={() => openEdit(row.original)}>
-                            <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                            size="icon"
-                            variant="destructive"
-                            disabled={deleting}
-                            onClick={() => requestDelete(row.original)}
-                        >
-                            <Trash2 className="h-4 w-4" />
-                        </Button>
-                    </div>
-                ),
+                cell: (ctx) => {
+                    const r = getRow(ctx);
+                    return (
+                        <div className="flex items-center gap-2">
+                            <Button size="icon" variant="outline" onClick={() => openEdit(r)}>
+                                <Pencil className="h-4 w-4"/>
+                            </Button>
+                            <Button
+                                size="icon"
+                                variant="destructive"
+                                disabled={deleting}
+                                onClick={() => requestDelete(r)}
+                            >
+                                <Trash2 className="h-4 w-4"/>
+                            </Button>
+                        </div>
+                    );
+                },
             },
         ];
     }, [branchNameById, categoryById, subcatById, openEdit, deleting, requestDelete]);
 
     const doDownload = useCallback(() => {
-        const header = ["Date", "Branch", "Category", "Subcategory", "Amount", "Ref", "Description"]; 
+        const header = ["Date", "Branch", "Category", "Subcategory", "Amount", "Ref", "Description"];
         const body = visibleRows.map((r) => [
             yyyyMmDd(r.expense_date),
             branchNameById.get(String(r.branch_id)) || r.branch_id,
@@ -365,13 +416,13 @@ export default function ExpensesTab() {
 
                 <div className="flex gap-2">
                     <Button variant="outline" onClick={() => expensesQ.refetch()} disabled={loading}>
-                        <RefreshCcw className="h-4 w-4 mr-2" /> Refresh
+                        <RefreshCcw className="h-4 w-4 mr-2"/> Refresh
                     </Button>
                     <Button variant="outline" onClick={doDownload} disabled={!visibleRows.length}>
-                        <Download className="h-4 w-4 mr-2" /> CSV
+                        <Download className="h-4 w-4 mr-2"/> CSV
                     </Button>
                     <Button onClick={openCreate}>
-                        <Plus className="h-4 w-4 mr-2" /> Add Expense
+                        <Plus className="h-4 w-4 mr-2"/> Add Expense
                     </Button>
                 </div>
             </div>
