@@ -169,3 +169,42 @@ export function sortByDateKeyDesc(list = [], key = "created_on", nestedKey = nul
         return toEpochMs(bv) - toEpochMs(av);
     });
 }
+
+/**
+ * Convert any datetime input into a "naive" IST ISO string:
+ * "YYYY-MM-DDTHH:mm:ss" (no Z, no offset)
+ *
+ * Accepts:
+ * - Date
+ * - ISO string ("2026-02-16T05:56:00", "2026-02-16T05:56:00Z", etc.)
+ * - datetime-local string ("2026-02-16T05:56")
+ */
+export function toISTNaiveISO(input, withSeconds = true) {
+    if (!input) return null;
+
+    const d = input instanceof Date ? input : new Date(input);
+    if (Number.isNaN(d.getTime())) return null;
+
+    const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+    }).formatToParts(d);
+
+    const get = (t) => parts.find((p) => p.type === t)?.value || "";
+    const y = get("year");
+    const m = get("month");
+    const da = get("day");
+    const hh = get("hour");
+    const mm = get("minute");
+    const ss = get("second");
+
+    return withSeconds
+        ? `${y}-${m}-${da}T${hh}:${mm}:${ss}`
+        : `${y}-${m}-${da}T${hh}:${mm}`;
+}

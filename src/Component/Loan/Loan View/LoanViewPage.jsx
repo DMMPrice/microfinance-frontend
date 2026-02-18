@@ -9,34 +9,41 @@ import {Tabs, TabsContent, TabsList, TabsTrigger} from "@/components/ui/tabs.tsx
 import {Input} from "@/components/ui/input.tsx";
 import {Button} from "@/components/ui/button.tsx";
 
-import {
-    useLoanSummary,
-    useLoanSchedule,
-    useLoanStatement,
-} from "@/hooks/useLoans.js";
+import {useLoanSummary, useLoanSchedule, useLoanStatement} from "@/hooks/useLoans.js";
 import {useLoanOfficerById} from "@/hooks/useLoanOfficers.js";
 import AdvancedTable from "@/Utils/AdvancedTable.jsx";
 
-// ✅ NEW: your modal
 import EditCollectionModal from "@/Component/Loan/EditCollectionModal.jsx";
+import LoanSummaryKpis from "@/Component/Loan/LoanSummaryKpis.jsx";
+
+import {toISTNaiveISO} from "@/Helpers/dateTimeIST";
 
 function money(v) {
     const n = Number(v || 0);
     return n.toFixed(2);
 }
 
-function fmtDate(v) {
+// ✅ Date in IST (YYYY-MM-DD)
+function fmtDateIST(v) {
     if (!v) return "-";
-    return String(v).slice(0, 10);
+    const s = toISTNaiveISO(v, false); // YYYY-MM-DDTHH:mm
+    return s ? s.slice(0, 10) : "-";
 }
 
-function fmtDateTime(v) {
+// ✅ DateTime in IST (YYYY-MM-DD HH:mm)
+function fmtDateTimeIST(v) {
     if (!v) return "-";
-    try {
-        return new Date(v).toLocaleString();
-    } catch {
-        return String(v);
-    }
+    const s = toISTNaiveISO(v, false); // YYYY-MM-DDTHH:mm
+    return s ? s.replace("T", " ") : "-";
+}
+
+// ✅ Stable IST sort epoch
+function toISTEpochMs(v) {
+    if (!v) return 0;
+    const s = toISTNaiveISO(v, true); // YYYY-MM-DDTHH:mm:ss in IST
+    if (!s) return 0;
+    const t = Date.parse(s); // parse naive
+    return Number.isFinite(t) ? t : 0;
 }
 
 function isNumericId(v) {
@@ -61,15 +68,10 @@ export default function LoanViewPage() {
     const cleanedRef = useMemo(() => String(loanRef || "").trim(), [loanRef]);
     const isId = useMemo(() => isNumericId(cleanedRef), [cleanedRef]);
 
-    // 🔹 Input state (we will auto-switch it to loan_account_no after summary loads)
     const [searchRef, setSearchRef] = useState(cleanedRef || "");
-
-    // ✅ Use whatever user provided in URL/input:
-    // - numeric => loan_id endpoints
-    // - non-numeric => loan_account_no endpoints
     const [activeLoanRef, setActiveLoanRef] = useState(cleanedRef || "");
 
-    // ✅ NEW: edit modal state
+    // ✅ Edit modal state
     const [editOpen, setEditOpen] = useState(false);
     const [editRow, setEditRow] = useState(null);
 
@@ -78,36 +80,25 @@ export default function LoanViewPage() {
         setEditOpen(true);
     };
 
-    // keep in sync when route param changes
     useEffect(() => {
         setActiveLoanRef(cleanedRef || "");
     }, [cleanedRef]);
 
-    // ---- Load data using loan_id / loan_account_no ----
-    const {
-        data: summary,
-        isLoading: summaryLoading,
-        isError: summaryError,
-    } = useLoanSummary(activeLoanRef);
+    // ---- Load data ----
+    const {data: summary, isLoading: summaryLoading, isError: summaryError} =
+        useLoanSummary(activeLoanRef);
 
-    const {
-        data: schedule,
-        isLoading: scheduleLoading,
-        isError: scheduleError,
-    } = useLoanSchedule(activeLoanRef);
+    const {data: schedule, isLoading: scheduleLoading, isError: scheduleError} =
+        useLoanSchedule(activeLoanRef);
 
-    const {
-        data: statement,
-        isLoading: statementLoading,
-        isError: statementError,
-    } = useLoanStatement(activeLoanRef);
+    const {data: statement, isLoading: statementLoading, isError: statementError} =
+        useLoanStatement(activeLoanRef);
 
-    // ✅ IMPORTANT: if route param was numeric, replace input value with loan_account_no
+    // ✅ If opened using numeric loan_id, auto-switch to loan_account_no after summary loads
     useEffect(() => {
         const acc = summary?.loan_account_no ? String(summary.loan_account_no).trim() : "";
         if (!acc) return;
 
-        // If the current input is a numeric loan_id (like "14"), replace it with account no
         if (isNumericId(searchRef) || searchRef.trim() === cleanedRef) {
             setSearchRef(acc);
             setActiveLoanRef(acc);
@@ -115,28 +106,19 @@ export default function LoanViewPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [summary?.loan_account_no]);
 
-    const paymentTxns = useMemo(() => {
-        const list = statement || [];
-        return list.filter((x) => x.txn_type === "PAYMENT");
-    }, [statement]);
-
-    // ✅ Header label should prefer Loan Account No always
+    // ✅ Header label prefer Loan Account No always
     const headerRefLabel = useMemo(() => {
         const acc = summary?.loan_account_no ? String(summary.loan_account_no).trim() : "";
         if (acc) return `Loan Account No: ${acc}`;
 
-        // before summary loads:
         if (!cleanedRef) return "-";
         if (!isId) return `Loan Account No: ${cleanedRef}`;
-        return `Loan Account No: -`; // don't show Loan ID
+        return `Loan Account No: -`;
     }, [summary?.loan_account_no, cleanedRef, isId]);
 
     function goToLoan(ref) {
         const clean = String(ref || "").trim();
         if (!clean) return;
-
-        // ✅ Always navigate using what user sees (Loan Account No),
-        // but if user still typed a numeric id, it will still work.
         navigate(`/dashboard/loans/view/${encodeURIComponent(clean)}`);
     }
 
@@ -157,7 +139,6 @@ export default function LoanViewPage() {
     // ---- AdvancedTable data ----
     const scheduleData = useMemo(() => (Array.isArray(schedule) ? schedule : []), [schedule]);
     const statementData = useMemo(() => (Array.isArray(statement) ? statement : []), [statement]);
-    const paymentsData = useMemo(() => (Array.isArray(paymentTxns) ? paymentTxns : []), [paymentTxns]);
 
     const scheduleTableColumns = useMemo(
         () => [
@@ -170,9 +151,10 @@ export default function LoanViewPage() {
             },
             {
                 key: "due_date",
-                header: "Due Date",
-                sortValue: (r) => (r?.due_date ? new Date(r.due_date).getTime() : 0),
-                cell: (r) => <div className="text-center">{fmtDate(r.due_date)}</div>,
+                header: "Due Date (IST)",
+                sortValue: (r) => toISTEpochMs(r?.due_date),
+                cell: (r) => <div className="text-center">{fmtDateIST(r.due_date)}</div>,
+                exportValue: (r) => fmtDateIST(r.due_date),
                 tdClassName: "px-3 py-3 text-center align-middle whitespace-nowrap",
             },
             {
@@ -216,9 +198,10 @@ export default function LoanViewPage() {
             },
             {
                 key: "paid_date",
-                header: "Paid Date",
-                sortValue: (r) => (r?.paid_date ? new Date(r.paid_date).getTime() : 0),
-                cell: (r) => <div className="text-center">{fmtDate(r.paid_date)}</div>,
+                header: "Paid Date (IST)",
+                sortValue: (r) => toISTEpochMs(r?.paid_date),
+                cell: (r) => <div className="text-center">{fmtDateIST(r.paid_date)}</div>,
+                exportValue: (r) => fmtDateIST(r.paid_date),
                 tdClassName: "px-3 py-3 text-center align-middle whitespace-nowrap",
             },
         ],
@@ -236,9 +219,10 @@ export default function LoanViewPage() {
             },
             {
                 key: "txn_date",
-                header: "Date & Time",
-                sortValue: (r) => (r?.txn_date ? new Date(r.txn_date).getTime() : 0),
-                cell: (r) => <div className="whitespace-nowrap">{fmtDateTime(r.txn_date)}</div>,
+                header: "Date (IST)",
+                sortValue: (r) => toISTEpochMs(r?.txn_date),
+                cell: (r) => <div className="whitespace-nowrap">{fmtDateTimeIST(r.txn_date)}</div>,
+                exportValue: (r) => fmtDateTimeIST(r.txn_date),
             },
             {
                 key: "txn_type",
@@ -279,54 +263,18 @@ export default function LoanViewPage() {
                 sortValue: (r) => r.narration,
                 cell: (r) => <div className="whitespace-normal">{r.narration || "-"}</div>,
             },
-        ],
-        []
-    );
-
-    // ✅ UPDATED: Paid Installments columns now include Edit action.
-    // Payment ledger rows store payment_id in "ref_id".
-    const paymentsTableColumns = useMemo(
-        () => [
-            {
-                key: "txn_date",
-                header: "Date & Time",
-                sortValue: (r) => (r?.txn_date ? new Date(r.txn_date).getTime() : 0),
-                cell: (r) => <div className="whitespace-nowrap">{fmtDateTime(r.txn_date)}</div>,
-            },
-            {
-                key: "credit",
-                header: "Paid",
-                sortValue: (r) => Number(r.credit || 0),
-                cell: (r) => <div className="text-right font-semibold">₹ {money(r.credit)}</div>,
-                tdClassName: "px-3 py-3 text-right align-middle whitespace-nowrap",
-            },
-            {
-                key: "balance_outstanding",
-                header: "Outstanding After",
-                sortValue: (r) => Number(r.balance_outstanding || 0),
-                cell: (r) => <div className="text-right">₹ {money(r.balance_outstanding)}</div>,
-                tdClassName: "px-3 py-3 text-right align-middle whitespace-nowrap",
-            },
-            {
-                key: "narration",
-                header: "Narration",
-                hideable: true,
-                sortValue: (r) => r.narration,
-                cell: (r) => <div className="whitespace-normal">{r.narration || "-"}</div>,
-            },
-
-            // ✅ NEW Actions column
             {
                 key: "__actions",
                 header: "Actions",
                 cell: (r) => {
-                    const paymentId = r?.ref_id; // ledger PAYMENT -> payment_id
+                    const t = String(r?.txn_type || "").toUpperCase();
+                    const canEdit = t === "PAYMENT" || t === "ADVANCE_ADD";
                     return (
                         <div className="flex justify-center">
                             <Button
                                 size="sm"
                                 variant="outline"
-                                disabled={!paymentId}
+                                disabled={!canEdit}
                                 onClick={() => openEdit(r)}
                             >
                                 Edit
@@ -342,7 +290,7 @@ export default function LoanViewPage() {
 
     return (
         <div className="space-y-4">
-            {/* ✅ HEADER */}
+            {/* HEADER */}
             <Card>
                 <CardHeader className="pb-2">
                     <div className="flex items-start justify-between gap-4">
@@ -387,7 +335,7 @@ export default function LoanViewPage() {
                 </CardContent>
             </Card>
 
-            {/* ✅ Resolve status when opened using Loan Account No */}
+            {/* Resolve status when opened using Loan Account No */}
             {!isId && summaryLoading ? (
                 <Card>
                     <CardHeader className="pb-2">
@@ -413,7 +361,7 @@ export default function LoanViewPage() {
                 </Card>
             ) : null}
 
-            {/* ✅ SUMMARY CARD */}
+            {/* SUMMARY KPI */}
             <Card>
                 <CardHeader className="pb-2">
                     <CardTitle className="text-base">Loan Summary</CardTitle>
@@ -423,94 +371,31 @@ export default function LoanViewPage() {
                     {summaryLoading ? (
                         <div className="space-y-2">
                             <Skeleton className="h-6 w-1/3"/>
-                            <Skeleton className="h-24 w-full"/>
+                            <Skeleton className="h-28 w-full"/>
                         </div>
                     ) : summaryError ? (
                         <p className="text-sm text-destructive">Failed to load summary.</p>
                     ) : !summary ? (
                         <p className="text-sm text-muted-foreground">No summary found.</p>
                     ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                            <div className="rounded-md border p-3 text-center flex flex-col items-center">
-                                <div className="text-m text-muted-foreground mb-2">Loan Account No</div>
-                                <div className="font-medium">{summary.loan_account_no || "-"}</div>
-                            </div>
-
-                            <div className="rounded-md border p-3 text-center flex flex-col items-center">
-                                <div className="text-m text-muted-foreground mb-2">Member Name</div>
-                                <div className="font-medium">{summary.member_name || "-"}</div>
-                            </div>
-
-                            <div className="rounded-md border p-3 text-center flex flex-col items-center">
-                                <div className="text-m text-muted-foreground mb-2">Group Name</div>
-                                <div className="font-medium">{summary.group_name || "-"}</div>
-                            </div>
-
-                            <div className="rounded-md border p-3 text-center flex flex-col items-center">
-                                <div className="text-m text-muted-foreground mb-2">Loan Officer Name</div>
-                                {loLoading ? (
-                                    <Skeleton className="h-5 w-28"/>
-                                ) : loError ? (
-                                    <div className="font-medium">{loId != null ? `LO-${loId}` : "-"}</div>
-                                ) : (
-                                    <div className="font-medium">{loanOfficerName}</div>
-                                )}
-                            </div>
-
-                            <div className="rounded-md border p-3 text-center flex flex-col items-center">
-                                <div className="text-m text-muted-foreground mb-2">Principal Amount</div>
-                                <div className="font-medium">₹ {money(summary.principal_amount)}</div>
-                            </div>
-
-                            <div className="rounded-md border p-3 text-center flex flex-col items-center">
-                                <div className="text-m text-muted-foreground mb-2">Total Interest Amount</div>
-                                <div className="font-medium">₹ {money(summary.interest_amount_total)}</div>
-                            </div>
-
-                            <div className="rounded-md border p-3 text-center flex flex-col items-center">
-                                <div className="text-m text-muted-foreground mb-2">Total Amount Disbursed</div>
-                                <div className="font-medium">₹ {money(summary.total_disbursed_amount)}</div>
-                            </div>
-
-                            <div className="rounded-md border p-3 text-center flex flex-col items-center">
-                                <div className="text-m text-muted-foreground mb-2">Total Amount Paid</div>
-                                <div className="font-medium">₹ {money(summary.total_paid)}</div>
-                            </div>
-
-                            <div className="rounded-md border p-3 text-center flex flex-col items-center">
-                                <div className="text-m text-muted-foreground mb-2">Outstanding Balance</div>
-                                <div className="font-medium">₹ {money(summary.outstanding)}</div>
-                            </div>
-
-                            <div className="rounded-md border p-3 text-center flex flex-col items-center">
-                                <div className="text-m text-muted-foreground mb-2">Advance Balance</div>
-                                <div className="font-medium">₹ {money(summary.advance_balance)}</div>
-                            </div>
-
-                            <div className="rounded-md border p-3 text-center flex flex-col items-center md:col-span-2">
-                                <div className="text-m text-muted-foreground mb-2">Next Due Date & Amount</div>
-                                <div className="font-medium">
-                                    {fmtDate(summary.next_due_date)}{" "}
-                                    {summary.next_due_amount != null ? `(₹ ${money(summary.next_due_amount)})` : ""}
-                                </div>
-                            </div>
-                        </div>
+                        <LoanSummaryKpis summary={summary}
+                                         loanOfficerName={loLoading ? "-" : (loError ? `LO-${loId}` : loanOfficerName)}/>
                     )}
                 </CardContent>
             </Card>
 
-            {/* ✅ TABS */}
+            {/* TABS */}
             <Card>
                 <CardHeader className="pb-2">
                     <CardTitle className="text-base">Loan Details</CardTitle>
                 </CardHeader>
 
                 <CardContent>
+                    {/* ✅ Only 2 tabs now */}
                     <Tabs defaultValue="schedule" className="w-full">
                         <TabsList>
                             <TabsTrigger value="schedule">Schedule</TabsTrigger>
                             <TabsTrigger value="statement">Statement</TabsTrigger>
-                            <TabsTrigger value="payments">Paid Installments</TabsTrigger>
                         </TabsList>
 
                         <TabsContent value="schedule" className="mt-4">
@@ -545,29 +430,11 @@ export default function LoanViewPage() {
                                 rowKey={(r, idx) => r.ledger_id ?? `${activeLoanRef}-st-${idx}`}
                             />
                         </TabsContent>
-
-                        <TabsContent value="payments" className="mt-4">
-                            <AdvancedTable
-                                title="Paid Installments"
-                                description="PAYMENT transactions"
-                                data={paymentsData}
-                                columns={paymentsTableColumns}
-                                isLoading={statementLoading}
-                                errorText={statementError ? "Failed to load payments." : ""}
-                                emptyText="There are no PAYMENT transactions yet."
-                                enableSearch
-                                enablePagination
-                                initialPageSize={10}
-                                enableExport
-                                exportFileName={`payments_${summary?.loan_account_no || activeLoanRef || "loan"}.xlsx`}
-                                rowKey={(r, idx) => r.ledger_id ?? `${activeLoanRef}-pay-${idx}`}
-                            />
-                        </TabsContent>
                     </Tabs>
                 </CardContent>
             </Card>
 
-            {/* ✅ NEW: Mount your modal once */}
+            {/* Mount modal once */}
             <EditCollectionModal
                 open={editOpen}
                 onOpenChange={setEditOpen}

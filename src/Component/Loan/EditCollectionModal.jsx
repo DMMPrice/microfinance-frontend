@@ -1,5 +1,5 @@
+// src/Component/Loan/EditCollectionModal.jsx
 import React, {useEffect, useMemo, useState} from "react";
-import dayjs from "dayjs";
 
 import {
     Dialog,
@@ -12,22 +12,30 @@ import {Button} from "@/components/ui/button";
 import {Input} from "@/components/ui/input";
 import {Label} from "@/components/ui/label";
 
-import {useEditLoanPayment} from "@/hooks/useLoans";
+import {useEditCollectionByLedger} from "@/hooks/useLoans"; // ✅ ledger route hook
+import {toISTNaiveISO} from "@/Helpers/dateTimeIST";        // ✅ IST helper
 
 const MODES = ["CASH", "UPI", "BANK", "CARD", "OTHER"];
 
-export default function EditCollectionModal({
-                                                open,
-                                                onOpenChange,
-                                                loanId,
-                                                row, // the clicked row (must contain payment_id at least)
-                                            }) {
-    const editPayment = useEditLoanPayment();
+/**
+ * datetime-local gives: "YYYY-MM-DDTHH:mm"
+ * Backend wants: "YYYY-MM-DDTHH:mm:ss" (naive IST)
+ */
+function localToNaiveIstWithSeconds(dtLocal) {
+    if (!dtLocal) return null;
+    // If already includes seconds, keep first 19 chars
+    if (dtLocal.length >= 19) return dtLocal.slice(0, 19);
+    // Add ":00" seconds
+    return `${dtLocal}:00`;
+}
 
-    const paymentId = row?.payment_id;
+export default function EditCollectionModal({open, onOpenChange, loanId, row}) {
+    const editByLedger = useEditCollectionByLedger();
+
+    const ledgerId = row?.ledger_id;
 
     const [amount, setAmount] = useState("");
-    const [paymentDate, setPaymentDate] = useState("");
+    const [paymentDate, setPaymentDate] = useState(""); // "YYYY-MM-DDTHH:mm" (IST in UI)
     const [mode, setMode] = useState("CASH");
     const [receiptNo, setReceiptNo] = useState("");
     const [remarks, setRemarks] = useState("");
@@ -35,20 +43,12 @@ export default function EditCollectionModal({
     useEffect(() => {
         if (!row) return;
 
-        setAmount(
-            row?.amount_received != null
-                ? String(row.amount_received)
-                : row?.collected_amount != null
-                    ? String(row.collected_amount)
-                    : ""
-        );
+        const amt = row?.amount_received ?? row?.collected_amount ?? row?.credit ?? "";
+        setAmount(amt !== "" && amt != null ? String(amt) : "");
 
-        // backend expects ISO timestamp or null
-        setPaymentDate(
-            row?.payment_date
-                ? dayjs(row.payment_date).format("YYYY-MM-DDTHH:mm")
-                : ""
-        );
+        // ✅ Prefill in IST for datetime-local (no seconds)
+        // row.txn_date can be ISO with/without Z; we normalize to IST
+        setPaymentDate(row?.txn_date ? toISTNaiveISO(row.txn_date, false) : "");
 
         setMode(row?.payment_mode || "CASH");
         setReceiptNo(row?.receipt_no || "");
@@ -56,11 +56,11 @@ export default function EditCollectionModal({
     }, [row]);
 
     const canSave = useMemo(() => {
-        if (!paymentId) return false;
+        if (!ledgerId) return false;
         if (amount === "") return false;
         const n = Number(amount);
         return !Number.isNaN(n) && n >= 0;
-    }, [paymentId, amount]);
+    }, [ledgerId, amount]);
 
     const onSave = () => {
         if (!canSave) return;
@@ -70,16 +70,18 @@ export default function EditCollectionModal({
             payment_mode: mode || null,
             receipt_no: receiptNo?.trim() || null,
             remarks: remarks?.trim() || null,
-            payment_date: paymentDate ? new Date(paymentDate).toISOString() : null,
+
+            // ✅ Send naive IST with seconds
+            payment_date: localToNaiveIstWithSeconds(paymentDate),
         };
 
-        editPayment.mutate(
-            {loanId, paymentId, payload},
-            {
-                onSuccess: () => onOpenChange(false),
-            }
+        editByLedger.mutate(
+            {ledger_id: ledgerId, payload, loanRef: loanId},
+            {onSuccess: () => onOpenChange(false)}
         );
     };
+
+    const txnDateIstLabel = row?.txn_date ? toISTNaiveISO(row.txn_date, true)?.replace("T", " ") : "-";
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -88,12 +90,16 @@ export default function EditCollectionModal({
                     <DialogTitle>Edit Collection</DialogTitle>
                 </DialogHeader>
 
-                {!paymentId ? (
+                {!ledgerId ? (
                     <div className="text-sm text-muted-foreground">
-                        This row does not contain <b>payment_id</b>, so it can’t be edited.
+                        This row does not contain <b>ledger_id</b>, so it can’t be edited.
                     </div>
                 ) : (
                     <div className="grid gap-3">
+                        <div className="text-xs text-muted-foreground">
+                            Ledger ID: <b>{ledgerId}</b> | Current Txn Date (IST): <b>{txnDateIstLabel}</b>
+                        </div>
+
                         <div className="grid gap-1">
                             <Label>Amount Received</Label>
                             <Input
@@ -106,7 +112,7 @@ export default function EditCollectionModal({
                         </div>
 
                         <div className="grid gap-1">
-                            <Label>Payment Date</Label>
+                            <Label>Payment Date (IST)</Label>
                             <Input
                                 type="datetime-local"
                                 value={paymentDate}
@@ -153,8 +159,8 @@ export default function EditCollectionModal({
                     <Button variant="outline" onClick={() => onOpenChange(false)}>
                         Cancel
                     </Button>
-                    <Button onClick={onSave} disabled={!canSave || editPayment.isPending}>
-                        {editPayment.isPending ? "Saving..." : "Save"}
+                    <Button onClick={onSave} disabled={!canSave || editByLedger.isPending}>
+                        {editByLedger.isPending ? "Saving..." : "Save"}
                     </Button>
                 </DialogFooter>
             </DialogContent>
