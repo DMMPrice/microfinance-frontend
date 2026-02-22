@@ -1,22 +1,7 @@
-// ✅ UPDATED: CollectionEntryPage.jsx
-// Requirement:
-// 1) NOTHING shows until user clicks "Load Due"
-// 2) After Load Due -> show group-wise accordion in MAIN window
-// 3) Each group has an "Open" button -> opens that group's rows in a MODAL
-// 4) If user tries Open/View before Load Due -> show WARNING modal
-
-import React, {useEffect, useMemo, useRef, useState} from "react";
+import React, {useEffect, useMemo, useState} from "react";
 import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card.tsx";
 import {Button} from "@/components/ui/button.tsx";
 import {Input} from "@/components/ui/input.tsx";
-import {Label} from "@/components/ui/label.tsx";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select.tsx";
 import {
     Accordion,
     AccordionContent,
@@ -24,7 +9,7 @@ import {
     AccordionTrigger,
 } from "@/components/ui/accordion.tsx";
 import {Skeleton} from "@/components/ui/skeleton.tsx";
-import {CheckCircle2, Eye, Loader2, RotateCw, Download, ExternalLink} from "lucide-react";
+import {CheckCircle2, Eye, Loader2, ExternalLink} from "lucide-react";
 
 import {
     Dialog,
@@ -36,13 +21,17 @@ import {
 import {useBranches} from "@/hooks/useBranches.js";
 import {useGroups} from "@/hooks/useGroups.js";
 import {useLoanOfficers} from "@/hooks/useLoanOfficers.js";
-
 import {
     useCollectionsByLOManual,
     useCreateLoanPayment,
     useLoanPayments,
 } from "@/hooks/useLoans.js";
+import {getProfileData, getUserRole, getUserBranchId} from "@/hooks/useApi.js";
 
+import LoanPaymentsDialog from "./LoanPaymentsDialog.jsx";
+import CollectionEntryFilters from "./CollectionEntryFilters.jsx";
+
+/* -------------------- Date helpers -------------------- */
 function todayYYYYMMDD() {
     const d = new Date();
     const yyyy = d.getFullYear();
@@ -51,15 +40,11 @@ function todayYYYYMMDD() {
     return `${yyyy}-${mm}-${dd}`;
 }
 
-
 function isOverdueDate(dueDateLike) {
-    // Overdue = due date strictly before today (local)
     if (!dueDateLike) return false;
 
-    // Try native Date parsing first (supports ISO strings)
     let d = new Date(dueDateLike);
 
-    // Fallback for plain 'YYYY-MM-DD'
     if (Number.isNaN(d.getTime())) {
         const s = String(dueDateLike).trim();
         const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -79,9 +64,27 @@ function isOverdueDate(dueDateLike) {
     return dueStart < todayStart;
 }
 
-const MODE_OPTIONS = ["CASH", "UPI", "BANK", "CARD", "OTHER"];
+/* -------------------- Role helpers -------------------- */
+function normalizeRoleString(role) {
+    return (role || "").toString().trim().toLowerCase();
+}
 
-/** ✅ CSV helpers */
+function resolveRoleName(profile) {
+    const roleStr = normalizeRoleString(profile?.role || getUserRole?.());
+    if (roleStr) return roleStr;
+
+    const ridRaw = profile?.role_id ?? profile?.roleId ?? profile?.RoleId ?? null;
+    const rid = ridRaw == null ? null : Number(ridRaw);
+    if (!Number.isFinite(rid)) return "";
+
+    // adjust mapping if needed
+    if (rid === 4) return "branch_manager";
+    if (rid === 5) return "loan_officer";
+
+    return "";
+}
+
+/** ✅ CSV helpers (keep if you use statement download) */
 function csvEscape(v) {
     if (v === null || v === undefined) return "";
     const s = String(v);
@@ -110,114 +113,71 @@ export default function CollectionEntryPage() {
     const [loId, setLoId] = useState("");
     const [groupId, setGroupId] = useState("ALL");
 
-    // ✅ MUST click Load Due first
     const [applyFilters, setApplyFilters] = useState(false);
 
     const [rowForm, setRowForm] = useState({});
     const [posting, setPosting] = useState({});
     const [posted, setPosted] = useState({});
 
-    // ✅ bulk collect all (per group modal)
     const [collectAllRunning, setCollectAllRunning] = useState(false);
     const [collectAllProgress, setCollectAllProgress] = useState({done: 0, total: 0});
 
-    // ✅ amount validation warnings (per row)
     const [amountErrors, setAmountErrors] = useState({});
-
-    // ✅ warning modal
     const [warnOpen, setWarnOpen] = useState(false);
 
-    // ✅ View Payments modal
     const [openPayments, setOpenPayments] = useState(false);
     const [selectedLoanId, setSelectedLoanId] = useState(null);
 
-    // ✅ Group-wise modal
     const [openGroupModal, setOpenGroupModal] = useState(false);
     const [selectedGroupKey, setSelectedGroupKey] = useState(null);
 
-    /* -------------------- MASTER DROPDOWNS -------------------- */
+    /* -------------------- master data -------------------- */
     const {branches, isLoading: branchesLoading} = useBranches();
     const {groups, isLoading: groupsLoading} = useGroups();
     const {loanOfficers, isLoading: losLoading} = useLoanOfficers();
 
     const anyMasterLoading = branchesLoading || groupsLoading || losLoading;
 
-    const filteredLOs = useMemo(() => {
-        if (!branchId) return [];
-        const bId = Number(branchId);
-        return (loanOfficers || []).filter((lo) => lo?.employee?.branch_id === bId);
-    }, [loanOfficers, branchId]);
+    /* -------------------- profile / RBAC -------------------- */
+    const profile = getProfileData?.() || {};
+    const roleName = resolveRoleName(profile);
 
-    const filteredGroups = useMemo(() => {
-        if (!branchId) return [];
-        const bId = Number(branchId);
-        const lId = loId ? Number(loId) : null;
+    const isBranchManager = roleName === "branch_manager";
+    const isLoanOfficer = roleName === "loan_officer";
 
-        return (groups || [])
-            .filter((g) => g.branch_id === bId)
-            .filter((g) => (lId ? g.lo_id === lId : true));
-    }, [groups, branchId, loId]);
+    // ✅ hide dropdowns if auto-selected
+    const hideBranchField = isBranchManager || isLoanOfficer;
+    const hideLoField = isLoanOfficer;
 
-    /* -------------------- DUE COLLECTIONS (NO AUTO FETCH) -------------------- */
-    const effectiveLoId = applyFilters ? loId : null;
-    const effectiveAsOn = applyFilters ? asOn : null;
+    // ✅ Branch from profile always exists (your payload has branch_id)
+    const resolvedBranchId = useMemo(() => {
+        const bid = profile?.branch_id ?? getUserBranchId?.();
+        return bid != null && String(bid).trim() !== "" ? String(bid) : "";
+    }, [profile]);
 
-    const {
-        data: rows = [],
-        isLoading: rowsLoading,
-        isFetching: rowsFetching,
-        refetch: refetchDue,
-    } = useCollectionsByLOManual(effectiveLoId, effectiveAsOn, applyFilters);
+    // ✅ Loan Officer LO_ID derived from /loan-officers by employee_id
+    const resolvedLoId = useMemo(() => {
+        if (!isLoanOfficer) return "";
+        const empId = profile?.employee_id ?? profile?.employeeId ?? null;
+        if (!empId) return "";
 
-    const isLoadingDue = rowsLoading || rowsFetching;
+        const found = (loanOfficers || []).find(
+            (x) => Number(x?.employee_id) === Number(empId),
+        );
 
-    const createPayment = useCreateLoanPayment();
+        return found?.lo_id != null ? String(found.lo_id) : "";
+    }, [isLoanOfficer, profile, loanOfficers]);
 
-    const {data: paymentRows = [], isLoading: paymentsLoading} = useLoanPayments(
-        selectedLoanId,
-        openPayments && !!selectedLoanId
-    );
-
-    /* -------------------- Helpers -------------------- */
-    function updateForm(key, patch) {
-        setRowForm((prev) => ({
-            ...prev,
-            [key]: {...(prev[key] || {}), ...patch},
-        }));
-    }
-
-
-    // ✅ keep Amount input stable + numeric-only (supports up to 2 decimals)
-    function sanitizeAmountInput(raw) {
-        const s = String(raw ?? "");
-        // allow digits and a single dot
-        let out = "";
-        let dotUsed = false;
-        for (const ch of s) {
-            if (ch >= "0" && ch <= "9") out += ch;
-            else if (ch === "." && !dotUsed) {
-                dotUsed = true;
-                out += ch;
-            }
+    // ✅ set locked values once available
+    useEffect(() => {
+        if ((isBranchManager || isLoanOfficer) && resolvedBranchId) {
+            setBranchId(resolvedBranchId);
         }
-        // limit decimals to 2
-        if (dotUsed) {
-            const [a, b = ""] = out.split(".");
-            out = a + "." + b.slice(0, 2);
+        if (isLoanOfficer && resolvedLoId) {
+            setLoId(resolvedLoId);
         }
-        return out;
-    }
-
-    function setAmountError(key, msg) {
-        setAmountErrors((p) => {
-            if (!msg) {
-                const n = {...(p || {})};
-                delete n[key];
-                return n;
-            }
-            return {...(p || {}), [key]: msg};
-        });
-    }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isBranchManager, isLoanOfficer, resolvedBranchId, resolvedLoId]);
 
     function resetTableState() {
         setApplyFilters(false);
@@ -246,6 +206,80 @@ export default function CollectionEntryPage() {
         resetTableState();
     }
 
+    /* -------------------- dropdown filtering -------------------- */
+    const filteredLOs = useMemo(() => {
+        if (!branchId) return [];
+        const bId = Number(branchId);
+        return (loanOfficers || []).filter((lo) => Number(lo?.employee?.branch_id) === bId);
+    }, [loanOfficers, branchId]);
+
+    const filteredGroups = useMemo(() => {
+        if (!branchId) return [];
+        const bId = Number(branchId);
+        const lId = loId ? Number(loId) : null;
+
+        return (groups || [])
+            .filter((g) => Number(g.branch_id) === bId)
+            .filter((g) => (lId ? Number(g.lo_id) === lId : true));
+    }, [groups, branchId, loId]);
+
+    /* -------------------- dues fetch -------------------- */
+    const effectiveLoId = applyFilters ? (loId || resolvedLoId) : null;
+    const effectiveAsOn = applyFilters ? asOn : null;
+
+    const {
+        data: rows = [],
+        isLoading: rowsLoading,
+        isFetching: rowsFetching,
+        refetch: refetchDue,
+    } = useCollectionsByLOManual(effectiveLoId, effectiveAsOn, applyFilters);
+
+    const isLoadingDue = rowsLoading || rowsFetching;
+
+    const createPayment = useCreateLoanPayment();
+
+    const {data: paymentRows = [], isLoading: paymentsLoading} = useLoanPayments(
+        selectedLoanId,
+        openPayments && !!selectedLoanId,
+    );
+
+    /* -------------------- helpers -------------------- */
+    function updateForm(key, patch) {
+        setRowForm((prev) => ({
+            ...prev,
+            [key]: {...(prev[key] || {}), ...patch},
+        }));
+    }
+
+    function sanitizeAmountInput(raw) {
+        const s = String(raw ?? "");
+        let out = "";
+        let dotUsed = false;
+        for (const ch of s) {
+            if (ch >= "0" && ch <= "9") out += ch;
+            else if (ch === "." && !dotUsed) {
+                dotUsed = true;
+                out += ch;
+            }
+        }
+        if (dotUsed) {
+            const [a, b = ""] = out.split(".");
+            out = a + "." + b.slice(0, 2);
+        }
+        return out;
+    }
+
+    function setAmountError(key, msg) {
+        setAmountErrors((p) => {
+            if (!msg) {
+                const n = {...(p || {})};
+                delete n[key];
+                return n;
+            }
+            return {...(p || {}), [key]: msg};
+        });
+    }
+
     function requireLoadOrWarn() {
         if (!applyFilters) {
             setWarnOpen(true);
@@ -260,36 +294,18 @@ export default function CollectionEntryPage() {
         await refetchDue();
     }
 
-    /* ✅ helper: loan account no */
-    const loanAccountById = useMemo(() => {
-        const m = new Map();
-        (rows || []).forEach((r) => {
-            if (r?.loan_id != null) m.set(r.loan_id, r.loan_account_no);
-        });
-        return m;
-    }, [rows]);
-
-    const selectedLoanAccountNo = useMemo(() => {
-        if (!selectedLoanId) return "";
-        return loanAccountById.get(selectedLoanId) || "";
-    }, [selectedLoanId, loanAccountById]);
-
-    /* -------------------- init row form -------------------- */
+    /* -------------------- init row forms -------------------- */
     const rowsStringified = useMemo(() => {
-        return JSON.stringify((rows || []).map(r => `${r.installment_no}:${r.loan_id}`));
+        return JSON.stringify((rows || []).map((r) => `${r.installment_no}:${r.loan_id}`));
     }, [rows]);
 
     useEffect(() => {
-        // ✅ only init after data arrives (after Load Due)
         if (!applyFilters || rows.length === 0) return;
 
         setRowForm((prev) => {
             const next = {...(prev || {})};
-
             (rows || []).forEach((r) => {
                 const key = `${r.installment_no}:${r.loan_id}`;
-
-                // ✅ DON'T overwrite if field already exists (prevents cursor/focus loss)
                 if (next[key]) return;
 
                 next[key] = {
@@ -300,17 +316,16 @@ export default function CollectionEntryPage() {
                     payment_date: new Date().toISOString().slice(0, 16),
                 };
             });
-
             return next;
         });
     }, [rowsStringified, applyFilters]);
 
-    /* -------------------- filtering / grouping -------------------- */
+    /* -------------------- display/group -------------------- */
     const displayRows = useMemo(() => {
-        if (!applyFilters) return []; // ✅ nothing before Load Due
+        if (!applyFilters) return [];
         if (groupId === "ALL") return rows;
         const gId = Number(groupId);
-        return (rows || []).filter((r) => r.group_id === gId);
+        return (rows || []).filter((r) => Number(r.group_id) === gId);
     }, [rows, groupId, applyFilters]);
 
     const grouped = useMemo(() => {
@@ -331,20 +346,19 @@ export default function CollectionEntryPage() {
         return grouped.find((g) => g.key === selectedGroupKey) || null;
     }, [grouped, selectedGroupKey]);
 
-    /* -------------------- submit row -------------------- */
+    /* -------------------- submit -------------------- */
     async function submitRow(r) {
         if (!requireLoadOrWarn()) return;
 
         const key = `${r.installment_no}:${r.loan_id}`;
         const f = rowForm[key] || {};
 
-        // ✅ allow 0 (records a "no collection" entry), block negatives/NaN/empty
         const rawAmt = f.amount_received;
-        const amount = rawAmt === "" || rawAmt === null || rawAmt === undefined ? null : Number(rawAmt);
+        const amount =
+            rawAmt === "" || rawAmt === null || rawAmt === undefined ? null : Number(rawAmt);
+
         if (amount === null || Number.isNaN(amount) || amount < 0) return;
 
-        // ✅ If amount is 0: treat as 'no collection' -> DO NOT call API.
-        // The unpaid amount will automatically carry forward in next installment's due_left.
         if (amount === 0) {
             setPosted((x) => ({...x, [key]: true}));
             return;
@@ -355,7 +369,7 @@ export default function CollectionEntryPage() {
         try {
             await createPayment.mutateAsync({
                 payload: {
-                    loan_id: r.loan_id, // ✅ REQUIRED in payload
+                    loan_id: r.loan_id,
                     amount_received: amount,
                     payment_mode: f.payment_mode || "CASH",
                     receipt_no: f.receipt_no || null,
@@ -372,14 +386,11 @@ export default function CollectionEntryPage() {
         }
     }
 
-    // ✅ Collect All: sequentially submits every pending row (backend-safe)
-    // UX: user clicks ONCE, we process one-by-one and show progress in the button text.
     async function collectAllRows(items) {
         if (!requireLoadOrWarn()) return;
         if (!Array.isArray(items) || items.length === 0) return;
         if (collectAllRunning) return;
 
-        // build queue: only not submitted, valid amount > 0
         const queue = (items || []).filter((r) => {
             const key = `${r.installment_no}:${r.loan_id}`;
             const f = rowForm[key] || {};
@@ -393,7 +404,7 @@ export default function CollectionEntryPage() {
         try {
             let done = 0;
             for (const r of queue) {
-                await submitRow(r); // ✅ one-by-one
+                await submitRow(r);
                 done += 1;
                 setCollectAllProgress({done, total: queue.length});
             }
@@ -402,6 +413,19 @@ export default function CollectionEntryPage() {
         }
     }
 
+    /* -------------------- statement helpers -------------------- */
+    const loanAccountById = useMemo(() => {
+        const m = new Map();
+        (rows || []).forEach((r) => {
+            if (r?.loan_id != null) m.set(r.loan_id, r.loan_account_no);
+        });
+        return m;
+    }, [rows]);
+
+    const selectedLoanAccountNo = useMemo(() => {
+        if (!selectedLoanId) return "";
+        return loanAccountById.get(selectedLoanId) || "";
+    }, [selectedLoanId, loanAccountById]);
 
     function downloadStatementCSV() {
         if (!selectedLoanId) return;
@@ -417,15 +441,13 @@ export default function CollectionEntryPage() {
             x.narration || "-",
         ]));
 
-        const filename = `loan_${accNo}_statement_${todayYYYYMMDD()}.csv`;
-        downloadCSV(filename, [header, ...data]);
+        downloadCSV(`loan_${accNo}_statement_${todayYYYYMMDD()}.csv`, [header, ...data]);
     }
 
-    /* -------------------- table renderer (re-used) -------------------- */
-    /* -------------------- table renderer (re-used) -------------------- */
+    /* -------------------- table renderer -------------------- */
     const renderGroupTable = (items) => {
-        // ✅ Excel-style totals row (under columns)
         let dueTotal = 0;
+        let prevOverdueTotal = 0;
         let enteredTotal = 0;
         let submittedTotal = 0;
 
@@ -433,10 +455,12 @@ export default function CollectionEntryPage() {
             const k = `${r.installment_no}:${r.loan_id}`;
             const f = rowForm[k] || {};
             const due = Number(r.due_left ?? 0);
+            const prev = Number(r.overdue_prev ?? 0);
             const entered = Number(f.amount_received ?? 0);
             const isDone = !!posted[k];
 
             dueTotal += Number.isFinite(due) ? due : 0;
+            prevOverdueTotal += Number.isFinite(prev) ? prev : 0;
             enteredTotal += Number.isFinite(entered) ? entered : 0;
             if (isDone) submittedTotal += Number.isFinite(entered) ? entered : 0;
         }
@@ -449,6 +473,7 @@ export default function CollectionEntryPage() {
                         <th className="p-2 border text-left">Member</th>
                         <th className="p-2 border">Due Date</th>
                         <th className="p-2 border">Inst</th>
+                        <th className="p-2 border">Prev Overdue</th>
                         <th className="p-2 border">Due Left</th>
                         <th className="p-2 border">Amount</th>
                         <th className="p-2 border">Mode</th>
@@ -479,19 +504,18 @@ export default function CollectionEntryPage() {
                                                 <>
                                                     Loan A/c:{" "}
                                                     <span className="inline-flex items-center gap-2">
-                                                        {overdue && (
-                                                            <span className="relative flex h-3 w-3">
-                                                                <span
-                                                                    className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"/>
-                                                                <span
-                                                                    className="relative inline-flex h-3 w-3 rounded-full bg-red-600"/>
-                                                            </span>
-                                                        )}
+                            {overdue && (
+                                <span className="relative flex h-3 w-3">
+                                <span
+                                    className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"/>
+                                <span className="relative inline-flex h-3 w-3 rounded-full bg-red-600"/>
+                              </span>
+                            )}
                                                         <span
                                                             className={overdue ? "text-red-600 font-semibold" : "font-medium"}>
-                                                            {accNo}
-                                                        </span>
-                                                    </span>{" "}
+                              {accNo}
+                            </span>
+                          </span>{" "}
                                                     • Advance: {Number(r.advance_balance || 0).toFixed(2)}
                                                 </>
                                             );
@@ -501,6 +525,8 @@ export default function CollectionEntryPage() {
 
                                 <td className="p-2 border text-center">{String(r.due_date || "").slice(0, 10)}</td>
                                 <td className="p-2 border text-center">{r.installment_no}</td>
+
+                                <td className="p-2 border text-center">{Number(r.overdue_prev || 0).toFixed(2)}</td>
                                 <td className="p-2 border text-center">{Number(r.due_left || 0).toFixed(2)}</td>
 
                                 <td className="p-2 border">
@@ -511,7 +537,6 @@ export default function CollectionEntryPage() {
                                             onChange={(e) => {
                                                 const raw = e.target.value;
 
-                                                // allow empty while typing
                                                 if (raw === "") {
                                                     setAmountError(key, "");
                                                     updateForm(key, {amount_received: ""});
@@ -520,20 +545,14 @@ export default function CollectionEntryPage() {
 
                                                 const cleaned = sanitizeAmountInput(raw);
 
-                                                // if user typed invalid char -> keep cleaned, warn
-                                                if (cleaned !== raw) {
-                                                    setAmountError(key, "Only numbers and dot allowed");
-                                                } else {
-                                                    setAmountError(key, "");
-                                                }
+                                                if (cleaned !== raw) setAmountError(key, "Only numbers and dot allowed");
+                                                else setAmountError(key, "");
 
-                                                // validate max
                                                 const max = Number(r.due_left ?? 0);
                                                 const n = Number(cleaned);
                                                 if (Number.isFinite(max) && Number.isFinite(n) && n > max) {
                                                     setAmountError(key, `Max ${max.toFixed(2)}`);
                                                 } else {
-                                                    // clear max error only if it was max error
                                                     if ((amountErrors[key] || "").startsWith("Max ")) setAmountError(key, "");
                                                 }
 
@@ -542,28 +561,14 @@ export default function CollectionEntryPage() {
                                             placeholder="0.00"
                                             disabled={isDone || isPosting || collectAllRunning}
                                         />
-
                                         {amountErrors[key] ? (
                                             <div className="text-xs text-red-600">{amountErrors[key]}</div>
                                         ) : null}
                                     </div>
                                 </td>
 
-                                <td className="p-2 border">
-                                    <Select
-                                        value={f.payment_mode || "CASH"}
-                                        onValueChange={(v) => updateForm(key, {payment_mode: v})}
-                                        disabled={isDone || isPosting || collectAllRunning}
-                                    >
-                                        <SelectTrigger className="h-9">
-                                            <SelectValue placeholder="Select mode"/>
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="CASH">CASH</SelectItem>
-                                            <SelectItem value="UPI">UPI</SelectItem>
-                                            <SelectItem value="BANK">BANK</SelectItem>
-                                        </SelectContent>
-                                    </Select>
+                                <td className="p-2 border text-center">
+                                    <Input value={f.payment_mode || "CASH"} disabled/>
                                 </td>
 
                                 <td className="p-2 border">
@@ -634,11 +639,11 @@ export default function CollectionEntryPage() {
                         );
                     })}
 
-                    {/* ✅ Totals row (Excel-style) */}
                     <tr className="bg-muted/40 font-semibold border-t">
                         <td className="p-2 border">TOTAL</td>
                         <td className="p-2 border"/>
                         <td className="p-2 border"/>
+                        <td className="p-2 border text-right">{prevOverdueTotal.toFixed(2)}</td>
                         <td className="p-2 border text-right">{dueTotal.toFixed(2)}</td>
                         <td className="p-2 border text-right">{enteredTotal.toFixed(2)}</td>
                         <td className="p-2 border"/>
@@ -652,6 +657,16 @@ export default function CollectionEntryPage() {
             </div>
         );
     };
+
+    /* -------------------- Load Due gating -------------------- */
+    const disableLoadDue =
+        isLoadingDue ||
+        !(branchId || resolvedBranchId) ||
+        !(loId || resolvedLoId) ||
+        (isLoanOfficer && losLoading); // wait for mapping
+
+    const loadDueLabel =
+        isLoanOfficer && losLoading ? "Loading..." : "Load Due";
 
     return (
         <div className="space-y-4">
@@ -670,83 +685,30 @@ export default function CollectionEntryPage() {
                 </CardHeader>
 
                 <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-                        <div className="space-y-1">
-                            <Label>As On Date</Label>
-                            <Input type="date" value={asOn} onChange={(e) => onAsOnChange(e.target.value)}/>
-                        </div>
-
-                        <div className="space-y-1">
-                            <Label>Branch</Label>
-                            <Select value={branchId} onValueChange={onBranchChange}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder={anyMasterLoading ? "Loading..." : "Select Branch"}/>
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {(branches || []).map((b) => (
-                                        <SelectItem key={b.branch_id} value={String(b.branch_id)}>
-                                            {b.branch_name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <div className="space-y-1">
-                            <Label>Loan Officer</Label>
-                            <Select value={loId} onValueChange={onLoChange} disabled={!branchId}>
-                                <SelectTrigger>
-                                    <SelectValue
-                                        placeholder={!branchId ? "Select Branch first" : "Select Loan Officer"}/>
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {filteredLOs.length === 0 ? (
-                                        <div className="px-3 py-2 text-sm text-muted-foreground">
-                                            No Loan Officer found for this branch
-                                        </div>
-                                    ) : (
-                                        filteredLOs.map((lo) => (
-                                            <SelectItem key={lo.lo_id} value={String(lo.lo_id)}>
-                                                {lo?.employee?.full_name || "Loan Officer"}
-                                            </SelectItem>
-                                        ))
-                                    )}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <div className="space-y-1">
-                            <Label>Group (optional)</Label>
-                            <Select value={groupId} onValueChange={setGroupId} disabled={!branchId}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder={!branchId ? "Select Branch first" : "All Groups"}/>
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="ALL">All Groups</SelectItem>
-                                    {filteredGroups.map((g) => (
-                                        <SelectItem key={g.group_id} value={String(g.group_id)}>
-                                            {g.group_name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <div className="flex items-end gap-2">
-                            <Button onClick={loadDue} disabled={isLoadingDue || !branchId || !loId} className="w-full">
-                                {isLoadingDue ? (
-                                    <Loader2 className="h-4 w-4 animate-spin"/>
-                                ) : (
-                                    <RotateCw className="h-4 w-4"/>
-                                )}
-                                <span className="ml-2">Load Due</span>
-                            </Button>
-                        </div>
-                    </div>
+                    <CollectionEntryFilters
+                        asOn={asOn}
+                        onAsOnChange={onAsOnChange}
+                        hideBranchField={hideBranchField}
+                        hideLoField={hideLoField}
+                        branchId={branchId}
+                        loId={loId}
+                        groupId={groupId}
+                        onBranchChange={onBranchChange}
+                        onLoChange={onLoChange}
+                        setGroupId={setGroupId}
+                        anyMasterLoading={anyMasterLoading}
+                        branches={branches || []}
+                        filteredLOs={filteredLOs || []}
+                        filteredGroups={filteredGroups || []}
+                        onLoadDue={loadDue}
+                        isLoadingDue={isLoadingDue}
+                        disableLoadDue={disableLoadDue}
+                        loadDueLabel={loadDueLabel}
+                    />
                 </CardContent>
             </Card>
 
-            {/* ✅ MAIN WINDOW GROUP-WISE VIEW */}
+            {/* Due Collections */}
             <Card>
                 <CardHeader className="pb-2">
                     <CardTitle className="text-base">Due Collections</CardTitle>
@@ -773,12 +735,10 @@ export default function CollectionEntryPage() {
                                         <div className="flex items-center justify-between w-full pr-3">
                                             <div className="flex items-center gap-3">
                                                 <span className="font-medium">{g.groupName}</span>
-                                                <span className="text-xs text-muted-foreground">
-                          Rows: {g.items.length}
-                        </span>
+                                                <span
+                                                    className="text-xs text-muted-foreground">Rows: {g.items.length}</span>
                                             </div>
 
-                                            {/* ✅ Open group in modal */}
                                             <Button
                                                 size="sm"
                                                 variant="outline"
@@ -786,7 +746,6 @@ export default function CollectionEntryPage() {
                                                     e.preventDefault();
                                                     e.stopPropagation();
                                                     if (!requireLoadOrWarn()) return;
-
                                                     setSelectedGroupKey(g.key);
                                                     setOpenGroupModal(true);
                                                 }}
@@ -797,9 +756,7 @@ export default function CollectionEntryPage() {
                                         </div>
                                     </AccordionTrigger>
 
-                                    <AccordionContent>
-                                        {renderGroupTable(g.items)}
-                                    </AccordionContent>
+                                    <AccordionContent>{renderGroupTable(g.items)}</AccordionContent>
                                 </AccordionItem>
                             ))}
                         </Accordion>
@@ -807,14 +764,12 @@ export default function CollectionEntryPage() {
                 </CardContent>
             </Card>
 
-            {/* ✅ GROUP MODAL (selected group only) */}
+            {/* Group Modal */}
             <Dialog open={openGroupModal} onOpenChange={setOpenGroupModal}>
                 <DialogContent className="max-w-7xl">
                     <DialogHeader>
                         <div className="flex items-center justify-between gap-3">
-                            <DialogTitle>
-                                Due Collections - {selectedGroup?.groupName || "Group"}
-                            </DialogTitle>
+                            <DialogTitle>Due Collections - {selectedGroup?.groupName || "Group"}</DialogTitle>
 
                             <Button
                                 size="sm"
@@ -826,8 +781,8 @@ export default function CollectionEntryPage() {
                                     <>
                                         <Loader2 className="h-4 w-4 animate-spin"/>
                                         <span className="ml-2">
-                                            Collecting {collectAllProgress.done}/{collectAllProgress.total}
-                                        </span>
+                      Collecting {collectAllProgress.done}/{collectAllProgress.total}
+                    </span>
                                     </>
                                 ) : (
                                     "Collect All"
@@ -837,16 +792,14 @@ export default function CollectionEntryPage() {
                     </DialogHeader>
 
                     <div className="max-h-[75vh] overflow-auto pr-1">
-                        {selectedGroup ? (
-                            renderGroupTable(selectedGroup.items)
-                        ) : (
+                        {selectedGroup ? renderGroupTable(selectedGroup.items) : (
                             <p className="text-sm text-muted-foreground">No group selected.</p>
                         )}
                     </div>
                 </DialogContent>
             </Dialog>
 
-            {/* ✅ WARNING MODAL */}
+            {/* Warning Modal */}
             <Dialog open={warnOpen} onOpenChange={setWarnOpen}>
                 <DialogContent className="max-w-md">
                     <DialogHeader>
@@ -865,7 +818,7 @@ export default function CollectionEntryPage() {
                                 setWarnOpen(false);
                                 await loadDue();
                             }}
-                            disabled={!branchId || !loId}
+                            disabled={disableLoadDue}
                         >
                             Load Due Now
                         </Button>
@@ -873,69 +826,16 @@ export default function CollectionEntryPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* ✅ PAYMENTS MODAL */}
-            <Dialog open={openPayments} onOpenChange={setOpenPayments}>
-                <DialogContent className="max-w-4xl">
-                    <DialogHeader>
-                        <div className="flex items-center justify-between gap-3">
-                            <DialogTitle>
-                                Previous Payments{" "}
-                                {selectedLoanId
-                                    ? `(Loan A/c: ${selectedLoanAccountNo || `#${selectedLoanId}`})`
-                                    : ""}
-                            </DialogTitle>
-
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={downloadStatementCSV}
-                                disabled={paymentsLoading || !selectedLoanId || paymentRows.length === 0}
-                            >
-                                <Download className="h-4 w-4 mr-2"/>
-                                Download Statement
-                            </Button>
-                        </div>
-                    </DialogHeader>
-
-                    {paymentsLoading ? (
-                        <div className="space-y-2">
-                            <Skeleton className="h-10 w-full"/>
-                            <Skeleton className="h-24 w-full"/>
-                        </div>
-                    ) : paymentRows.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No previous payments found.</p>
-                    ) : (
-                        <div className="w-full overflow-x-auto">
-                            <table className="w-full text-sm border rounded-md">
-                                <thead className="bg-muted">
-                                <tr>
-                                    <th className="p-2 border">Date & Time</th>
-                                    <th className="p-2 border">Paid Amount</th>
-                                    <th className="p-2 border">Outstanding After</th>
-                                    <th className="p-2 border">Narration</th>
-                                </tr>
-                                </thead>
-                                <tbody>
-                                {paymentRows.map((x) => (
-                                    <tr key={x.ledger_id}>
-                                        <td className="p-2 border">
-                                            {x.txn_date ? new Date(x.txn_date).toLocaleString() : "-"}
-                                        </td>
-                                        <td className="p-2 border text-right">
-                                            {Number(x.credit || 0).toFixed(2)}
-                                        </td>
-                                        <td className="p-2 border text-right">
-                                            {Number(x.balance_outstanding || 0).toFixed(2)}
-                                        </td>
-                                        <td className="p-2 border">{x.narration || "-"}</td>
-                                    </tr>
-                                ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
-                </DialogContent>
-            </Dialog>
+            {/* Payments Modal */}
+            <LoanPaymentsDialog
+                open={openPayments}
+                onOpenChange={setOpenPayments}
+                selectedLoanId={selectedLoanId}
+                selectedLoanAccountNo={selectedLoanAccountNo}
+                paymentsLoading={paymentsLoading}
+                paymentRows={paymentRows}
+                downloadStatementCSV={downloadStatementCSV}
+            />
         </div>
     );
 }
