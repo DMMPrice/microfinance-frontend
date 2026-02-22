@@ -65,6 +65,9 @@ export default function GroupManagement() {
     // ✅ LO toggle: default show only today meeting-day groups
     const [loShowAll, setLoShowAll] = useState(false);
 
+    // ✅ BM toggle: default show only today meeting-day groups (within branch)
+    const [bmShowAll, setBmShowAll] = useState(false);
+
     const {toast} = useToast();
 
     const {
@@ -86,7 +89,7 @@ export default function GroupManagement() {
         String(istToday || "").trim().toLowerCase();
 
     /* =========================
-       ✅ ProfileData (given)
+       ✅ ProfileData
     ========================= */
     const profile = getProfileData();
     const role = getUserRole();
@@ -174,18 +177,34 @@ export default function GroupManagement() {
     }, [groups, isAdmin, isLO, isBM, isRM, myLoId, myBranchId, myRegionId]);
 
     /* =========================
-       ✅ NEW: What LO sees in table
-       - default: only TODAY meeting groups
-       - button: show ALL his groups
+       ✅ Visible groups in table (LO + BM have Today/All toggle)
     ========================= */
     const visibleGroups = useMemo(() => {
-        if (!isLO) return roleScopedGroups;
-        if (loShowAll) return roleScopedGroups;
-        return roleScopedGroups.filter(isMeetingToday);
-    }, [isLO, loShowAll, roleScopedGroups, istToday]); // istToday used in isMeetingToday
+        // LO: Today vs All My Groups
+        if (isLO) {
+            if (loShowAll) return roleScopedGroups;
+            return roleScopedGroups.filter(isMeetingToday);
+        }
+
+        // BM: Today vs All Branch Groups
+        if (isBM) {
+            if (bmShowAll) return roleScopedGroups;
+            return roleScopedGroups.filter(isMeetingToday);
+        }
+
+        // Others
+        return roleScopedGroups;
+    }, [
+        isLO,
+        isBM,
+        loShowAll,
+        bmShowAll,
+        roleScopedGroups,
+        istToday, // used inside isMeetingToday
+    ]);
 
     /* =========================
-       ✅ FIX: eligibleLoanOfficersForCreate (MISSING BEFORE)
+       ✅ eligibleLoanOfficersForCreate
     ========================= */
     const eligibleLoanOfficersForCreate = useMemo(() => {
         const list = loanOfficers || [];
@@ -444,7 +463,7 @@ export default function GroupManagement() {
                 </Button>
             ) : null}
 
-            {/* ✅ NEW: LO toggle button */}
+            {/* ✅ LO toggle */}
             {isLO ? (
                 <Button
                     variant={loShowAll ? "default" : "outline"}
@@ -455,8 +474,27 @@ export default function GroupManagement() {
                     {loShowAll ? "Showing: All My Groups" : `Showing: Today (${istToday})`}
                 </Button>
             ) : null}
+
+            {/* ✅ BM toggle (NEW) */}
+            {isBM ? (
+                <Button
+                    variant={bmShowAll ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setBmShowAll((s) => !s)}
+                    className="min-w-[240px] justify-center"
+                >
+                    {bmShowAll
+                        ? "Showing: All Branch Groups"
+                        : `Showing: Today (${istToday})`}
+                </Button>
+            ) : null}
         </div>
     );
+
+    const emptyText =
+        (isLO && !loShowAll) || (isBM && !bmShowAll)
+            ? "No meeting groups for today."
+            : "No groups found.";
 
     return (
         <Card>
@@ -469,7 +507,9 @@ export default function GroupManagement() {
                                 ? "Showing all your groups"
                                 : `Showing only today's meeting-day groups (${istToday})`
                             : isBM
-                                ? "Showing groups for your branch"
+                                ? bmShowAll
+                                    ? "Showing all groups for your branch"
+                                    : `Showing only today's meeting-day groups (${istToday}) in your branch`
                                 : isRM
                                     ? "Showing groups for your region"
                                     : "Showing all groups"}
@@ -493,7 +533,7 @@ export default function GroupManagement() {
             </CardHeader>
 
             <CardContent>
-                {/* ✅ KPI should reflect what user currently sees in table */}
+                {/* ✅ KPI reflects visible list */}
                 <GroupsKpiRow groups={visibleGroups} isLoading={isLoading}/>
 
                 <AdvancedTable
@@ -502,7 +542,7 @@ export default function GroupManagement() {
                     data={visibleGroups}
                     columns={columns}
                     isLoading={isLoading}
-                    emptyText={isLO && !loShowAll ? "No meeting groups for today." : "No groups found."}
+                    emptyText={emptyText}
                     enableSearch
                     searchPlaceholder="Search group / meeting day..."
                     searchKeys={searchKeys}

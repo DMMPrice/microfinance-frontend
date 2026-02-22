@@ -50,26 +50,42 @@ export default function LoanPaymentsDialog({
                             <tr>
                                 <th className="p-2 border">Date & Time</th>
                                 <th className="p-2 border">Paid Amount</th>
+
+                                {/* ✅ NEW: Prev Overdue */}
+                                <th className="p-2 border">Prev Overdue</th>
+
                                 <th className="p-2 border">Outstanding After</th>
                                 <th className="p-2 border">Narration</th>
                             </tr>
                             </thead>
 
                             <tbody>
-                            {(paymentRows || []).map((x) => (
-                                <tr key={x.ledger_id}>
-                                    <td className="p-2 border">
-                                        {x.txn_date ? new Date(x.txn_date).toLocaleString() : "-"}
-                                    </td>
-                                    <td className="p-2 border text-right">
-                                        {Number(x.credit || 0).toFixed(2)}
-                                    </td>
-                                    <td className="p-2 border text-right">
-                                        {Number(x.balance_outstanding || 0).toFixed(2)}
-                                    </td>
-                                    <td className="p-2 border">{x.narration || "-"}</td>
-                                </tr>
-                            ))}
+                            {(paymentRows || []).map((x) => {
+                                // ✅ if backend provides it, show it; else "-"
+                                const prevOverdue =
+                                    x?.overdue_prev ?? x?.prev_overdue ?? x?.prevOverdue ?? null;
+
+                                return (
+                                    <tr key={x.ledger_id}>
+                                        <td className="p-2 border">
+                                            {x.txn_date ? new Date(x.txn_date).toLocaleString() : "-"}
+                                        </td>
+                                        <td className="p-2 border text-right">
+                                            {Number(x.credit || 0).toFixed(2)}
+                                        </td>
+
+                                        {/* ✅ NEW cell */}
+                                        <td className="p-2 border text-right">
+                                            {prevOverdue == null ? "-" : Number(prevOverdue || 0).toFixed(2)}
+                                        </td>
+
+                                        <td className="p-2 border text-right">
+                                            {Number(x.balance_outstanding || 0).toFixed(2)}
+                                        </td>
+                                        <td className="p-2 border">{x.narration || "-"}</td>
+                                    </tr>
+                                );
+                            })}
                             </tbody>
                         </table>
                     </div>
