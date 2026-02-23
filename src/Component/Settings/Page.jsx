@@ -5,6 +5,7 @@ import {Tabs, TabsList, TabsTrigger, TabsContent} from "@/components/ui/tabs";
 import SystemSettingsSection from "@/Component/Settings/SystemSettingsSection.jsx";
 import ExpenseMasterSection from "@/Component/Settings/ExpenseMasterSection.jsx";
 import DatabaseMaintenanceSection from "@/Component/Settings/DatabaseMaintenanceSection.jsx";
+import LoanBulkActionsSection from "@/Component/Settings/LoanBulkActionsSection.jsx";
 
 export default function SettingsPage() {
     return (
@@ -19,12 +20,17 @@ export default function SettingsPage() {
             <Tabs defaultValue="settings" className="space-y-4">
                 <TabsList>
                     <TabsTrigger value="settings">System Settings</TabsTrigger>
+                    <TabsTrigger value="loanBulk">Loan Bulk Actions</TabsTrigger>
                     <TabsTrigger value="expenseMaster">Expense Categories Settings</TabsTrigger>
                     <TabsTrigger value="db">DB Maintenance</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="settings" className="space-y-6">
                     <SystemSettingsSection/>
+                </TabsContent>
+
+                <TabsContent value="loanBulk" className="space-y-6">
+                    <LoanBulkActionsSection/>
                 </TabsContent>
 
                 <TabsContent value="expenseMaster" className="space-y-6">

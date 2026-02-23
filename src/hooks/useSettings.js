@@ -1,6 +1,24 @@
 import {useCallback, useEffect, useState} from "react";
 import {api} from "@/lib/http"; // ✅ your axios instance
 
+/* -------------------------------------------------
+   ✅ Loan Bulk Actions (Pause/Resume)
+   Placed in Settings hooks (as requested)
+-------------------------------------------------- */
+
+// PATCH /loans/pause?group_id=&branch_id=&remarks=
+async function apiBulkPauseLoans(params) {
+    const res = await api.patch("/loans/pause", null, {params: params || {}});
+    return res.data;
+}
+
+// PATCH /loans/resume?group_id=&branch_id=&resume_from=&resequence=&reallocate_payments=&remarks=
+async function apiBulkResumeLoans(params) {
+    const res = await api.patch("/loans/resume", null, {params: params || {}});
+    return res.data;
+}
+
+
 // GET /settings
 async function apiListSettings() {
     const res = await api.get("/settings");
@@ -100,6 +118,62 @@ export function useCreateSetting({onSuccess, onError} = {}) {
             setError(null);
             try {
                 const data = await apiCreateSetting({key, value, description});
+                onSuccess?.(data);
+                return data;
+            } catch (e) {
+                setError(e);
+                onError?.(e);
+                throw e;
+            } finally {
+                setLoading(false);
+            }
+        },
+        [onSuccess, onError]
+    );
+
+    return {mutate, loading, error};
+}
+
+/* -------------------------------------------------
+   ✅ Hooks: Bulk Pause/Resume Loans
+-------------------------------------------------- */
+
+export function useBulkPauseLoans({onSuccess, onError} = {}) {
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+
+    const mutate = useCallback(
+        async (params) => {
+            setLoading(true);
+            setError(null);
+            try {
+                const data = await apiBulkPauseLoans(params);
+                onSuccess?.(data);
+                return data;
+            } catch (e) {
+                setError(e);
+                onError?.(e);
+                throw e;
+            } finally {
+                setLoading(false);
+            }
+        },
+        [onSuccess, onError]
+    );
+
+    return {mutate, loading, error};
+}
+
+export function useBulkResumeLoans({onSuccess, onError} = {}) {
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+
+    const mutate = useCallback(
+        async (params) => {
+            setLoading(true);
+            setError(null);
+            try {
+                const data = await apiBulkResumeLoans(params);
                 onSuccess?.(data);
                 return data;
             } catch (e) {
