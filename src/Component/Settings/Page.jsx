@@ -20,9 +20,9 @@ export default function SettingsPage() {
             <Tabs defaultValue="settings" className="space-y-4">
                 <TabsList>
                     <TabsTrigger value="settings">System Settings</TabsTrigger>
-                    <TabsTrigger value="loanBulk">Loan Bulk Actions</TabsTrigger>
                     <TabsTrigger value="expenseMaster">Expense Categories Settings</TabsTrigger>
                     <TabsTrigger value="db">DB Maintenance</TabsTrigger>
+                    <TabsTrigger value="loanBulk">Loan Bulk Actions</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="settings" className="space-y-6">

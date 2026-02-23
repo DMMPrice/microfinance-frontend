@@ -488,10 +488,65 @@ export function useUpdateLoan() {
     });
 }
 
-// NOTE:
-// Bulk Loan Pause/Resume hooks were moved to src/hooks/useSettings.js (as requested).
-// If you still need single-loan pause/resume/deactivate hooks in loan screens,
-// implement them locally there OR create a separate hook file for loan actions.
+/* -------------------- DEACTIVATE LOAN -------------------- */
+export function useDeactivateLoan() {
+    const qc = useQueryClient();
+
+    return useMutation({
+        mutationFn: async ({loan_id}) => {
+            const loanId = normalizeId(loan_id);
+            if (!loanId) throw new Error("loan_id is required");
+            return (await apiClient.patch(`/loans/${loanId}/deactivate`)).data;
+        },
+        onSuccess: (_data, vars) => {
+            invalidateLoanCommon(qc);
+            invalidateLoanDetails(qc, {
+                loan_id: vars?.loan_id,
+                loan_account_no: vars?.loan_account_no,
+            });
+        },
+    });
+}
+
+/* -------------------- PAUSE LOAN -------------------- */
+export function usePauseLoan() {
+    const qc = useQueryClient();
+
+    return useMutation({
+        mutationFn: async ({loan_id, payload}) => {
+            const loanId = normalizeId(loan_id);
+            if (!loanId) throw new Error("loan_id is required");
+            return (await apiClient.patch(`/loans/${loanId}/pause`, payload || {})).data;
+        },
+        onSuccess: (_data, vars) => {
+            invalidateLoanCommon(qc);
+            invalidateLoanDetails(qc, {
+                loan_id: vars?.loan_id,
+                loan_account_no: vars?.loan_account_no,
+            });
+        },
+    });
+}
+
+/* -------------------- RESUME LOAN -------------------- */
+export function useResumeLoan() {
+    const qc = useQueryClient();
+
+    return useMutation({
+        mutationFn: async ({loan_id, payload}) => {
+            const loanId = normalizeId(loan_id);
+            if (!loanId) throw new Error("loan_id is required");
+            return (await apiClient.patch(`/loans/${loanId}/resume`, payload || {})).data;
+        },
+        onSuccess: (_data, vars) => {
+            invalidateLoanCommon(qc);
+            invalidateLoanDetails(qc, {
+                loan_id: vars?.loan_id,
+                loan_account_no: vars?.loan_account_no,
+            });
+        },
+    });
+}
 
 /* -------------------- LOAN CHARGES -------------------- */
 export function useLoanCharges(loan_id) {

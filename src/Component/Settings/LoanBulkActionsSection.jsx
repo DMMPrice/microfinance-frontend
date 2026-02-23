@@ -9,6 +9,7 @@ import {Separator} from "@/components/ui/separator";
 import {Alert, AlertTitle, AlertDescription} from "@/components/ui/alert";
 import {Loader2, PauseCircle, PlayCircle} from "lucide-react";
 import {toast} from "@/components/ui/use-toast";
+import SimpleDatePicker from "@/Utils/SimpleDatePicker";
 
 import SearchableSelect from "@/Utils/SearchableSelect";
 import {useBranches} from "@/hooks/useBranches";
@@ -139,14 +140,6 @@ export default function LoanBulkActionsSection() {
             </CardHeader>
 
             <CardContent className="space-y-4">
-                <Alert>
-                    <AlertTitle>Backend requirement</AlertTitle>
-                    <AlertDescription>
-                        This expects <code>group_id</code> / <code>branch_id</code> query params on:
-                        <code className="ml-1">PATCH /loans/pause</code> and
-                        <code className="ml-1">PATCH /loans/resume</code>.
-                    </AlertDescription>
-                </Alert>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-2">
@@ -254,10 +247,10 @@ export default function LoanBulkActionsSection() {
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div className="space-y-2">
                                 <Label>Resume from (optional)</Label>
-                                <Input
+                                <SimpleDatePicker
                                     value={resumeFrom}
-                                    onChange={(e) => setResumeFrom(e.target.value)}
-                                    placeholder="YYYY-MM-DD"
+                                    onChange={setResumeFrom}
+                                    placeholder="Select resume date"
                                 />
                             </div>
 
@@ -289,18 +282,68 @@ export default function LoanBulkActionsSection() {
                         {isBusy ? <Loader2 className="h-4 w-4 mr-2 animate-spin"/> : null}
                         Run Bulk {action === "PAUSE" ? "Pause" : "Resume"}
                     </Button>
-
-                    <div className="text-xs text-muted-foreground">
-                        {mode === "BRANCH"
-                            ? (effectiveBranchId ? `Selected Branch ID: ${effectiveBranchId}` : "No branch selected")
-                            : (effectiveGroupId ? `Selected Group ID: ${effectiveGroupId}` : "No group selected")}
-                    </div>
                 </div>
 
                 {result ? (
-                    <div className="rounded-xl border bg-muted/20 p-3">
-                        <div className="text-sm font-medium mb-2">Response</div>
-                        <pre className="text-xs overflow-auto">{JSON.stringify(result, null, 2)}</pre>
+                    <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                            <div className="text-sm font-semibold">Bulk Action Result</div>
+
+                            {/* tiny badge */}
+                            <div
+                                className={`text-xs px-2 py-1 rounded-full border ${
+                                    (result?.matched_loans || 0) > 0 ? "bg-green-50 border-green-200" : "bg-amber-50 border-amber-200"
+                                }`}
+                            >
+                                {(result?.matched_loans || 0) > 0 ? "Completed" : "No loans found"}
+                            </div>
+                        </div>
+
+                        {/* summary grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div className="rounded-lg border bg-background p-3">
+                                <div className="text-xs text-muted-foreground">Scope</div>
+                                <div className="text-sm font-medium mt-1">
+                                    Branch: <span className="font-semibold">{result?.scope?.branch_id ?? "-"}</span>
+                                </div>
+                                <div className="text-sm font-medium">
+                                    Group: <span className="font-semibold">{result?.scope?.group_id ?? "-"}</span>
+                                </div>
+                            </div>
+
+                            <div className="rounded-lg border bg-background p-3">
+                                <div className="text-xs text-muted-foreground">Matched Loans</div>
+                                <div className="text-2xl font-bold mt-1">{result?.matched_loans ?? 0}</div>
+                                <div className="text-xs text-muted-foreground mt-1">
+                                    Loans that satisfied the filter (status + branch/group)
+                                </div>
+                            </div>
+
+                            <div className="rounded-lg border bg-background p-3">
+                                <div className="text-xs text-muted-foreground">
+                                    {action === "PAUSE" ? "Paused Loans" : "Resumed Loans"}
+                                </div>
+                                <div className="text-2xl font-bold mt-1">
+                                    {action === "PAUSE" ? (result?.paused_loans ?? 0) : (result?.resumed_loans ?? 0)}
+                                </div>
+                                <div className="text-xs text-muted-foreground mt-1">
+                                    Loans successfully updated
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* warning if 0 */}
+                        {(result?.matched_loans ?? 0) === 0 ? (
+                            <Alert variant="destructive">
+                                <AlertTitle>No loans matched</AlertTitle>
+                                <AlertDescription>
+                                    Check if the selected Branch/Group has loans in
+                                    status <b>ACTIVE</b> or <b>DISBURSED</b> (for pause),
+                                    or <b>PAUSED</b> (for resume). Also confirm the correct Branch/Group IDs.
+                                </AlertDescription>
+                            </Alert>
+                        ) : null}
+
                     </div>
                 ) : null}
             </CardContent>

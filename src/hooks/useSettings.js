@@ -1,23 +1,41 @@
 import {useCallback, useEffect, useState} from "react";
-import {api} from "@/lib/http"; // ✅ your axios instance
+import {api} from "@/lib/http";
 
 /* -------------------------------------------------
-   ✅ Loan Bulk Actions (Pause/Resume)
-   Placed in Settings hooks (as requested)
+   ✅ Loan Bulk Actions (Pause/Resume) - SUPER ADMIN
+   Uses admin-safe routes to avoid conflict with /loans/{loan_id}
 -------------------------------------------------- */
 
-// PATCH /loans/pause?group_id=&branch_id=&remarks=
+function cleanParams(p) {
+    const out = {};
+    Object.entries(p || {}).forEach(([k, v]) => {
+        if (v === undefined || v === null) return;
+        const s = String(v).trim();
+        if (s === "") return;
+        out[k] = v;
+    });
+    return out;
+}
+
+// ✅ PATCH /loans/admin/pause?group_id=&branch_id=&remarks=
 async function apiBulkPauseLoans(params) {
-    const res = await api.patch("/loans/pause", null, {params: params || {}});
+    const res = await api.patch("/loans/admin/pause", null, {
+        params: cleanParams(params),
+    });
     return res.data;
 }
 
-// PATCH /loans/resume?group_id=&branch_id=&resume_from=&resequence=&reallocate_payments=&remarks=
+// ✅ PATCH /loans/admin/resume?group_id=&branch_id=&resume_from=&resequence=&reallocate_payments=&remarks=
 async function apiBulkResumeLoans(params) {
-    const res = await api.patch("/loans/resume", null, {params: params || {}});
+    const res = await api.patch("/loans/admin/resume", null, {
+        params: cleanParams(params),
+    });
     return res.data;
 }
 
+/* -------------------------------------------------
+   ✅ Settings APIs
+-------------------------------------------------- */
 
 // GET /settings
 async function apiListSettings() {
@@ -40,6 +58,10 @@ async function apiCreateSetting({key, value, description}) {
     });
     return res.data; // { message:"created", key, value, description }
 }
+
+/* -------------------------------------------------
+   ✅ Hooks: Settings
+-------------------------------------------------- */
 
 export function useSettings() {
     const [settings, setSettings] = useState([]);
@@ -135,7 +157,7 @@ export function useCreateSetting({onSuccess, onError} = {}) {
 }
 
 /* -------------------------------------------------
-   ✅ Hooks: Bulk Pause/Resume Loans
+   ✅ Hooks: Bulk Pause/Resume Loans (SUPER ADMIN)
 -------------------------------------------------- */
 
 export function useBulkPauseLoans({onSuccess, onError} = {}) {
