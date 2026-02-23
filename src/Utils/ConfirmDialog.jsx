@@ -9,7 +9,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {Button} from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 
 export function ConfirmDialog({
                                   open,
@@ -20,9 +20,11 @@ export function ConfirmDialog({
                                   cancelLabel = "Cancel",
                                   onConfirm,
                                   isLoading = false,
+                                  children,
+                                  confirmDisabled = false,
                               }) {
     const handleConfirm = () => {
-        if (!isLoading && onConfirm) {
+        if (!isLoading && !confirmDisabled && onConfirm) {
             onConfirm();
         }
     };
@@ -32,21 +34,39 @@ export function ConfirmDialog({
             <AlertDialogContent>
                 <AlertDialogHeader>
                     <AlertDialogTitle>{title}</AlertDialogTitle>
-                    {description && (
-                        <AlertDialogDescription>{description}</AlertDialogDescription>
+
+                    {/* ✅ If children NOT provided, show description normally */}
+                    {!children && description && (
+                        <AlertDialogDescription>
+                            {description}
+                        </AlertDialogDescription>
                     )}
                 </AlertDialogHeader>
+
+                {/* ✅ If children provided, render custom body */}
+                {children && (
+                    <div className="mt-2 space-y-3">
+                        {description && (
+                            <p className="text-sm text-muted-foreground">
+                                {description}
+                            </p>
+                        )}
+                        {children}
+                    </div>
+                )}
+
                 <AlertDialogFooter>
                     <AlertDialogCancel asChild>
                         <Button variant="outline" type="button">
                             {cancelLabel}
                         </Button>
                     </AlertDialogCancel>
+
                     <AlertDialogAction asChild>
                         <Button
                             variant="destructive"
                             onClick={handleConfirm}
-                            disabled={isLoading}
+                            disabled={isLoading || confirmDisabled}
                         >
                             {isLoading ? "Processing..." : confirmLabel}
                         </Button>

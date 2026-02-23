@@ -26,6 +26,7 @@ function getProfileDataSafe() {
  * ✅ useMembers(filters?)
  * Supports optional filters:
  * - group_id, lo_id, branch_id, region_id
+ * - include_inactive (boolean)  ✅ NEW
  *
  * Auto-applies:
  * - RM -> region_id from profileData
@@ -37,13 +38,11 @@ export function useMembers(filters = {}) {
 
     const profile = getProfileDataSafe();
 
-    const role = String(profile?.role ?? "").trim(); // "regional_manager"
+    const role = String(profile?.role ?? "").trim(); // e.g. "regional_manager"
     const profileRegionId = profile?.region_id ?? profile?.regionId ?? null;
     const profileBranchId = profile?.branch_id ?? profile?.branchId ?? null;
 
-    // 🔥 LO identity:
-    // If your profileData stores employee_id for LO, use it.
-    // Else fallback to user_id if that’s how backend maps lo_id.
+    // 🔥 LO identity (employee_id preferred; fallback user_id)
     const profileLoId =
         profile?.employee_id ??
         profile?.employeeId ??
@@ -56,6 +55,12 @@ export function useMembers(filters = {}) {
     const isRM = role === "regional_manager";
     const isBM = role === "branch_manager";
     const isLO = role === "loan_officer";
+
+    // ✅ include_inactive flag
+    const includeInactive =
+        filters?.include_inactive ??
+        filters?.includeInactive ??
+        false;
 
     // ✅ Effective filters (caller wins; else auto-scope for RM/BM/LO)
     const effectiveFilters = {
@@ -79,6 +84,9 @@ export function useMembers(filters = {}) {
             filters?.group_id ??
             filters?.groupId ??
             null,
+
+        // ✅ NEW: include inactive members when requested
+        include_inactive: includeInactive ? true : undefined,
     };
 
     // remove null/undefined/empty filters
@@ -100,7 +108,7 @@ export function useMembers(filters = {}) {
         queryFn: async () => {
             const res = await api.get("/members/", {
                 headers: authHeader(),
-                params, // ✅ now includes lo_id properly
+                params,
             });
             return res.data;
         },
@@ -118,13 +126,10 @@ export function useMembers(filters = {}) {
     // -----------------------
     const createMemberMutation = useMutation({
         mutationFn: async (payload) => {
-            // Optional safety: enforce scope for RM/BM/LO on create
             const finalPayload = {
                 ...payload,
                 region_id: isRM ? profileRegionId : payload?.region_id,
                 branch_id: isBM ? profileBranchId : payload?.branch_id,
-
-                // ✅ FIX: use lo_id (NOT employee_id)
                 lo_id: isLO ? profileLoId : payload?.lo_id,
             };
 
@@ -143,7 +148,6 @@ export function useMembers(filters = {}) {
     // -----------------------
     const updateMemberMutation = useMutation({
         mutationFn: async ({member_id, payload}) => {
-            // Optional safety: prevent changing scope fields for RM/BM/LO
             let finalPayload = payload;
 
             if (isRM || isBM || isLO) {
@@ -170,11 +174,18 @@ export function useMembers(filters = {}) {
     });
 
     // -----------------------
-    // DELETE MEMBER (SOFT)
+    // DEACTIVATE MEMBER ✅ NEW
     // -----------------------
-    const deleteMemberMutation = useMutation({
-        mutationFn: async (member_id) => {
-            const res = await api.delete(`/members/${member_id}`, {
+    const deactivateMemberMutation = useMutation({
+        mutationFn: async ({member_id, reason, files = []}) => {
+            // backend expects reason + files (text[])
+            const payload = {
+                reason: reason,
+                files: files,
+            };
+
+            // ✅ endpoint assumption: PATCH /members/{id}/deactivate
+            const res = await api.patch(`/members/${member_id}/deactivate`, payload, {
                 headers: authHeader(),
             });
             return res.data;
@@ -183,6 +194,35 @@ export function useMembers(filters = {}) {
             queryClient.invalidateQueries({queryKey: MEMBERS_KEY});
         },
     });
+
+    // -----------------------
+    // REACTIVATE MEMBER ✅ NEW
+    // -----------------------
+    const reactivateMemberMutation = useMutation({
+        mutationFn: async (member_id) => {
+            // ✅ endpoint assumption: POST /members/{id}/reactivate
+            const res = await api.patch(`/members/${member_id}/reactivate`, null, {
+                headers: authHeader(),
+            });
+            return res.data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({queryKey: MEMBERS_KEY});
+        },
+    });
+
+    // -----------------------
+    // BACKWARD COMPAT (optional)
+    // If some old code still calls deleteMember(member_id),
+    // we map it to deactivate with a safe default reason.
+    // -----------------------
+    const deleteMemberLegacy = async (member_id) => {
+        return deactivateMemberMutation.mutateAsync({
+            member_id,
+            reason: "Deactivated",
+            files: [],
+        });
+    };
 
     // -----------------------
     // RETURN API
@@ -200,8 +240,15 @@ export function useMembers(filters = {}) {
         updateMember: updateMemberMutation.mutateAsync,
         isUpdating: updateMemberMutation.isPending,
 
-        deleteMember: deleteMemberMutation.mutateAsync,
-        isDeleting: deleteMemberMutation.isPending,
+        // ✅ NEW exports (what your UI calls)
+        deactivateMember: deactivateMemberMutation.mutateAsync,
+        isDeactivating: deactivateMemberMutation.isPending,
+
+        reactivateMember: reactivateMemberMutation.mutateAsync,
+        isReactivating: reactivateMemberMutation.isPending,
+
+        // ✅ legacy (optional) to avoid breaking other screens
+        deleteMember: deleteMemberLegacy,
 
         appliedParams: params,
         role,

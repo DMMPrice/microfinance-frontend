@@ -66,6 +66,11 @@ export function isBranchManagerRole(role) {
     return r === "branch_manager";
 }
 
+export function isSuperAdminRole(role) {
+    const r = (role || "").toString().trim().toLowerCase().replace(/[-\s]+/g, "_");
+    return r === "super_admin";
+}
+
 export function useApi() {
     const get = (url, config = {}) => apiClient.get(url, config);
     const post = (url, data, config = {}) => apiClient.post(url, data, config);
@@ -86,5 +91,7 @@ export function useApi() {
         isRegionalManagerRole,
         isBranchManagerRole,
         isAdminLikeRole,
+        isSuperAdminRole,
     };
 }
+

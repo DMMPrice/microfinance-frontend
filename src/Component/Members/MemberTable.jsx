@@ -18,8 +18,10 @@ export default function MemberTable({
                                         rows = [],
                                         onEdit,
                                         onDeactivate,
+                                        onReactivate,          // ✅ NEW
                                         isDeleting,
                                         role = "",
+                                        busy = false,          // ✅ NEW (optional; from MemberManagement you already have `busy`)
                                     }) {
     const data = Array.isArray(rows) ? rows : [];
 
@@ -104,8 +106,11 @@ export default function MemberTable({
                 sortValue: (row) => (row?.m?.is_active ?? true) ? 1 : 0,
                 cell: (row) => {
                     const active = Boolean(row?.m?.is_active ?? true);
-                    return active ? <Badge variant="secondary">Active</Badge> :
-                        <Badge variant="destructive">Inactive</Badge>;
+                    return active ? (
+                        <Badge variant="secondary">Active</Badge>
+                    ) : (
+                        <Badge variant="destructive">Inactive</Badge>
+                    );
                 },
             },
             {
@@ -116,6 +121,8 @@ export default function MemberTable({
                 sortValue: () => "",
                 cell: (row) => {
                     const m = row?.m || {};
+                    const isInactive = m?.is_active === false;
+
                     return (
                         <div className="inline-flex gap-2">
                             <Button variant="outline" size="sm" onClick={() => onEdit?.(m)}>
@@ -123,21 +130,32 @@ export default function MemberTable({
                                 Edit
                             </Button>
 
-                            <Button
-                                variant="destructive"
-                                size="sm"
-                                disabled={Boolean(isDeleting)}
-                                onClick={() => onDeactivate?.(m)}
-                            >
-                                <Trash2 className="mr-2 h-4 w-4"/>
-                                Deactivate
-                            </Button>
+                            {isInactive ? (
+                                <Button
+                                    variant="default"
+                                    size="sm"
+                                    disabled={Boolean(isDeleting) || Boolean(busy)}
+                                    onClick={() => onReactivate?.(m)} // ✅ calls reactivate flow
+                                >
+                                    Activate
+                                </Button>
+                            ) : (
+                                <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    disabled={Boolean(isDeleting) || Boolean(busy)}
+                                    onClick={() => onDeactivate?.(m)}
+                                >
+                                    <Trash2 className="mr-2 h-4 w-4"/>
+                                    Deactivate
+                                </Button>
+                            )}
                         </div>
                     );
                 },
             },
         ];
-    }, [onEdit, onDeactivate, isDeleting, role]);
+    }, [onEdit, onDeactivate, onReactivate, isDeleting, role, busy]);
 
     return (
         <AdvancedTable

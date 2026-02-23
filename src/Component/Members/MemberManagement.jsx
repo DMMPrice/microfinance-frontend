@@ -1,5 +1,5 @@
-// src/Component/Home/Main Components/Members/MemberManagement.jsx
-import React, {useMemo, useState} from "react";
+// src/Component/Home Main Components/Members/MemberManagement.jsx
+import React, {useEffect, useMemo, useState} from "react";
 import {Button} from "@/components/ui/button.tsx";
 import {
     Card,
@@ -12,15 +12,18 @@ import {Plus} from "lucide-react";
 import {useToast} from "@/hooks/use-toast.ts";
 import {useMembers} from "@/hooks/useMembers.js";
 import {useLoanOfficers} from "@/hooks/useLoanOfficers.js";
-import {confirmDelete} from "@/Utils/confirmDelete.js";
 
-import {getProfileData, isBranchManagerRole} from "@/hooks/useApi";
+import {getProfileData, isBranchManagerRole, isSuperAdminRole} from "@/hooks/useApi";
 
 import MemberFilters from "@/Component/Members/MemberFilters.jsx";
 import MemberTable from "@/Component/Members/MemberTable.jsx";
 import MemberDialog from "@/Component/Members/MemberDialog.jsx";
 import {buildMaps, getMemberInfo, filterMemberRows} from "@/Component/Members/memberUtils.js";
 import MembersKpiRow from "@/Component/Members/MembersKpiRow.jsx";
+
+// ✅ NEW
+import {ConfirmDialog} from "@/Utils/ConfirmDialog.jsx";
+import {Textarea} from "@/components/ui/textarea";
 
 export default function MemberManagement({groups = [], branches = [], officers = [], regions = []}) {
     const {toast} = useToast();
@@ -34,6 +37,22 @@ export default function MemberManagement({groups = [], branches = [], officers =
     const isBranchManager = isBranchManagerRole(role);
     const hideBranchRegion = isLoanOfficer || isBranchManager;
 
+    // ✅ SUPER ADMIN check
+    const isSuperAdmin = isSuperAdminRole(role);
+
+    // filters (declare BEFORE useMembers)
+    const [q, setQ] = useState("");
+    const [filterRegionId, setFilterRegionId] = useState("all");
+    const [filterBranchId, setFilterBranchId] = useState("all");
+    const [filterOfficerId, setFilterOfficerId] = useState("all");
+    const [filterGroupId, setFilterGroupId] = useState("all");
+    const [onlyActive, setOnlyActive] = useState(true);
+
+    // ✅ If not SUPER ADMIN, force active-only
+    useEffect(() => {
+        if (!isSuperAdmin) setOnlyActive(true);
+    }, [isSuperAdmin]);
+
     const {
         members = [],
         isLoading,
@@ -43,10 +62,16 @@ export default function MemberManagement({groups = [], branches = [], officers =
         isCreating,
         updateMember,
         isUpdating,
-        deleteMember,
-        isDeleting,
+        deactivateMember,
+        isDeactivating,
+        reactivateMember,
+        isReactivating,
         refetch,
-    } = useMembers();
+    } = useMembers({
+        include_inactive: isSuperAdmin ? !onlyActive : false,
+    });
+
+    const busy = isDeactivating || isReactivating;
 
     // ✅ Ensure Loan Officer dropdown always has data
     const {loanOfficers = []} = useLoanOfficers();
@@ -56,13 +81,14 @@ export default function MemberManagement({groups = [], branches = [], officers =
     const [open, setOpen] = useState(false);
     const [editingId, setEditingId] = useState(null);
 
-    // filters
-    const [q, setQ] = useState("");
-    const [filterRegionId, setFilterRegionId] = useState("all");
-    const [filterBranchId, setFilterBranchId] = useState("all");
-    const [filterOfficerId, setFilterOfficerId] = useState("all");
-    const [filterGroupId, setFilterGroupId] = useState("all");
-    const [onlyActive, setOnlyActive] = useState(true);
+    // ✅ Deactivate confirm modal state
+    const [deactivateOpen, setDeactivateOpen] = useState(false);
+    const [deactivateTarget, setDeactivateTarget] = useState(null);
+    const [deactivateReason, setDeactivateReason] = useState("");
+
+    // ✅ Reactivate confirm modal state (NEW)
+    const [reactivateOpen, setReactivateOpen] = useState(false);
+    const [reactivateTarget, setReactivateTarget] = useState(null);
 
     // form state
     const [groupId, setGroupId] = useState("");
@@ -80,7 +106,6 @@ export default function MemberManagement({groups = [], branches = [], officers =
     const [otherDetails, setOtherDetails] = useState("");
     const [photoB64, setPhotoB64] = useState("");
     const [photoPreview, setPhotoPreview] = useState("");
-    const [isActive, setIsActive] = useState(true);
 
     const maps = useMemo(
         () => buildMaps({groups, branches, regions, officers: officersList}),
@@ -128,7 +153,6 @@ export default function MemberManagement({groups = [], branches = [], officers =
         setOtherDetails("");
         setPhotoB64("");
         setPhotoPreview("");
-        setIsActive(true);
     };
 
     const openCreate = () => {
@@ -151,7 +175,6 @@ export default function MemberManagement({groups = [], branches = [], officers =
         setPermanentAddress(m.permanent_address ?? "");
         setPincode(m.pincode ?? "");
         setOtherDetails(m.other_details ?? "");
-        setIsActive(Boolean(m.is_active ?? true));
 
         const b64 = m.photo_b64 || "";
         setPhotoB64(b64);
@@ -201,7 +224,7 @@ export default function MemberManagement({groups = [], branches = [], officers =
                 pincode,
                 group_id: Number(groupId),
                 other_details: otherDetails || "",
-                is_active: isActive,
+                // ❌ DO NOT send is_active here
             };
 
             if (editingId) {
@@ -224,22 +247,64 @@ export default function MemberManagement({groups = [], branches = [], officers =
         }
     };
 
-    const handleDeactivate = async (m) => {
-        const ok = await confirmDelete?.({
-            title: "Deactivate member?",
-            description: `This will deactivate "${m.full_name}".`,
-            confirmText: "Deactivate",
-        });
-        const fallbackOk = ok === undefined ? window.confirm(`Deactivate "${m.full_name}"?`) : ok;
-        if (!fallbackOk) return;
+    // ✅ Open ConfirmDialog instead of prompt/confirmDelete
+    const handleDeactivate = (m) => {
+        if (!isSuperAdmin) {
+            toast({title: "Only SUPER ADMIN can deactivate members", variant: "destructive"});
+            return;
+        }
+        setDeactivateTarget(m);
+        setDeactivateReason("");
+        setDeactivateOpen(true);
+    };
+
+    const confirmDeactivate = async () => {
+        const m = deactivateTarget;
+        if (!m) return;
 
         try {
-            await deleteMember(m.member_id);
+            await deactivateMember({
+                member_id: m.member_id,
+                reason: deactivateReason.trim(),
+                files: [],
+            });
             toast({title: "Member deactivated"});
+            setDeactivateOpen(false);
+            setDeactivateTarget(null);
+            setDeactivateReason("");
             refetch();
         } catch (err) {
             toast({
-                title: "Failed to delete member",
+                title: "Failed to deactivate member",
+                description: err?.response?.data?.detail || err?.message || "Unknown error",
+                variant: "destructive",
+            });
+        }
+    };
+
+    // ✅ Reactivate uses ConfirmDialog (UPDATED)
+    const handleReactivate = (m) => {
+        if (!isSuperAdmin) {
+            toast({title: "Only SUPER ADMIN can reactivate members", variant: "destructive"});
+            return;
+        }
+        setReactivateTarget(m);
+        setReactivateOpen(true);
+    };
+
+    const confirmReactivate = async () => {
+        const m = reactivateTarget;
+        if (!m) return;
+
+        try {
+            await reactivateMember(m.member_id);
+            toast({title: "Member reactivated"});
+            setReactivateOpen(false);
+            setReactivateTarget(null);
+            refetch();
+        } catch (err) {
+            toast({
+                title: "Failed to reactivate member",
                 description: err?.response?.data?.detail || err?.message || "Unknown error",
                 variant: "destructive",
             });
@@ -289,9 +354,10 @@ export default function MemberManagement({groups = [], branches = [], officers =
                     setFilterGroupId={setFilterGroupId}
                     regions={regions}
                     branches={branches}
-                    officers={officersList}   // ✅ IMPORTANT
+                    officers={officersList}
                     groups={groups}
                     role={role}
+                    isSuperAdmin={isSuperAdmin}
                 />
 
                 <MemberTable
@@ -299,7 +365,9 @@ export default function MemberManagement({groups = [], branches = [], officers =
                     rows={filteredRows}
                     onEdit={openEdit}
                     onDeactivate={handleDeactivate}
-                    isDeleting={isDeleting}
+                    onReactivate={handleReactivate}
+                    busy={busy}
+                    isDeleting={busy}
                     role={role}
                 />
 
@@ -342,10 +410,66 @@ export default function MemberManagement({groups = [], branches = [], officers =
                     photoPreview={photoPreview}
                     handlePhotoUpload={handlePhotoUpload}
                     clearPhoto={clearPhoto}
-                    isActive={isActive}
-                    setIsActive={setIsActive}
                     onSubmit={handleSubmit}
                 />
+
+                {/* ✅ Confirm Dialog for Deactivation */}
+                <ConfirmDialog
+                    open={deactivateOpen}
+                    onOpenChange={(v) => {
+                        setDeactivateOpen(v);
+                        if (!v) {
+                            setDeactivateTarget(null);
+                            setDeactivateReason("");
+                        }
+                    }}
+                    title="Deactivate member?"
+                    description={
+                        deactivateTarget
+                            ? `This will deactivate "${deactivateTarget.full_name}".`
+                            : "This action cannot be undone."
+                    }
+                    confirmLabel="Deactivate"
+                    cancelLabel="Cancel"
+                    onConfirm={confirmDeactivate}
+                    isLoading={busy}
+                    confirmDisabled={!deactivateReason.trim()}
+                >
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium">Reason (required)</label>
+                        <Textarea
+                            value={deactivateReason}
+                            onChange={(e) => setDeactivateReason(e.target.value)}
+                            placeholder="Enter reason for deactivation..."
+                            rows={3}
+                        />
+                    </div>
+                </ConfirmDialog>
+
+                {/* ✅ Confirm Dialog for Reactivation (NEW) */}
+                <ConfirmDialog
+                    open={reactivateOpen}
+                    onOpenChange={(v) => {
+                        setReactivateOpen(v);
+                        if (!v) {
+                            setReactivateTarget(null);
+                        }
+                    }}
+                    title="Activate member?"
+                    description={
+                        reactivateTarget
+                            ? `This will activate "${reactivateTarget.full_name}".`
+                            : "This action cannot be undone."
+                    }
+                    confirmLabel="Activate"
+                    cancelLabel="Cancel"
+                    onConfirm={confirmReactivate}
+                    isLoading={busy}
+                >
+                    <div className="text-sm text-muted-foreground">
+                        The member will become active and visible in active lists again.
+                    </div>
+                </ConfirmDialog>
             </CardContent>
         </Card>
     );
