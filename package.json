@@ -103,15 +103,14 @@
     "wait-on": "^9.0.3"
   },
   "build": {
-    "appId": "Micro Finance dashboard",
+    "appId": "com.dmmprice.microfinance.dashboard",
     "productName": "Micro Finance Dashboard",
     "directories": {
       "output": "release"
     },
     "files": [
-      "dist/**/*",
-      "electron/main.js",
-      "electron/preload.cjs",
+      "dist/**",
+      "electron/**",
       "package.json"
     ],
     "win": {

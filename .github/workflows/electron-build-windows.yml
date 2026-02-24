@@ -58,7 +58,6 @@ jobs:
           Set-Content VERSION $new -NoNewline
 
           # Update package.json version (and package-lock.json)
-          # This also keeps npm ci consistent.
           npm version $new --no-git-tag-version
 
           git config user.name "github-actions[bot]"
@@ -84,18 +83,39 @@ jobs:
         run: |
           npm run build:win
 
-      # ✅ Find the generated EXE automatically (excluding node_modules)
-      - name: Locate EXE
+      # ✅ Verify ICU + locales exist in unpacked output (prevents ICU crash)
+      - name: Verify ICU/locales exist
         shell: pwsh
         run: |
-          $exe = Get-ChildItem -Path . -Recurse -File -Filter *.exe |
-            Where-Object { $_.FullName -notmatch "\\node_modules\\" } |
-            Sort-Object Length -Descending |
+          $unpacked = Get-ChildItem -Path release -Recurse -Directory |
+            Where-Object { $_.Name -match "win-unpacked" } |
             Select-Object -First 1
 
-          if (-not $exe) { Write-Error "No EXE file found!"; exit 1 }
+          if (-not $unpacked) { Write-Error "win-unpacked not found in release"; exit 1 }
 
-          Write-Host "Found EXE: $($exe.FullName)"
+          $icu = Join-Path $unpacked.FullName "icudtl.dat"
+          $loc = Join-Path $unpacked.FullName "locales"
+
+          if (!(Test-Path $icu)) { Write-Error "Missing icudtl.dat at $icu"; exit 1 }
+          if (!(Test-Path $loc)) { Write-Error "Missing locales folder at $loc"; exit 1 }
+
+          $pak = (Get-ChildItem $loc -Filter *.pak -File -ErrorAction SilentlyContinue).Count
+          if ($pak -lt 5) { Write-Error "Too few locale .pak files: $pak"; exit 1 }
+
+          Write-Host "✅ ICU/locales OK. pakCount=$pak"
+
+      # ✅ Find ONLY the NSIS installer EXE (Setup) from release folder
+      - name: Locate Installer EXE (Setup only)
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path release -Recurse -File -Filter "Micro-Finance-Setup-*.exe" |
+            Where-Object { $_.FullName -notmatch "win-unpacked" } |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+
+          if (-not $exe) { Write-Error "No Setup EXE found in release!"; exit 1 }
+
+          Write-Host "Found Setup EXE: $($exe.FullName)"
           "EXE_PATH=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       # ✅ Create release and upload ONLY the EXE
