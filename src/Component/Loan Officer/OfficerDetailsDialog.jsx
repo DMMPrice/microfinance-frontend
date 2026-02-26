@@ -83,7 +83,7 @@ export default function OfficerDetailsDialog({
     }, [groupsArr]);
 
     const tableColumns = useMemo(
-        () => ["Group Name", "Meeting Day", "Branch", "Region"],
+        () => ["Group Name", "Meeting Day", "Branch Reports", "Region"],
         []
     );
 

@@ -38,7 +38,7 @@ import {useLocation, matchPath} from "react-router-dom";
 import logo from "@/assets/logo.svg";
 import {ROLES, ROLE_LABEL, hasRole, normalizeRole} from "@/config/roles";
 import ProfileModal from "@/Utils/ProfileModal.jsx";
-import { User } from "lucide-react"; // (optional icon)
+import {User} from "lucide-react"; // (optional icon)
 
 /* -------------------- Navigation Config -------------------- */
 const navigationItems = [
@@ -67,7 +67,7 @@ const navigationItems = [
         ],
         children: [
             {
-                title: "Branch List",
+                title: "Branch Reports List",
                 url: "/dashboard/branches/home",
                 allowedRoles: [ROLES.ADMIN, ROLES.SUPER_ADMIN, ROLES.REGIONAL_MANAGER],
             },
@@ -190,7 +190,16 @@ const navigationItems = [
                     ROLES.REGIONAL_MANAGER,
                     ROLES.BRANCH_MANAGER,
                 ],
-            },
+            }, {
+                title: "Branch Top Sheet Reports",
+                url: "/dashboard/reports/loan-top-sheet",
+                allowedRoles: [
+                    ROLES.ADMIN,
+                    ROLES.SUPER_ADMIN,
+                    ROLES.REGIONAL_MANAGER,
+                    ROLES.BRANCH_MANAGER,
+                ],
+            }
         ],
     },
 
@@ -416,7 +425,7 @@ export function AppSidebar() {
                                     </p>
                                 </div>
 
-                                <User className="h-4 w-4 text-muted-foreground" />
+                                <User className="h-4 w-4 text-muted-foreground"/>
                             </div>
 
                             <p className="mt-1 text-[11px] text-muted-foreground">
@@ -424,7 +433,7 @@ export function AppSidebar() {
                             </p>
                         </button>
 
-                        <ProfileModal open={profileOpen} onOpenChange={setProfileOpen} />
+                        <ProfileModal open={profileOpen} onOpenChange={setProfileOpen}/>
                     </>
                 )}
                 {/* =================================================== */}

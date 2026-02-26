@@ -112,7 +112,7 @@ export default function OpeningBalanceTab() {
         return mapped;
     }, [rawRows, branchNameById, allowedBranchIds, isRegionalManager, isBranchManager]);
 
-    // ✅ Branch Manager: Add only if first time (no data)
+    // ✅ Branch Reports Manager: Add only if first time (no data)
     const branchManagerHasAnyData = useMemo(() => {
         if (!isBranchManager) return false;
         return rows.length > 0;
@@ -120,7 +120,7 @@ export default function OpeningBalanceTab() {
 
     // ✅ Can add rules:
     // - Super Admin -> can add (as before)
-    // - Branch Manager -> only if no data exists
+    // - Branch Reports Manager -> only if no data exists
     const canShowAdd = isSuperAdmin || isBranchManager;
     const disableAdd = isBranchManager && branchManagerHasAnyData;
 
@@ -141,7 +141,7 @@ export default function OpeningBalanceTab() {
     }, []);
 
     const validate = useCallback(() => {
-        if (!form.branch_id) return "Branch is required";
+        if (!form.branch_id) return "Branch Reports is required";
         if (!form.seed_date) return "Month is required";
         const dt = new Date(form.seed_date);
         if (Number.isNaN(dt.getTime())) return "Invalid date";
@@ -168,7 +168,7 @@ export default function OpeningBalanceTab() {
             }
         }
 
-        // ✅ extra safety: Branch Manager can only add first time
+        // ✅ extra safety: Branch Reports Manager can only add first time
         if (isBranchManager && rows.length > 0) {
             return toast({
                 title: "Not allowed",
@@ -203,7 +203,7 @@ export default function OpeningBalanceTab() {
                 cell: (r) => formatSeedDateIST(r?.seed_date),
             },
             {
-                header: "Branch",
+                header: "Branch Reports",
                 key: "branch_name",
                 cell: (r) => r?.branch_name || "-",
             },

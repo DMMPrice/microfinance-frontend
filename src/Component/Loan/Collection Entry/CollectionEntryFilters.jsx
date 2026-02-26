@@ -47,13 +47,13 @@ export default function CollectionEntryFilters({
     // we use flex + wrap for mobile, but md keeps a single row
     const groupDisabled = !branchId;
 
-    const branchPlaceholder = anyMasterLoading ? "Loading..." : "Select Branch";
+    const branchPlaceholder = anyMasterLoading ? "Loading..." : "Select Branch Reports";
 
     const loPlaceholder = !branchId
-        ? "Select Branch first"
+        ? "Select Branch Reports first"
         : "Select Loan Officer";
 
-    const groupPlaceholder = !branchId ? "Select Branch first" : "All Groups";
+    const groupPlaceholder = !branchId ? "Select Branch Reports first" : "All Groups";
 
     return (
         <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end">
@@ -67,7 +67,7 @@ export default function CollectionEntryFilters({
                 />
             </div>
 
-            {/* Branch (hidden if auto-selected) */}
+            {/* Branch Reports (hidden if auto-selected) */}
             {!hideBranchField ? (
                 <div className="w-full md:w-[240px] space-y-1">
                     <Label>Branch</Label>

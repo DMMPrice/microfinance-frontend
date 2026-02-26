@@ -149,7 +149,7 @@ export default function CollectionEntryPage() {
     const hideBranchField = isBranchManager || isLoanOfficer;
     const hideLoField = isLoanOfficer;
 
-    // ✅ Branch from profile always exists (your payload has branch_id)
+    // ✅ Branch Reports from profile always exists (your payload has branch_id)
     const resolvedBranchId = useMemo(() => {
         const bid = profile?.branch_id ?? getUserBranchId?.();
         return bid != null && String(bid).trim() !== "" ? String(bid) : "";

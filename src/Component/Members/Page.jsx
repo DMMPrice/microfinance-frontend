@@ -20,7 +20,7 @@ export default function Page() {
         name: lo.employee?.full_name || `Loan Officer ${lo.lo_id}`,
     }));
 
-    // ✅ Branch Manager should only see officers that belong to their branch scope
+    // ✅ Branch Reports Manager should only see officers that belong to their branch scope
     // (derive from already-scoped groups list)
     const isBranchManager = ["branch_manager", "branch manager", "bm"].includes(role);
     if (isBranchManager) {

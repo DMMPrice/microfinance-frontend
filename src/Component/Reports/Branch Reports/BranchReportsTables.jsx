@@ -90,7 +90,7 @@ export default function BranchReportsTables({
                 exportVisibleOnly
                 exportTitleRow={`Branch Cashbook Summary (${fromDate} to ${toDate})`}
                 exportMetaRows={[
-                    ["Branch", branchLabel], // ✅ name + id
+                    ["Branch Reports", branchLabel], // ✅ name + id
                     ["From", fromDate],
                     ["To", toDate],
                     ["View Mode", viewMode],
@@ -123,7 +123,7 @@ export default function BranchReportsTables({
                 exportVisibleOnly
                 exportTitleRow={`Branch Cashbook Rows (${fromDate} to ${toDate})`}
                 exportMetaRows={[
-                    ["Branch", branchLabel], // ✅ optional but useful
+                    ["Branch Reports", branchLabel], // ✅ optional but useful
                     ["From", fromDate],
                     ["To", toDate],
                 ]}

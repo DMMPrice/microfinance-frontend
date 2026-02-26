@@ -186,7 +186,7 @@ export default function GroupManagement() {
             return roleScopedGroups.filter(isMeetingToday);
         }
 
-        // BM: Today vs All Branch Groups
+        // BM: Today vs All Branch Reports Groups
         if (isBM) {
             if (bmShowAll) return roleScopedGroups;
             return roleScopedGroups.filter(isMeetingToday);
@@ -209,7 +209,7 @@ export default function GroupManagement() {
     const eligibleLoanOfficersForCreate = useMemo(() => {
         const list = loanOfficers || [];
 
-        // Branch Manager: only same branch officers
+        // Branch Reports Manager: only same branch officers
         if (isBM && myBranchId != null) {
             return list.filter(
                 (lo) => String(lo.employee?.branch_id) === String(myBranchId)
@@ -281,8 +281,8 @@ export default function GroupManagement() {
 
     /* =========================
        ✅ Columns
-       - BM: hide Branch & Region
-       - LO: hide Branch, Region, Loan Officer + Action
+       - BM: hide Branch Reports & Region
+       - LO: hide Branch Reports, Region, Loan Officer + Action
     ========================= */
     const columns = useMemo(() => {
         const base = [
@@ -335,7 +335,7 @@ export default function GroupManagement() {
             },
             {
                 key: "branch_id",
-                header: "Branch",
+                header: "Branch Reports",
                 className: headerCenter,
                 tdClassName: () => tdCenter,
                 cell: (row) => (
@@ -484,7 +484,7 @@ export default function GroupManagement() {
                     className="min-w-[240px] justify-center"
                 >
                     {bmShowAll
-                        ? "Showing: All Branch Groups"
+                        ? "Showing: All Branch Reports Groups"
                         : `Showing: Today (${istToday})`}
                 </Button>
             ) : null}

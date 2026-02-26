@@ -107,7 +107,7 @@ export default function ProfileModal({open, onOpenChange}) {
                                 key === "region_name"
                                     ? "Region"
                                     : key === "branch_name"
-                                        ? "Branch"
+                                        ? "Branch Reports"
                                         : prettyLabel(key);
 
                             return (

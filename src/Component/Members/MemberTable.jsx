@@ -88,7 +88,7 @@ export default function MemberTable({
                 : [
                     {
                         key: "branch",
-                        header: "Branch",
+                        header: "Branch Reports",
                         sortValue: (row) => row?.info?.branch || "",
                         cell: (row) => row?.info?.branch || "—",
                     },

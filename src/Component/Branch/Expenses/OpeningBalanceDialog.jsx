@@ -82,7 +82,7 @@ export default function OpeningBalanceDialog({
                 </DialogHeader>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Branch */}
+                    {/* Branch Reports */}
                     <div className="space-y-1">
                         <Label>Branch</Label>
                         <Select

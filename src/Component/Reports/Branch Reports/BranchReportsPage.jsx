@@ -210,15 +210,15 @@ export default function BranchReportsPage() {
 
     const branchSelectDisabled = isBranchManager || (!canPickAnyBranch && !!myBranchId);
     const branchLockedReason = isBranchManager
-        ? "Branch is locked for Branch Manager role."
-        : (!canPickAnyBranch && myBranchId ? "Branch is restricted by your role." : "");
+        ? "Branch Reports is locked for Branch Reports Manager role."
+        : (!canPickAnyBranch && myBranchId ? "Branch Reports is restricted by your role." : "");
 
     return (
         <Card className="border-muted/60">
             <CardHeader className="space-y-1">
                 <CardTitle className="text-xl">Branch Reports</CardTitle>
                 <CardDescription>
-                    {reportType === "PASSBOOK" ? "Branch passbook" : "Branch cashbook"}
+                    {reportType === "PASSBOOK" ? "Branch Reports passbook" : "Branch Reports cashbook"}
                 </CardDescription>
             </CardHeader>
 

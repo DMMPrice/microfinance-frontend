@@ -166,7 +166,7 @@ export function filterMemberRows(rows = [], filters = {}) {
             if (getRegionIdFromRow(row) !== String(filterRegionId)) return false;
         }
 
-        // ✅ Branch filter
+        // ✅ Branch Reports filter
         if (filterBranchId !== "all") {
             if (getBranchIdFromRow(row) !== String(filterBranchId)) return false;
         }

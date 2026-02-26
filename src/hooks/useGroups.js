@@ -10,7 +10,7 @@ const normalizeRole = (r) => String(r ?? "").trim().toLowerCase();
  * useGroups(filters)
  * ✅ Admin/Super Admin: no auto filter (can pass any filters)
  * ✅ Regional Manager: auto region_id (unless explicitly passed)
- * ✅ Branch Manager: auto branch_id (unless explicitly passed)
+ * ✅ Branch Reports Manager: auto branch_id (unless explicitly passed)
  * ✅ Loan Officer: auto user_id (employee_id) (unless explicitly passed)
  *
  * Supported query params:

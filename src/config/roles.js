@@ -13,7 +13,7 @@ export const ROLES = {
 export const ROLE_LABEL = {
     [ROLES.ADMIN]: "Admin",
     [ROLES.REGIONAL_MANAGER]: "Regional Manager",
-    [ROLES.BRANCH_MANAGER]: "Branch Manager",
+    [ROLES.BRANCH_MANAGER]: "Branch Reports Manager",
     [ROLES.LOAN_OFFICER]: "Loan Officer",
     [ROLES.SUPER_ADMIN]: "Super Admin",
 };

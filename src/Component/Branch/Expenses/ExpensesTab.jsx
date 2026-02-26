@@ -63,7 +63,7 @@ export default function ExpensesTab() {
     /* =========================================================
        ✅ Role based access
        - Regional Manager -> only branches of own region
-       - Branch Manager   -> only own branch
+       - Branch Reports Manager   -> only own branch
     ========================================================= */
     const role = getUserRole();
     const myRegionId = getUserRegionId();
@@ -182,7 +182,7 @@ export default function ExpensesTab() {
     }, []);
 
     const validate = useCallback(() => {
-        if (!form.branch_id) return "Branch is required";
+        if (!form.branch_id) return "Branch Reports is required";
         if (!form.category_id) return "Category is required";
         if (!form.subcategory_id) return "Subcategory is required";
         if (!form.expense_date) return "Expense date is required";
@@ -300,7 +300,7 @@ export default function ExpensesTab() {
                 },
             },
             {
-                header: "Branch",
+                header: "Branch Reports",
                 accessorKey: "branch_id",
                 cell: (ctx) => {
                     const r = getRow(ctx);
@@ -391,7 +391,7 @@ export default function ExpensesTab() {
     }, [branchNameById, categoryById, subcatById, openEdit, deleting, requestDelete]);
 
     const doDownload = useCallback(() => {
-        const header = ["Date", "Branch", "Category", "Subcategory", "Amount", "Ref", "Description"];
+        const header = ["Date", "Branch Reports", "Category", "Subcategory", "Amount", "Ref", "Description"];
         const body = visibleRows.map((r) => [
             yyyyMmDd(r.expense_date),
             branchNameById.get(String(r.branch_id)) || r.branch_id,

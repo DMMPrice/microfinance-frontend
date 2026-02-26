@@ -1,5 +1,5 @@
 // src/hooks/useReports.js
-import { useQuery, useMutation } from "@tanstack/react-query";
+import {useQuery, useMutation} from "@tanstack/react-query";
 import {apiClient} from "@/hooks/useApi.js";
 
 /* ---------------- helpers ---------------- */
@@ -31,7 +31,7 @@ function buildQS(paramsObj) {
 }
 
 /* =========================================================
-   1) Branch Cashbook Passbook
+   1) Branch Reports Cashbook Passbook
    GET /reports/cashbook/branch/passbook?branch_id=..&from_date=..&to_date=..
 ========================================================= */
 export function useBranchCashbookPassbook({branchId, fromDate, toDate, enabled = false}) {
@@ -54,193 +54,24 @@ export function useBranchCashbookPassbook({branchId, fromDate, toDate, enabled =
     });
 }
 
-/* =========================================================
-   2) Group Cashbook Passbook
-   GET /reports/cashbook/group/passbook?group_id=..&from_date=..&to_date=..&include_charges=true
-========================================================= */
-export function useGroupCashbookPassbook({
-                                             groupId,
-                                             fromDate,
-                                             toDate,
-                                             includeCharges = true,
-                                             enabled = false,
-                                         }) {
-    const f = normalizeDate(fromDate);
-    const t = normalizeDate(toDate);
-
-    return useQuery({
-        queryKey: [
-            "reports",
-            "cashbook",
-            "group",
-            "passbook",
-            groupId,
-            f,
-            t,
-            !!includeCharges,
-        ],
-        enabled: !!enabled && !!groupId && !!f && !!t,
-        queryFn: async () => {
-            const qs = buildQS({
-                group_id: groupId,
-                from_date: f,
-                to_date: t,
-                include_charges: includeCharges ? "true" : "false",
-            });
-
-            const {data} = await apiClient.get(`/reports/cashbook/group/passbook?${qs}`);
-            return data;
-        },
-    });
-}
-
-/* =========================================================
-   3) Admin: Regions + Branches (nested)
-   GET /reports/admin/regions-branches
-========================================================= */
-export function useAdminRegionsBranches({enabled = true} = {}) {
-    return useQuery({
-        queryKey: ["reports", "admin", "regions-branches"],
-        enabled: !!enabled,
-        keepPreviousData: true,
-        queryFn: async () => {
-            const {data} = await apiClient.get(`/reports/admin/regions-branches`);
-            return data;
-        },
-    });
-}
-
-/* =========================================================
-   4) Admin: Regions + Branches + Stats
-   GET /reports/admin/regions-branches/stats
-========================================================= */
-export function useAdminRegionsBranchesStats({enabled = true} = {}) {
-    return useQuery({
-        queryKey: ["reports", "admin", "regions-branches", "stats"],
-        enabled: !!enabled,
-        keepPreviousData: true,
-        queryFn: async () => {
-            const {data} = await apiClient.get(`/reports/admin/regions-branches/stats`);
-            return data;
-        },
-    });
-}
-
-/* =========================================================
-   5) Admin: Transaction Log (audit)
-   GET /reports/admin/txns?from_date=..&to_date=..&region_id=&branch_id=&group_id=&source=&limit=&offset=
-========================================================= */
-export function useAdminTransactionLog({
-                                           fromDate,
-                                           toDate,
-                                           regionId,
-                                           branchId,
-                                           groupId,
-                                           source, // EXPENSE / INSTALLMENT / DISBURSEMENT / CHARGE
-                                           limit = 200,
-                                           offset = 0,
-                                           enabled = false,
-                                       }) {
-    const f = normalizeDate(fromDate);
-    const t = normalizeDate(toDate);
-
-    return useQuery({
-        queryKey: [
-            "reports",
-            "admin",
-            "txns",
-            f,
-            t,
-            regionId || null,
-            branchId || null,
-            groupId || null,
-            source ? String(source).toUpperCase() : null,
-            limit,
-            offset,
-        ],
-        enabled: !!enabled && !!f && !!t,
-        keepPreviousData: true,
-        queryFn: async () => {
-            const qs = buildQS({
-                from_date: f,
-                to_date: t,
-                region_id: regionId,
-                branch_id: branchId,
-                group_id: groupId,
-                source: source ? String(source).toUpperCase() : undefined,
-                limit,
-                offset,
-            });
-
-            const {data} = await apiClient.get(`/reports/admin/txns?${qs}`);
-            return data;
-        },
-    });
-}
-
-/* =========================================================
-   6) Admin: Passbook (running balance across scope)
-   GET /reports/admin/passbook?from_date=..&to_date=..&region_id=&branch_id=&group_id=&include_charges=true
-========================================================= */
-export function useAdminPassbook({
-                                     fromDate,
-                                     toDate,
-                                     regionId,
-                                     branchId,
-                                     groupId,
-                                     includeCharges = true,
-                                     enabled = false,
-                                 }) {
-    const f = normalizeDate(fromDate);
-    const t = normalizeDate(toDate);
-
-    return useQuery({
-        queryKey: [
-            "reports",
-            "admin",
-            "passbook",
-            f,
-            t,
-            regionId || null,
-            branchId || null,
-            groupId || null,
-            includeCharges ? "true" : "false",
-        ],
-        enabled: !!enabled && !!f && !!t,
-        keepPreviousData: true,
-        queryFn: async () => {
-            const qs = buildQS({
-                from_date: f,
-                to_date: t,
-                region_id: regionId,
-                branch_id: branchId,
-                group_id: groupId,
-                include_charges: includeCharges ? "true" : "false",
-            });
-
-            const {data} = await apiClient.get(`/reports/admin/passbook?${qs}`);
-            return data;
-        },
-    });
-}
 // ============================================================
-// Branch Cashbook (Loan Ledger + Expenses)
+// Branch Reports Cashbook (Loan Ledger + Expenses)
 // ============================================================
 export function useBranchLoanLedgerLogs({
-    branchId,
-    fromDate,
-    toDate,
-    includeCharges = true,
-    includeOtherLogs = true,
-    includeExpenses = true,
-    includeEmptyDays = true,
-    viewMode = "DAILY",
-    weekStart = "MON",
-    search,
-    limit = 200,
-    offset = 0,
-    enabled = true,
-}) {
+                                            branchId,
+                                            fromDate,
+                                            toDate,
+                                            includeCharges = true,
+                                            includeOtherLogs = true,
+                                            includeExpenses = true,
+                                            includeEmptyDays = true,
+                                            viewMode = "DAILY",
+                                            weekStart = "MON",
+                                            search,
+                                            limit = 200,
+                                            offset = 0,
+                                            enabled = true,
+                                        }) {
     const b = branchId ? String(branchId) : "";
     const f = normalizeDate(fromDate);
     const t = normalizeDate(toDate);
@@ -278,7 +109,40 @@ export function useBranchLoanLedgerLogs({
                 offset,
             });
 
-            const { data } = await apiClient.get(`/reports/cashbook/branch/loan-ledger-logs?${qs}`);
+            const {data} = await apiClient.get(`/reports/cashbook/branch/loan-ledger-logs?${qs}`);
+            return data;
+        },
+    });
+}
+
+/* =========================================================
+   2) Loan Top Sheet (Branch Reports)
+   POST /reports/loan-top-sheet/branch
+   payload: { branch_id, month_start, month_end, persist }
+========================================================= */
+export function useLoanTopSheetBranch({
+                                          branchId,
+                                          monthStart,
+                                          monthEnd,
+                                          persist = true,
+                                          enabled = false,
+                                      }) {
+    const b = branchId ? Number(branchId) : null;
+    const ms = normalizeDate(monthStart);
+    const me = normalizeDate(monthEnd);
+
+    return useQuery({
+        queryKey: ["reports", "loanTopSheet", "branch", b, ms, me, !!persist],
+        enabled: !!enabled && !!b && !!ms && !!me,
+        queryFn: async () => {
+            const payload = {
+                branch_id: b,
+                month_start: ms,
+                month_end: me,
+                persist: !!persist,
+            };
+
+            const { data } = await apiClient.post(`/reports/loan-top-sheet`, payload);
             return data;
         },
     });
@@ -291,7 +155,7 @@ export function useRebuildBalances() {
     return useMutation({
         mutationKey: ["rebuildBalances"],
         mutationFn: async (payload) => {
-            const { data } = await apiClient.post(`/reports/balances/rebuild`, payload);
+            const {data} = await apiClient.post(`/reports/balances/rebuild`, payload);
             return data;
         },
     });

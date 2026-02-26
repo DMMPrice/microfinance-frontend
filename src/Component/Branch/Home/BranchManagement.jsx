@@ -163,7 +163,7 @@ export default function BranchManagement({
             },
             {
                 onSuccess: () => {
-                    toast({title: "Branch created successfully"});
+                    toast({title: "Branch Reports created successfully"});
                     setBranchName("");
                     setRegionId(isRegionalManager && myRegionId != null ? String(myRegionId) : "");
                     setOpen(false);
@@ -221,7 +221,7 @@ export default function BranchManagement({
             },
             {
                 onSuccess: () => {
-                    toast({title: "Branch updated successfully"});
+                    toast({title: "Branch Reports updated successfully"});
                     setEditOpen(false);
                     setEditingBranch(null);
                 },
@@ -251,7 +251,7 @@ export default function BranchManagement({
         }
 
         deleteBranchMutation.mutate(branch_id, {
-            onSuccess: () => toast({title: "Branch deleted"}),
+            onSuccess: () => toast({title: "Branch Reports deleted"}),
             onError: (err) => {
                 const detail =
                     err?.response?.data?.detail || "Failed to delete branch. Please try again.";
@@ -377,7 +377,7 @@ export default function BranchManagement({
                                 className="w-full rounded-lg"
                                 disabled={createBranchMutation.isPending || !branchName.trim()}
                             >
-                                {createBranchMutation.isPending ? "Creating..." : "Create Branch"}
+                                {createBranchMutation.isPending ? "Creating..." : "Create Branch Reports"}
                             </Button>
                         </form>
                     </DialogContent>
@@ -412,7 +412,7 @@ export default function BranchManagement({
                 </Card>
             ) : null}
 
-            {/* ✅ Branch cards (uses visibleBranches) */}
+            {/* ✅ Branch Reports cards (uses visibleBranches) */}
             {!loading && !isBranchesError && !isRegionsError ? (
                 visibleBranches?.length ? (
                     <div className={`grid gap-4 ${isPage ? "md:grid-cols-2 lg:grid-cols-3" : "sm:grid-cols-2"}`}>
@@ -499,7 +499,7 @@ export default function BranchManagement({
                 )
             ) : null}
 
-            {/* ✅ Edit Branch modal */}
+            {/* ✅ Edit Branch Reports modal */}
             <Dialog open={editOpen} onOpenChange={setEditOpen}>
                 <DialogContent>
                     <DialogHeader>
@@ -553,7 +553,7 @@ export default function BranchManagement({
                             className="w-full rounded-lg"
                             disabled={updateBranchMutation.isPending || !editBranchName.trim()}
                         >
-                            {updateBranchMutation.isPending ? "Updating..." : "Update Branch"}
+                            {updateBranchMutation.isPending ? "Updating..." : "Update Branch Reports"}
                         </Button>
                     </form>
                 </DialogContent>

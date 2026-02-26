@@ -44,7 +44,7 @@ export default function UsersTable({
 
             {
                 key: "branch",
-                header: "Branch",
+                header: "Branch Reports",
                 sortValue: (r) => (r.employee?.branch_id ?? r.branch_id ?? 0),
                 cell: (r) =>
                     branchesLoading ? "..." : getBranchName(r.employee?.branch_id ?? r.branch_id),

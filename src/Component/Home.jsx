@@ -24,7 +24,8 @@ import LoanViewLandingPage from "@/Component/Loan/Loan View/LoanViewLandingPage.
 import SettingPage from "@/Component/Settings/Page.jsx";
 
 // ✅ NEW: Reports Pages (create placeholders now)
-import BranchReportsPage from "@/Component/Reports/Branch/Page.jsx";
+import BranchReportsPage from "@/Component/Reports/Branch Reports/Page.jsx";
+import LoanTopSheetPage from "@/Component/Reports/LoanTopSheet/Page.jsx";
 
 /* -------------------- Route meta for header -------------------- */
 const ROUTE_META = [
@@ -47,10 +48,10 @@ const ROUTE_META = [
         breadcrumbs: [{label: "Home", to: "/dashboard"}, {label: "Branches"}],
     },
 
-    // ✅ Branch Expenses header meta
+    // ✅ Branch Reports Expenses header meta
     {
         pattern: "/dashboard/branches/expenses",
-        title: "Branch Expenses",
+        title: "Branch Reports Expenses",
         subtitle: "Track and manage branch expenses",
         breadcrumbs: [
             {label: "Home", to: "/dashboard"},
@@ -139,7 +140,17 @@ const ROUTE_META = [
         breadcrumbs: [
             {label: "Home", to: "/dashboard"},
             {label: "Reports"},
-            {label: "Branch Reports"},
+            {label: "Branch Reports Reports"},
+        ],
+    },
+    {
+        pattern: "/dashboard/reports/loan-top-sheet",
+        title: "Branch Top Sheet Reports",
+        subtitle: "Branch Top Sheet Reports",
+        breadcrumbs: [
+            {label: "Home", to: "/dashboard"},
+            {label: "Reports"},
+            {label: "Branch Top Sheet Reports"},
         ],
     },
 
@@ -194,7 +205,6 @@ const NON_LOAN_OFFICER_ROLES = [
 
 const SYSTEM_ROLES = [ROLES.ADMIN, ROLES.SUPER_ADMIN];
 
-// ✅ NEW: Reports roles (same as Branch Mgmt for now)
 const REPORTS_ROLES = BRANCH_MGMT_ROLES;
 
 function Guard({allowedRoles, role, children}) {
@@ -278,7 +288,7 @@ export default function Home() {
                                 }
                             />
 
-                            {/* Branch mgmt */}
+                            {/* Branch Reports mgmt */}
                             <Route
                                 path="branches/home"
                                 element={
@@ -288,7 +298,7 @@ export default function Home() {
                                 }
                             />
 
-                            {/* Branch Expenses */}
+                            {/* Branch Reports Expenses */}
                             <Route
                                 path="branches/expenses"
                                 element={
@@ -368,6 +378,15 @@ export default function Home() {
                                 element={
                                     <Guard role={role} allowedRoles={REPORTS_ROLES}>
                                         <BranchReportsPage/>
+                                    </Guard>
+                                }
+                            />
+
+                            <Route
+                                path="reports/loan-top-sheet"
+                                element={
+                                    <Guard role={role} allowedRoles={REPORTS_ROLES}>
+                                        <LoanTopSheetPage/>
                                     </Guard>
                                 }
                             />

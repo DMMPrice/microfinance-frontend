@@ -87,10 +87,10 @@ export default function LoanBulkActionsSection() {
 
     const validate = () => {
         if (mode === "BRANCH") {
-            if (!effectiveBranchId) return "Please select a Branch.";
+            if (!effectiveBranchId) return "Please select a Branch Reports.";
         }
         if (mode === "GROUP") {
-            if (!effectiveBranchId) return "Please select a Branch first (to filter groups).";
+            if (!effectiveBranchId) return "Please select a Branch Reports first (to filter groups).";
             if (!effectiveGroupId) return "Please select a Group.";
         }
         if (action === "RESUME" && resumeFrom && !/^\d{4}-\d{2}-\d{2}$/.test(resumeFrom)) {
@@ -202,7 +202,7 @@ export default function LoanBulkActionsSection() {
 
                 <Separator/>
 
-                {/* Branch select (always shown) */}
+                {/* Branch Reports select (always shown) */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                         <Label>Branch</Label>

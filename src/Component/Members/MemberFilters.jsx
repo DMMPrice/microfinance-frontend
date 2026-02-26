@@ -83,7 +83,7 @@ export default function MemberFilters({
                 </Select>
             )}
 
-            {/* ✅ Branch (only for Admin / RM / Super Admin etc.) */}
+            {/* ✅ Branch Reports (only for Admin / RM / Super Admin etc.) */}
             {!hideBranchRegion && (
                 <Select value={filterBranchId} onValueChange={setFilterBranchId}>
                     <SelectTrigger>

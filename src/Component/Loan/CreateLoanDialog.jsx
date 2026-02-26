@@ -145,7 +145,7 @@ const DEFAULT_BOOK_PRICE = 0;
 export default function CreateLoanDialog({open, onOpenChange}) {
     const createLoan = useCreateLoan();
 
-    // ✅ Branch scope from profileData (NO UI)
+    // ✅ Branch Reports scope from profileData (NO UI)
     const branchId = useMemo(() => {
         const bid = getUserBranchId();
         return bid != null ? String(bid) : "";
@@ -243,7 +243,7 @@ export default function CreateLoanDialog({open, onOpenChange}) {
         return map;
     }, [groups]);
 
-    // ✅ Filter groups by Branch + selected Loan Officer (lo_id)
+    // ✅ Filter groups by Branch Reports + selected Loan Officer (lo_id)
     const visibleGroups = useMemo(() => {
         const list = Array.isArray(groups) ? groups : [];
         const oid = form.loan_officer_id ? String(form.loan_officer_id) : "";

@@ -53,7 +53,7 @@ export function useBranches(regionId = null) {
 
     // ✅ FINAL branches visible to UI
     const branches = useMemo(() => {
-        // Branch Manager => only show their assigned branch
+        // Branch Reports Manager => only show their assigned branch
         if (isBranchManager && profileBranchId != null) {
             const target = toKey(profileBranchId);
             return (rawBranches || []).filter((b) => {
@@ -81,7 +81,7 @@ export function useBranches(regionId = null) {
         return b?.branch_name || b?.name || "";
     };
 
-    // ✅ Optional: prevent Branch Manager from CRUD (safety)
+    // ✅ Optional: prevent Branch Reports Manager from CRUD (safety)
     const canMutate = !isBranchManager;
 
     const createBranchMutation = useMutation({

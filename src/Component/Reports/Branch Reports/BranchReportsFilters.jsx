@@ -62,7 +62,7 @@ export default function BranchReportsFilters({
                     </Select>
                 </div>
 
-                {/* Branch */}
+                {/* Branch Reports */}
                 <div className="space-y-2 lg:col-span-5">
                     <Label>Branch</Label>
 

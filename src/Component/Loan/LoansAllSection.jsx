@@ -163,7 +163,7 @@ async function exportMasterRollExcel({
     ws.getCell("A2").style = subTitleStyle;
     ws.getRow(2).height = 20;
 
-    // --- Row 3: Branch + Date Range ---
+    // --- Row 3: Branch Reports + Date Range ---
     ws.mergeCells("A3:D3");
     ws.mergeCells("E3:H3");
 
