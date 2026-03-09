@@ -5,6 +5,7 @@ import {Label} from "@/components/ui/label";
 import {Input} from "@/components/ui/input";
 import {Skeleton} from "@/components/ui/skeleton";
 import {Badge} from "@/components/ui/badge";
+import {Download, Loader2} from "lucide-react";
 
 import {
     Select,
@@ -17,20 +18,19 @@ import {
 export default function LoanTopSheetFilters({
                                                 branchId,
                                                 setBranchId,
-
                                                 monthStart,
                                                 setMonthStart,
                                                 monthEnd,
                                                 setMonthEnd,
-
                                                 persist,
                                                 setPersist,
-
                                                 loadDisabled,
                                                 loading,
                                                 onThisMonth,
                                                 onLoad,
-
+                                                onDownloadExcel,
+                                                exportDisabled,
+                                                exporting,
                                                 branches,
                                                 branchesLoading,
                                                 branchSelectDisabled,
@@ -38,8 +38,7 @@ export default function LoanTopSheetFilters({
     return (
         <div className="space-y-3">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
-                {/* Branch */}
-                <div className="space-y-1 md:col-span-5">
+                <div className="space-y-1 md:col-span-4">
                     <Label>Branch</Label>
 
                     {branchesLoading ? (
@@ -70,8 +69,7 @@ export default function LoanTopSheetFilters({
                     )}
                 </div>
 
-                {/* Month Start */}
-                <div className="space-y-1 md:col-span-3">
+                <div className="space-y-1 md:col-span-2">
                     <Label>Month Start</Label>
                     <Input
                         type="date"
@@ -80,8 +78,7 @@ export default function LoanTopSheetFilters({
                     />
                 </div>
 
-                {/* Month End */}
-                <div className="space-y-1 md:col-span-3">
+                <div className="space-y-1 md:col-span-2">
                     <Label>Month End</Label>
                     <Input
                         type="date"
@@ -90,15 +87,34 @@ export default function LoanTopSheetFilters({
                     />
                 </div>
 
-                {/* Load button */}
-                <div className="flex items-end md:col-span-1">
-                    <Button onClick={onLoad} disabled={loadDisabled}>
+                <div className="flex items-end md:col-span-2">
+                    <Button className="w-full" onClick={onLoad} disabled={loadDisabled}>
                         {loading ? "Loading..." : "Load"}
+                    </Button>
+                </div>
+
+                <div className="flex items-end md:col-span-2">
+                    <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={onDownloadExcel}
+                        disabled={exportDisabled}
+                    >
+                        {exporting ? (
+                            <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin"/>
+                                Exporting...
+                            </>
+                        ) : (
+                            <>
+                                <Download className="mr-2 h-4 w-4"/>
+                                Download Excel
+                            </>
+                        )}
                     </Button>
                 </div>
             </div>
 
-            {/* Persist + This month */}
             <div className="flex flex-wrap items-center gap-3">
                 <label className="flex items-center gap-2 text-sm">
                     <input

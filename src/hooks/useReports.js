@@ -5,15 +5,12 @@ import {apiClient} from "@/hooks/useApi.js";
 /* ---------------- helpers ---------------- */
 function normalizeDate(d) {
     if (!d) return "";
-    // accept "YYYY-MM-DD"
     if (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
 
-    // accept Date
     if (d instanceof Date && !Number.isNaN(d.getTime())) {
         return d.toISOString().slice(0, 10);
     }
 
-    // accept dayjs/moment-like: {format()}
     if (d && typeof d.format === "function") {
         return d.format("YYYY-MM-DD");
     }
@@ -32,7 +29,6 @@ function buildQS(paramsObj) {
 
 /* =========================================================
    1) Branch Reports Cashbook Passbook
-   GET /reports/cashbook/branch/passbook?branch_id=..&from_date=..&to_date=..
 ========================================================= */
 export function useBranchCashbookPassbook({branchId, fromDate, toDate, enabled = false}) {
     const f = normalizeDate(fromDate);
@@ -54,9 +50,9 @@ export function useBranchCashbookPassbook({branchId, fromDate, toDate, enabled =
     });
 }
 
-// ============================================================
-// Branch Reports Cashbook (Loan Ledger + Expenses)
-// ============================================================
+/* =========================================================
+   2) Branch Reports Cashbook (Loan Ledger + Expenses)
+========================================================= */
 export function useBranchLoanLedgerLogs({
                                             branchId,
                                             fromDate,
@@ -116,9 +112,7 @@ export function useBranchLoanLedgerLogs({
 }
 
 /* =========================================================
-   2) Loan Top Sheet (Branch Reports)
-   POST /reports/loan-top-sheet/branch
-   payload: { branch_id, month_start, month_end, persist }
+   3) Loan Top Sheet
 ========================================================= */
 export function useLoanTopSheetBranch({
                                           branchId,
@@ -142,15 +136,31 @@ export function useLoanTopSheetBranch({
                 persist: !!persist,
             };
 
-            const { data } = await apiClient.post(`/reports/loan-top-sheet`, payload);
+            const {data} = await apiClient.post(`/reports/loan-top-sheet`, payload);
             return data;
         },
     });
 }
 
-// ============================================================
-// Rebuild balances before running reports (POST /reports/balances/rebuild)
-// ============================================================
+/* =========================================================
+   4) Auth users
+   GET /auth/users
+========================================================= */
+export function useAuthUsers(enabled = true) {
+    return useQuery({
+        queryKey: ["auth", "users"],
+        enabled: !!enabled,
+        staleTime: 5 * 60 * 1000,
+        queryFn: async () => {
+            const {data} = await apiClient.get(`/auth/users`);
+            return Array.isArray(data) ? data : [];
+        },
+    });
+}
+
+/* =========================================================
+   5) Rebuild balances
+========================================================= */
 export function useRebuildBalances() {
     return useMutation({
         mutationKey: ["rebuildBalances"],

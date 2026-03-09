@@ -1,22 +1,67 @@
+// src/Component/Reports/LoanTopSheet/LoanTopSheetPage.jsx
 import React, {useEffect, useMemo, useState} from "react";
 import {useBranches} from "@/hooks/useBranches";
 import {getUserRole, getUserBranchId} from "@/hooks/useApi";
-import {useLoanTopSheetBranch} from "@/hooks/useReports";
-import {Card, CardContent, CardHeader, CardTitle, CardDescription} from "@/components/ui/card";
-import AdvancedTable from "@/Utils/AdvancedTable.jsx";
-import StatCard from "@/Utils/StatCard.jsx";
-import {Wallet, ArrowUpRight, ArrowDownRight, AlertTriangle} from "lucide-react";
+import {useLoanTopSheetBranch, useAuthUsers} from "@/hooks/useReports";
+import {
+    Card,
+    CardContent,
+    CardHeader,
+    CardTitle,
+    CardDescription,
+} from "@/components/ui/card";
 import LoanTopSheetFilters from "@/Component/Reports/LoanTopSheet/LoanTopSheetFilters.jsx";
+import LoanTopSheetKpis from "@/Component/Reports/LoanTopSheet/LoanTopSheetKpis.jsx";
+import LoanTopSheetTables from "@/Component/Reports/LoanTopSheet/LoanTopSheetTables.jsx";
+import {exportLoanTopSheetExcel} from "@/Component/Reports/LoanTopSheet/loanTopSheet.export";
 
 import {
     isPrivilegedBranchPicker,
     getDefaultMonthRange,
-    formatINR,
 } from "@/Component/Reports/Branch Reports/branchReports.utils";
 
-import {
-    getDailyBranchColumns,
-} from "@/Component/Reports/LoanTopSheet/loanTopSheet.columns.jsx";
+function buildBranchSummaryRows(data) {
+    if (!data) return [];
+
+    const openingBranch = data?.opening_branch || {};
+    const closingCalc = data?.closing_branch_calc || {};
+    const closingBranch = data?.closing_branch || {};
+
+    return [
+        {metric: "Opening Outstanding Count", value: Number(openingBranch?.outstanding_cnt || 0), type: "count"},
+        {metric: "Opening Outstanding Amount", value: Number(openingBranch?.outstanding_amt || 0), type: "amount"},
+        {metric: "Opening Overdue Count", value: Number(openingBranch?.overdue_cnt || 0), type: "count"},
+        {metric: "Opening Overdue Amount", value: Number(openingBranch?.overdue_amt || 0), type: "amount"},
+
+        {metric: "Month Disbursed Amount", value: Number(closingCalc?.month_disb_amt || 0), type: "amount"},
+        {metric: "Month Realisable Amount", value: Number(closingCalc?.month_realisable_amt || 0), type: "amount"},
+        {metric: "Month Realised Amount", value: Number(closingCalc?.month_realised_amt || 0), type: "amount"},
+
+        {metric: "Closing Outstanding Count", value: Number(closingBranch?.outstanding_cnt || 0), type: "count"},
+        {metric: "Closing Outstanding Amount", value: Number(closingBranch?.outstanding_amt || 0), type: "amount"},
+        {metric: "Closing Overdue Count", value: Number(closingBranch?.overdue_cnt || 0), type: "count"},
+        {metric: "Closing Overdue Amount", value: Number(closingBranch?.overdue_amt || 0), type: "amount"},
+
+        {metric: "Closing Balance (Calc)", value: Number(closingCalc?.closing_balance_amt || 0), type: "amount"},
+        {metric: "Closing Overdue (Calc)", value: Number(closingCalc?.closing_overdue_amt || 0), type: "amount"},
+    ];
+}
+
+function getBranchOfficerName(users, branchId) {
+    if (!Array.isArray(users) || !branchId) return "";
+
+    const hit = users.find((u) => {
+        const emp = u?.employee || {};
+        return (
+            u?.is_active === true &&
+            emp?.is_active === true &&
+            String(emp?.role_name || "").toLowerCase() === "branch_manager" &&
+            String(emp?.branch_id ?? "") === String(branchId)
+        );
+    });
+
+    return hit?.employee?.full_name || "";
+}
 
 export default function LoanTopSheetPage() {
     const role = useMemo(() => getUserRole(), []);
@@ -29,14 +74,14 @@ export default function LoanTopSheetPage() {
     const [branchId, setBranchId] = useState(
         isBranchManager && myBranchId ? String(myBranchId) : ""
     );
-
     const [monthStart, setMonthStart] = useState(defaultFrom || "");
     const [monthEnd, setMonthEnd] = useState(defaultTo || "");
-
     const [persist, setPersist] = useState(true);
     const [load, setLoad] = useState(false);
+    const [exporting, setExporting] = useState(false);
 
     const {branches, isLoading: branchesLoading} = useBranches(null);
+    const {data: authUsers = []} = useAuthUsers(true);
 
     const branchOptions = useMemo(() => {
         const opts = (branches || []).map((b) => {
@@ -56,9 +101,11 @@ export default function LoanTopSheetPage() {
             setBranchId(String(myBranchId));
             return;
         }
-        if (!branchId && branchOptions.length === 1) setBranchId(branchOptions[0].id);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [branchOptions.length, isBranchManager, myBranchId]);
+
+        if (!branchId && branchOptions.length === 1) {
+            setBranchId(branchOptions[0].id);
+        }
+    }, [branchOptions, branchId, isBranchManager, myBranchId]);
 
     const branchSelectDisabled = isBranchManager || (!canPickAnyBranch && !!myBranchId);
 
@@ -69,6 +116,26 @@ export default function LoanTopSheetPage() {
         persist,
         enabled: load,
     });
+
+    const data = query.data || null;
+
+    const selectedBranchName = useMemo(() => {
+        const hit = branchOptions.find((b) => String(b.id) === String(branchId));
+        return hit?.name || "";
+    }, [branchId, branchOptions]);
+
+    const branchOfficerName = useMemo(() => {
+        return getBranchOfficerName(authUsers, branchId);
+    }, [authUsers, branchId]);
+
+    const openingRows = data?.opening || [];
+    const closingRows = data?.closing || [];
+    const detailedBranchRows = data?.detailed_branch || [];
+    const detailedGroupRows = data?.detailed || [];
+    const summaryRows = useMemo(() => buildBranchSummaryRows(data), [data]);
+
+    const loadDisabled = !branchId || !monthStart || !monthEnd || query.isFetching;
+    const exportDisabled = !data || exporting || query.isFetching;
 
     const onThisMonth = () => {
         const {from, to} = getDefaultMonthRange();
@@ -88,34 +155,33 @@ export default function LoanTopSheetPage() {
         await query.refetch();
     };
 
-    const data = query.data || null;
+    const onDownloadExcel = async () => {
+        if (!data) return;
 
-    const openingBranch = data?.opening_branch || null;
-    const closingCalc = data?.closing_branch_calc || null;
-    const closingBranch = data?.closing_branch || null;
-
-    const selectedBranchName = useMemo(() => {
-        const hit = branchOptions.find((b) => String(b.id) === String(branchId));
-        return hit?.name || "";
-    }, [branchId, branchOptions]);
-
-    const loadDisabled = !branchId || !monthStart || !monthEnd || query.isFetching;
-
-    // tables
-    const openingRows = data?.opening || [];
-    const closingRows = data?.closing || [];
-    const detailedBranchRows = data?.detailed_branch || [];
-    const detailedGroupRows = data?.detailed || [];
+        try {
+            setExporting(true);
+            await exportLoanTopSheetExcel({
+                data,
+                branchName: selectedBranchName || `branch-${branchId}`,
+                branchOfficerName,
+                monthStart,
+                monthEnd,
+            });
+        } finally {
+            setExporting(false);
+        }
+    };
 
     return (
         <Card className="border-muted/60">
             <CardHeader className="space-y-1">
                 <CardTitle className="text-xl">Loan Top Sheet</CardTitle>
-                <CardDescription>Branch-wise snapshot for selected month range</CardDescription>
+                <CardDescription>
+                    Branch-wise snapshot for selected month range
+                </CardDescription>
             </CardHeader>
 
             <CardContent className="space-y-4">
-                {/* Filters */}
                 <LoanTopSheetFilters
                     branchId={branchId}
                     setBranchId={(v) => {
@@ -141,84 +207,37 @@ export default function LoanTopSheetPage() {
                     loading={query.isFetching}
                     onThisMonth={onThisMonth}
                     onLoad={onLoad}
+                    onDownloadExcel={onDownloadExcel}
+                    exportDisabled={exportDisabled}
+                    exporting={exporting}
                     branches={branchOptions}
                     branchesLoading={branchesLoading}
                     branchSelectDisabled={branchSelectDisabled}
                 />
 
-                {/* ✅ KPI Section using StatCard */}
                 {data && (
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-                        <StatCard
-                            title="Branch"
-                            value={selectedBranchName || branchId}
-                            variant="blue"
-                        />
-
-                        <StatCard
-                            title="Opening Outstanding"
-                            value={`₹${formatINR(openingBranch?.outstanding_amt || 0)}`}
-                            subtitle={`${openingBranch?.outstanding_cnt || 0} loans`}
-                            Icon={Wallet}
-                            variant="purple"
-                        />
-
-                        <StatCard
-                            title="Closing Balance (calc)"
-                            value={`₹${formatINR(closingCalc?.closing_balance_amt || 0)}`}
-                            subtitle={`${closingBranch?.outstanding_cnt || 0} loans`}
-                            Icon={Wallet}
-                            variant="green"
-                        />
-
-                        <StatCard
-                            title="Month Disbursed"
-                            value={`₹${formatINR(closingCalc?.month_disb_amt || 0)}`}
-                            Icon={ArrowUpRight}
-                            variant="blue"
-                        />
-
-                        <StatCard
-                            title="Month Realised"
-                            value={`₹${formatINR(closingCalc?.month_realised_amt || 0)}`}
-                            Icon={ArrowDownRight}
-                            variant="green"
-                        />
-
-                        <StatCard
-                            title="Month Realisable"
-                            value={`₹${formatINR(closingCalc?.month_realisable_amt || 0)}`}
-                            variant="amber"
-                        />
-
-                        <StatCard
-                            title="Closing Overdue (calc)"
-                            value={`₹${formatINR(closingCalc?.closing_overdue_amt || 0)}`}
-                            subtitle={`${closingBranch?.overdue_cnt || 0} overdue loans`}
-                            Icon={AlertTriangle}
-                            variant="red"
-                        />
-                    </div>
+                    <LoanTopSheetKpis
+                        branchLabel={selectedBranchName || branchId}
+                        data={data}
+                    />
                 )}
 
-                {/* Tables */}
-                <div className="space-y-4">
+                <LoanTopSheetTables
+                    openingRows={openingRows}
+                    detailedBranchRows={detailedBranchRows}
+                    detailedGroupRows={detailedGroupRows}
+                    closingRows={closingRows}
+                    summaryRows={summaryRows}
+                    loading={query.isFetching}
+                />
 
-                    <AdvancedTable
-                        title="Daily Summary (Branch)"
-                        data={detailedBranchRows}
-                        columns={getDailyBranchColumns()}
-                        isLoading={query.isFetching}
-                        enableSearch
-                        initialPageSize={10}
-                        rowKey={(r, idx) => `db-${r.txn_date}-${idx}`}
-                    />
-                </div>
-
-                {/* Errors */}
                 {query.error && (
                     <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
-                        {String(query.error?.response?.data?.detail || query.error?.message || "Failed to load")}
+                        {String(
+                            query.error?.response?.data?.detail ||
+                            query.error?.message ||
+                            "Failed to load"
+                        )}
                     </div>
                 )}
             </CardContent>
