@@ -26,6 +26,7 @@ import SettingPage from "@/Component/Settings/Page.jsx";
 // ✅ NEW: Reports Pages (create placeholders now)
 import BranchReportsPage from "@/Component/Reports/Branch Reports/Page.jsx";
 import LoanTopSheetPage from "@/Component/Reports/LoanTopSheet/Page.jsx";
+import MarginMoneyReportPage from "@/Component/Reports/LoanMarginalMoney/Page.jsx";
 
 /* -------------------- Route meta for header -------------------- */
 const ROUTE_META = [
@@ -145,12 +146,21 @@ const ROUTE_META = [
     },
     {
         pattern: "/dashboard/reports/loan-top-sheet",
-        title: "Branch Top Sheet Reports",
-        subtitle: "Branch Top Sheet Reports",
+        title: "Branch Top Sheet Report",
+        subtitle: "Branch Top Sheet Report",
         breadcrumbs: [
             {label: "Home", to: "/dashboard"},
             {label: "Reports"},
             {label: "Branch Top Sheet Reports"},
+        ],
+    },{
+        pattern: "/dashboard/reports/margin-money",
+        title: "Branch Margin Money Reports",
+        subtitle: "Branch Margin Money Reports",
+        breadcrumbs: [
+            {label: "Home", to: "/dashboard"},
+            {label: "Reports"},
+            {label: "Branch Margin Money Reports"},
         ],
     },
 
@@ -387,6 +397,13 @@ export default function Home() {
                                 element={
                                     <Guard role={role} allowedRoles={REPORTS_ROLES}>
                                         <LoanTopSheetPage/>
+                                    </Guard>
+                                }
+                            /><Route
+                                path="reports/margin-money"
+                                element={
+                                    <Guard role={role} allowedRoles={REPORTS_ROLES}>
+                                        <MarginMoneyReportPage/>
                                     </Guard>
                                 }
                             />

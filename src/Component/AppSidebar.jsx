@@ -182,7 +182,7 @@ const navigationItems = [
         ],
         children: [
             {
-                title: "Branch Reports",
+                title: "Branch Report",
                 url: "/dashboard/reports/branches",
                 allowedRoles: [
                     ROLES.ADMIN,
@@ -191,8 +191,17 @@ const navigationItems = [
                     ROLES.BRANCH_MANAGER,
                 ],
             }, {
-                title: "Branch Top Sheet Reports",
+                title: "Branch Top Sheet Report",
                 url: "/dashboard/reports/loan-top-sheet",
+                allowedRoles: [
+                    ROLES.ADMIN,
+                    ROLES.SUPER_ADMIN,
+                    ROLES.REGIONAL_MANAGER,
+                    ROLES.BRANCH_MANAGER,
+                ],
+            }, {
+                title: "Branch Marginal Money Report",
+                url: "/dashboard/reports/margin-money",
                 allowedRoles: [
                     ROLES.ADMIN,
                     ROLES.SUPER_ADMIN,

@@ -170,3 +170,31 @@ export function useRebuildBalances() {
         },
     });
 }
+
+export function useLoanMarginalMoneyBranch({
+                                               branchId,
+                                               monthStart,
+                                               monthEnd,
+                                               persist = true,
+                                               enabled = false,
+                                           }) {
+    const b = branchId ? Number(branchId) : null;
+    const ms = normalizeDate(monthStart);
+    const me = normalizeDate(monthEnd);
+
+    return useQuery({
+        queryKey: ["reports", "loanMarginalMoney", "branch", b, ms, me, !!persist],
+        enabled: !!enabled && !!b && !!ms && !!me,
+        queryFn: async () => {
+            const payload = {
+                branch_id: b,
+                month_start: ms,
+                month_end: me,
+                persist: !!persist,
+            };
+
+            const {data} = await apiClient.post(`/reports/loan-marginal-money`, payload);
+            return data;
+        },
+    });
+}
