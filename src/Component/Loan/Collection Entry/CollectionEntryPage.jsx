@@ -9,7 +9,7 @@ import {
     AccordionTrigger,
 } from "@/components/ui/accordion.tsx";
 import {Skeleton} from "@/components/ui/skeleton.tsx";
-import {CheckCircle2, Eye, Loader2, ExternalLink} from "lucide-react";
+import {CheckCircle2, Loader2, ExternalLink} from "lucide-react";
 
 import {
     Dialog,
@@ -25,6 +25,7 @@ import {
     useCollectionsByLOManual,
     useCreateLoanPayment,
     useLoanPayments,
+    useAddLoanAdvance,
 } from "@/hooks/useLoans.js";
 import {getProfileData, getUserRole, getUserBranchId} from "@/hooks/useApi.js";
 
@@ -38,6 +39,12 @@ function todayYYYYMMDD() {
     const mm = String(d.getMonth() + 1).padStart(2, "0");
     const dd = String(d.getDate()).padStart(2, "0");
     return `${yyyy}-${mm}-${dd}`;
+}
+
+function getLocalDateTimeValue() {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function isOverdueDate(dueDateLike) {
@@ -77,14 +84,12 @@ function resolveRoleName(profile) {
     const rid = ridRaw == null ? null : Number(ridRaw);
     if (!Number.isFinite(rid)) return "";
 
-    // adjust mapping if needed
     if (rid === 4) return "branch_manager";
     if (rid === 5) return "loan_officer";
 
     return "";
 }
 
-/** ✅ CSV helpers (keep if you use statement download) */
 function csvEscape(v) {
     if (v === null || v === undefined) return "";
     const s = String(v);
@@ -131,31 +136,27 @@ export default function CollectionEntryPage() {
     const [openGroupModal, setOpenGroupModal] = useState(false);
     const [selectedGroupKey, setSelectedGroupKey] = useState(null);
 
-    /* -------------------- master data -------------------- */
     const {branches, isLoading: branchesLoading} = useBranches();
     const {groups, isLoading: groupsLoading} = useGroups();
     const {loanOfficers, isLoading: losLoading} = useLoanOfficers();
 
     const anyMasterLoading = branchesLoading || groupsLoading || losLoading;
 
-    /* -------------------- profile / RBAC -------------------- */
     const profile = getProfileData?.() || {};
     const roleName = resolveRoleName(profile);
 
     const isBranchManager = roleName === "branch_manager";
     const isLoanOfficer = roleName === "loan_officer";
+    const canEditPaymentDate = isBranchManager;
 
-    // ✅ hide dropdowns if auto-selected
     const hideBranchField = isBranchManager || isLoanOfficer;
     const hideLoField = isLoanOfficer;
 
-    // ✅ Branch Reports from profile always exists (your payload has branch_id)
     const resolvedBranchId = useMemo(() => {
         const bid = profile?.branch_id ?? getUserBranchId?.();
         return bid != null && String(bid).trim() !== "" ? String(bid) : "";
     }, [profile]);
 
-    // ✅ Loan Officer LO_ID derived from /loan-officers by employee_id
     const resolvedLoId = useMemo(() => {
         if (!isLoanOfficer) return "";
         const empId = profile?.employee_id ?? profile?.employeeId ?? null;
@@ -168,7 +169,6 @@ export default function CollectionEntryPage() {
         return found?.lo_id != null ? String(found.lo_id) : "";
     }, [isLoanOfficer, profile, loanOfficers]);
 
-    // ✅ set locked values once available
     useEffect(() => {
         if ((isBranchManager || isLoanOfficer) && resolvedBranchId) {
             setBranchId(resolvedBranchId);
@@ -176,7 +176,6 @@ export default function CollectionEntryPage() {
         if (isLoanOfficer && resolvedLoId) {
             setLoId(resolvedLoId);
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isBranchManager, isLoanOfficer, resolvedBranchId, resolvedLoId]);
 
     function resetTableState() {
@@ -206,7 +205,6 @@ export default function CollectionEntryPage() {
         resetTableState();
     }
 
-    /* -------------------- dropdown filtering -------------------- */
     const filteredLOs = useMemo(() => {
         if (!branchId) return [];
         const bId = Number(branchId);
@@ -223,7 +221,6 @@ export default function CollectionEntryPage() {
             .filter((g) => (lId ? Number(g.lo_id) === lId : true));
     }, [groups, branchId, loId]);
 
-    /* -------------------- dues fetch -------------------- */
     const effectiveLoId = applyFilters ? (loId || resolvedLoId) : null;
     const effectiveAsOn = applyFilters ? asOn : null;
 
@@ -237,13 +234,13 @@ export default function CollectionEntryPage() {
     const isLoadingDue = rowsLoading || rowsFetching;
 
     const createPayment = useCreateLoanPayment();
+    const addLoanAdvance = useAddLoanAdvance();
 
     const {data: paymentRows = [], isLoading: paymentsLoading} = useLoanPayments(
         selectedLoanId,
         openPayments && !!selectedLoanId,
     );
 
-    /* -------------------- helpers -------------------- */
     function updateForm(key, patch) {
         setRowForm((prev) => ({
             ...prev,
@@ -294,7 +291,6 @@ export default function CollectionEntryPage() {
         await refetchDue();
     }
 
-    /* -------------------- init row forms -------------------- */
     const rowsStringified = useMemo(() => {
         return JSON.stringify((rows || []).map((r) => `${r.installment_no}:${r.loan_id}`));
     }, [rows]);
@@ -310,17 +306,16 @@ export default function CollectionEntryPage() {
 
                 next[key] = {
                     amount_received: r.due_left ? String(r.due_left) : "",
+                    advance_amount: "",
                     payment_mode: "CASH",
                     receipt_no: "",
-                    remarks: "",
-                    payment_date: new Date().toISOString().slice(0, 16),
+                    payment_date: getLocalDateTimeValue(),
                 };
             });
             return next;
         });
-    }, [rowsStringified, applyFilters]);
+    }, [rowsStringified, applyFilters, rows.length]);
 
-    /* -------------------- display/group -------------------- */
     const displayRows = useMemo(() => {
         if (!applyFilters) return [];
         if (groupId === "ALL") return rows;
@@ -346,7 +341,6 @@ export default function CollectionEntryPage() {
         return grouped.find((g) => g.key === selectedGroupKey) || null;
     }, [grouped, selectedGroupKey]);
 
-    /* -------------------- submit -------------------- */
     async function submitRow(r) {
         if (!requireLoadOrWarn()) return;
 
@@ -371,10 +365,11 @@ export default function CollectionEntryPage() {
                 payload: {
                     loan_id: r.loan_id,
                     amount_received: amount,
-                    payment_mode: f.payment_mode || "CASH",
+                    payment_mode: "CASH",
                     receipt_no: f.receipt_no || null,
-                    remarks: f.remarks || null,
-                    payment_date: f.payment_date ? new Date(f.payment_date).toISOString() : null,
+                    ...(canEditPaymentDate && f.payment_date
+                        ? {payment_date: f.payment_date}
+                        : {}),
                 },
             });
 
@@ -386,6 +381,41 @@ export default function CollectionEntryPage() {
         }
     }
 
+    async function submitAdvanceRow(r) {
+        if (!requireLoadOrWarn()) return;
+
+        const key = `${r.installment_no}:${r.loan_id}`;
+        const f = rowForm[key] || {};
+
+        const rawAmt = f.advance_amount;
+        const amount =
+            rawAmt === "" || rawAmt === null || rawAmt === undefined ? null : Number(rawAmt);
+
+        if (amount === null || Number.isNaN(amount) || amount <= 0) return;
+
+        setPosting((p) => ({...p, [`adv_${key}`]: true}));
+
+        try {
+            await addLoanAdvance.mutateAsync({
+                loan_id: r.loan_id,
+                payload: {
+                    amount_received: amount,
+                    payment_mode: "CASH",
+                    receipt_no: f.receipt_no || null,
+                    ...(canEditPaymentDate && f.payment_date
+                        ? {payment_date: f.payment_date}
+                        : {}),
+                },
+            });
+
+            updateForm(key, {advance_amount: ""});
+        } catch (e) {
+            console.error("Advance add failed:", e);
+        } finally {
+            setPosting((p) => ({...p, [`adv_${key}`]: false}));
+        }
+    }
+
     async function collectAllRows(items) {
         if (!requireLoadOrWarn()) return;
         if (!Array.isArray(items) || items.length === 0) return;
@@ -394,8 +424,10 @@ export default function CollectionEntryPage() {
         const queue = (items || []).filter((r) => {
             const key = `${r.installment_no}:${r.loan_id}`;
             const f = rowForm[key] || {};
-            const amount = Number(f.amount_received || 0);
-            return !posted[key] && amount > 0;
+            const collectionAmount = Number(f.amount_received || 0);
+            const advanceAmount = Number(f.advance_amount || 0);
+
+            return !posted[key] && (collectionAmount > 0 || advanceAmount > 0);
         });
 
         setCollectAllProgress({done: 0, total: queue.length});
@@ -403,8 +435,22 @@ export default function CollectionEntryPage() {
 
         try {
             let done = 0;
+
             for (const r of queue) {
-                await submitRow(r);
+                const key = `${r.installment_no}:${r.loan_id}`;
+                const f = rowForm[key] || {};
+
+                const collectionAmount = Number(f.amount_received || 0);
+                const advanceAmount = Number(f.advance_amount || 0);
+
+                if (collectionAmount > 0) {
+                    await submitRow(r);
+                }
+
+                if (advanceAmount > 0) {
+                    await submitAdvanceRow(r);
+                }
+
                 done += 1;
                 setCollectAllProgress({done, total: queue.length});
             }
@@ -413,7 +459,6 @@ export default function CollectionEntryPage() {
         }
     }
 
-    /* -------------------- statement helpers -------------------- */
     const loanAccountById = useMemo(() => {
         const m = new Map();
         (rows || []).forEach((r) => {
@@ -444,11 +489,11 @@ export default function CollectionEntryPage() {
         downloadCSV(`loan_${accNo}_statement_${todayYYYYMMDD()}.csv`, [header, ...data]);
     }
 
-    /* -------------------- table renderer -------------------- */
     const renderGroupTable = (items) => {
         let dueTotal = 0;
         let prevOverdueTotal = 0;
         let enteredTotal = 0;
+        let advanceEnteredTotal = 0;
         let submittedTotal = 0;
 
         for (const r of items || []) {
@@ -457,11 +502,13 @@ export default function CollectionEntryPage() {
             const due = Number(r.due_left ?? 0);
             const prev = Number(r.overdue_prev ?? 0);
             const entered = Number(f.amount_received ?? 0);
+            const advEntered = Number(f.advance_amount ?? 0);
             const isDone = !!posted[k];
 
             dueTotal += Number.isFinite(due) ? due : 0;
             prevOverdueTotal += Number.isFinite(prev) ? prev : 0;
             enteredTotal += Number.isFinite(entered) ? entered : 0;
+            advanceEnteredTotal += Number.isFinite(advEntered) ? advEntered : 0;
             if (isDone) submittedTotal += Number.isFinite(entered) ? entered : 0;
         }
 
@@ -475,11 +522,10 @@ export default function CollectionEntryPage() {
                         <th className="p-2 border">Inst</th>
                         <th className="p-2 border">Prev Overdue</th>
                         <th className="p-2 border">Due Left</th>
-                        <th className="p-2 border">Amount</th>
-                        <th className="p-2 border">Mode</th>
+                        <th className="p-2 border">Collection Amount</th>
                         <th className="p-2 border">Receipt</th>
-                        <th className="p-2 border">DateTime</th>
-                        <th className="p-2 border">Remarks</th>
+                        {canEditPaymentDate ? <th className="p-2 border">DateTime</th> : null}
+                        <th className="p-2 border">Advance Amount</th>
                         <th className="p-2 border">Action</th>
                     </tr>
                     </thead>
@@ -489,6 +535,7 @@ export default function CollectionEntryPage() {
                         const key = `${r.installment_no}:${r.loan_id}`;
                         const f = rowForm[key] || {};
                         const isPosting = !!posting[key];
+                        const isAdvancePosting = !!posting[`adv_${key}`];
                         const isDone = !!posted[key];
 
                         return (
@@ -504,18 +551,19 @@ export default function CollectionEntryPage() {
                                                 <>
                                                     Loan A/c:{" "}
                                                     <span className="inline-flex items-center gap-2">
-                            {overdue && (
-                                <span className="relative flex h-3 w-3">
-                                <span
-                                    className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"/>
-                                <span className="relative inline-flex h-3 w-3 rounded-full bg-red-600"/>
-                              </span>
-                            )}
+                                                        {overdue && (
+                                                            <span className="relative flex h-3 w-3">
+                                                                <span
+                                                                    className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"/>
+                                                                <span
+                                                                    className="relative inline-flex h-3 w-3 rounded-full bg-red-600"/>
+                                                            </span>
+                                                        )}
                                                         <span
                                                             className={overdue ? "text-red-600 font-semibold" : "font-medium"}>
-                              {accNo}
-                            </span>
-                          </span>{" "}
+                                                            {accNo}
+                                                        </span>
+                                                    </span>{" "}
                                                     • Advance: {Number(r.advance_balance || 0).toFixed(2)}
                                                 </>
                                             );
@@ -525,7 +573,6 @@ export default function CollectionEntryPage() {
 
                                 <td className="p-2 border text-center">{String(r.due_date || "").slice(0, 10)}</td>
                                 <td className="p-2 border text-center">{r.installment_no}</td>
-
                                 <td className="p-2 border text-center">{Number(r.overdue_prev || 0).toFixed(2)}</td>
                                 <td className="p-2 border text-center">{Number(r.due_left || 0).toFixed(2)}</td>
 
@@ -548,27 +595,15 @@ export default function CollectionEntryPage() {
                                                 if (cleaned !== raw) setAmountError(key, "Only numbers and dot allowed");
                                                 else setAmountError(key, "");
 
-                                                const max = Number(r.due_left ?? 0);
-                                                const n = Number(cleaned);
-                                                if (Number.isFinite(max) && Number.isFinite(n) && n > max) {
-                                                    setAmountError(key, `Max ${max.toFixed(2)}`);
-                                                } else {
-                                                    if ((amountErrors[key] || "").startsWith("Max ")) setAmountError(key, "");
-                                                }
-
                                                 updateForm(key, {amount_received: cleaned});
                                             }}
                                             placeholder="0.00"
                                             disabled={isDone || isPosting || collectAllRunning}
                                         />
                                         {amountErrors[key] ? (
-                                            <div className="text-xs text-red-600">{amountErrors[key]}</div>
+                                            <div className="text-xs text-red-600 mt-1">{amountErrors[key]}</div>
                                         ) : null}
                                     </div>
-                                </td>
-
-                                <td className="p-2 border text-center">
-                                    <Input value={f.payment_mode || "CASH"} disabled/>
                                 </td>
 
                                 <td className="p-2 border">
@@ -576,30 +611,56 @@ export default function CollectionEntryPage() {
                                         value={f.receipt_no ?? ""}
                                         onChange={(e) => updateForm(key, {receipt_no: e.target.value})}
                                         placeholder="Receipt No"
-                                        disabled={isDone || isPosting || collectAllRunning}
+                                        disabled={isPosting || isAdvancePosting || collectAllRunning}
                                     />
                                 </td>
 
+                                {canEditPaymentDate ? (
+                                    <td className="p-2 border">
+                                        <Input
+                                            type="datetime-local"
+                                            value={f.payment_date ?? ""}
+                                            onChange={(e) => updateForm(key, {payment_date: e.target.value})}
+                                            disabled={isPosting || isAdvancePosting || collectAllRunning}
+                                        />
+                                    </td>
+                                ) : null}
+
                                 <td className="p-2 border">
-                                    <Input
-                                        type="datetime-local"
-                                        value={f.collected_at ?? ""}
-                                        onChange={(e) => updateForm(key, {collected_at: e.target.value})}
-                                        disabled={isDone || isPosting || collectAllRunning}
-                                    />
+                                    <div className="flex items-center gap-2">
+                                        <Input
+                                            inputMode="decimal"
+                                            value={f.advance_amount ?? ""}
+                                            onChange={(e) => {
+                                                const raw = e.target.value;
+                                                const cleaned = sanitizeAmountInput(raw);
+                                                updateForm(key, {advance_amount: cleaned});
+                                            }}
+                                            placeholder="0.00"
+                                            disabled={isAdvancePosting || isPosting || collectAllRunning}
+                                        />
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => submitAdvanceRow(r)}
+                                            disabled={
+                                                isAdvancePosting ||
+                                                isPosting ||
+                                                collectAllRunning ||
+                                                !Number(f.advance_amount || 0)
+                                            }
+                                        >
+                                            {isAdvancePosting ? (
+                                                <Loader2 className="h-4 w-4 animate-spin"/>
+                                            ) : (
+                                                "Add Advance"
+                                            )}
+                                        </Button>
+                                    </div>
                                 </td>
 
                                 <td className="p-2 border">
-                                    <Input
-                                        value={f.remarks ?? ""}
-                                        onChange={(e) => updateForm(key, {remarks: e.target.value})}
-                                        placeholder="Remarks"
-                                        disabled={isDone || isPosting || collectAllRunning}
-                                    />
-                                </td>
-
-                                <td className="p-2 border">
-                                    <div className="flex items-center justify-center gap-2">
+                                    <div className="flex items-center justify-center">
                                         <Button
                                             size="sm"
                                             onClick={() => submitRow(r)}
@@ -619,20 +680,6 @@ export default function CollectionEntryPage() {
                                                 "Submit"
                                             )}
                                         </Button>
-
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => {
-                                                if (collectAllRunning) return;
-                                                if (!requireLoadOrWarn()) return;
-                                                setSelectedLoanId(r.loan_id);
-                                                setOpenPayments(true);
-                                            }}
-                                        >
-                                            <Eye className="h-4 w-4 mr-2"/>
-                                            View
-                                        </Button>
                                     </div>
                                 </td>
                             </tr>
@@ -647,9 +694,8 @@ export default function CollectionEntryPage() {
                         <td className="p-2 border text-right">{dueTotal.toFixed(2)}</td>
                         <td className="p-2 border text-right">{enteredTotal.toFixed(2)}</td>
                         <td className="p-2 border"/>
-                        <td className="p-2 border"/>
-                        <td className="p-2 border"/>
-                        <td className="p-2 border"/>
+                        {canEditPaymentDate ? <td className="p-2 border"/> : null}
+                        <td className="p-2 border text-right">{advanceEnteredTotal.toFixed(2)}</td>
                         <td className="p-2 border text-right">{submittedTotal.toFixed(2)}</td>
                     </tr>
                     </tbody>
@@ -658,12 +704,11 @@ export default function CollectionEntryPage() {
         );
     };
 
-    /* -------------------- Load Due gating -------------------- */
     const disableLoadDue =
         isLoadingDue ||
         !(branchId || resolvedBranchId) ||
         !(loId || resolvedLoId) ||
-        (isLoanOfficer && losLoading); // wait for mapping
+        (isLoanOfficer && losLoading);
 
     const loadDueLabel =
         isLoanOfficer && losLoading ? "Loading..." : "Load Due";
@@ -708,7 +753,6 @@ export default function CollectionEntryPage() {
                 </CardContent>
             </Card>
 
-            {/* Due Collections */}
             <Card>
                 <CardHeader className="pb-2">
                     <CardTitle className="text-base">Due Collections</CardTitle>
@@ -764,7 +808,6 @@ export default function CollectionEntryPage() {
                 </CardContent>
             </Card>
 
-            {/* Group Modal */}
             <Dialog open={openGroupModal} onOpenChange={setOpenGroupModal}>
                 <DialogContent className="max-w-7xl">
                     <DialogHeader>
@@ -775,14 +818,14 @@ export default function CollectionEntryPage() {
                                 size="sm"
                                 onClick={() => collectAllRows(selectedGroup?.items || [])}
                                 disabled={!selectedGroup || collectAllRunning}
-                                title="Submit all pending rows in this group"
+                                title="Submit all pending collection and advance rows in this group"
                             >
                                 {collectAllRunning ? (
                                     <>
                                         <Loader2 className="h-4 w-4 animate-spin"/>
                                         <span className="ml-2">
-                      Collecting {collectAllProgress.done}/{collectAllProgress.total}
-                    </span>
+                Collecting {collectAllProgress.done}/{collectAllProgress.total}
+            </span>
                                     </>
                                 ) : (
                                     "Collect All"
@@ -799,7 +842,6 @@ export default function CollectionEntryPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* Warning Modal */}
             <Dialog open={warnOpen} onOpenChange={setWarnOpen}>
                 <DialogContent className="max-w-md">
                     <DialogHeader>
@@ -826,15 +868,14 @@ export default function CollectionEntryPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* Payments Modal */}
             <LoanPaymentsDialog
                 open={openPayments}
                 onOpenChange={setOpenPayments}
-                selectedLoanId={selectedLoanId}
-                selectedLoanAccountNo={selectedLoanAccountNo}
+                loanId={selectedLoanId}
+                loanAccountNo={selectedLoanAccountNo}
                 paymentsLoading={paymentsLoading}
                 paymentRows={paymentRows}
-                downloadStatementCSV={downloadStatementCSV}
+                onDownloadCSV={downloadStatementCSV}
             />
         </div>
     );
