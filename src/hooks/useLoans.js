@@ -606,7 +606,7 @@ export function useEditCollectionByLedger() {
                 if (ist) cleanPayload.payment_date = ist;
             }
 
-            const res = await apiClient.patch(`/loans/ledger/${ledId}`, cleanPayload);
+            const res = await apiClient.patch(`/loans/collections/pay/${ledId}`, cleanPayload);
             return res.data;
         },
 
