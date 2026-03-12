@@ -275,6 +275,7 @@ function buildDetailedSheet({
 
     let currentWeek = null;
     let weekStartRow = null;
+    const weeklyTotalRows = [];
 
     function flushWeeklyTotal() {
         if (!currentWeek || !weekStartRow) return;
@@ -293,6 +294,8 @@ function buildDetailedSheet({
         ]);
 
         const totalRow = ws.lastRow.number;
+        weeklyTotalRows.push(totalRow);
+
         ws.getRow(totalRow).font = {name: FONT_NAME, size: 10, bold: true};
         ws.getRow(totalRow).fill = {
             type: "pattern",
@@ -334,18 +337,28 @@ function buildDetailedSheet({
 
     flushWeeklyTotal();
 
-    const firstDataRow = 8;
-    const lastDataRowBeforeClosing = ws.lastRow.number;
+    function weeklyRowsAddFormula(col) {
+        if (!weeklyTotalRows.length) return 0;
+        return {
+            formula: weeklyTotalRows.map((r) => `${col}${r}`).join("+"),
+        };
+    }
+
+    const lastWeeklyRow = weeklyTotalRows.length
+        ? weeklyTotalRows[weeklyTotalRows.length - 1]
+        : null;
 
     ws.addRow([
         "Month Closing",
         "",
-        makeSumFormula("C", firstDataRow, lastDataRowBeforeClosing),
-        makeSumFormula("D", firstDataRow, lastDataRowBeforeClosing),
-        makeSumFormula("E", firstDataRow, lastDataRowBeforeClosing),
-        makeSumFormula("F", firstDataRow, lastDataRowBeforeClosing),
-        n(closingBranch?.loans_with_advance),
-        n(closingCalc?.closing_balance_amt ?? closingBranch?.advance_balance_amt),
+        weeklyRowsAddFormula("C"), // advance add count only from weekly totals
+        weeklyRowsAddFormula("D"), // advance add amount only from weekly totals
+        weeklyRowsAddFormula("E"), // advance deduct count only from weekly totals
+        weeklyRowsAddFormula("F"), // advance deduct amount only from weekly totals
+        lastWeeklyRow ? {formula: `G${lastWeeklyRow}`} : n(closingBranch?.loans_with_advance),
+        lastWeeklyRow
+            ? {formula: `H${lastWeeklyRow}`}
+            : n(closingCalc?.closing_balance_amt ?? closingBranch?.advance_balance_amt),
     ]);
 
     const closingRow = ws.lastRow.number;

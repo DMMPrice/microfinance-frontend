@@ -31,6 +31,22 @@ function monthLongLabel(monthStart) {
     return x.toLocaleDateString("en-US", {month: "long", year: "numeric"});
 }
 
+function weekdayLabel(value) {
+    const x = d(value);
+    if (!(x instanceof Date) || Number.isNaN(x.getTime())) return "";
+    return x.toLocaleDateString("en-US", {weekday: "long"});
+}
+
+function groupLabel(item) {
+    const name = item?.group_name || "";
+    const meetingDay =
+        item?.meeting_day_name ||
+        item?.meeting_day ||
+        item?.meetingDay ||
+        "";
+    return meetingDay ? `${name} (${meetingDay})` : name;
+}
+
 function setCell(ws, ref, value, opts = {}) {
     const cell = ws.getCell(ref);
     cell.value = value;
@@ -71,7 +87,7 @@ function setDataNumberFormats(ws, startRow, endRow, cols) {
         for (let c = 1; c <= ws.columnCount; c += 1) {
             ws.getRow(r).getCell(c).font = {name: FONT_NAME, size: 10};
             ws.getRow(r).getCell(c).alignment = {
-                horizontal: c <= 2 ? "left" : "right",
+                horizontal: c <= 3 ? "left" : "right",
                 vertical: "center",
                 wrapText: true,
             };
@@ -172,7 +188,7 @@ function buildOpenCloseSheet({
     (rows || []).forEach((item, idx) => {
         ws.addRow([
             idx + 1,
-            item.group_name || "",
+            groupLabel(item),
             n(item.disbursed_cnt),
             n(item.disbursed_amt),
             n(item.outstanding_cnt),
@@ -209,7 +225,7 @@ function buildOpenCloseSheet({
     setDataNumberFormats(ws, 7, totalRow, [3, 4, 5, 6, 7, 8]);
 
     ws.getColumn(1).width = 9.71;
-    ws.getColumn(2).width = 19.0;
+    ws.getColumn(2).width = 24.0;
     ws.getColumn(3).width = 9.71;
     ws.getColumn(4).width = 10.29;
     ws.getColumn(5).width = 9.71;
@@ -236,42 +252,46 @@ function buildDetailedSheet({
         `Branch Name: ${branchName || ""}`,
         `Branch Officer: ${branchOfficerName || ""}`,
         `Month: ${monthLongLabel(monthStart)}`,
-        12
+        13
     );
 
     ws.mergeCells("A4:A6");
     ws.mergeCells("B4:B6");
-    ws.mergeCells("C4:L4");
-    ws.mergeCells("C5:D5");
-    ws.mergeCells("E5:E6");
+    ws.mergeCells("C4:C6");
+    ws.mergeCells("D4:M4");
+    ws.mergeCells("D5:E5");
     ws.mergeCells("F5:F6");
-    ws.mergeCells("G5:H5");
-    ws.mergeCells("I5:J5");
-    ws.mergeCells("K5:L5");
+    ws.mergeCells("G5:G6");
+    ws.mergeCells("H5:I5");
+    ws.mergeCells("J5:K5");
+    ws.mergeCells("L5:M5");
 
     setCell(ws, "A4", "Type");
     setCell(ws, "B4", "Date");
-    setCell(ws, "C4", "Micro Loan");
-    setCell(ws, "C5", "Disburse With Interest");
-    setCell(ws, "E5", "Realisable");
-    setCell(ws, "F5", "Realised");
-    setCell(ws, "G5", "Overdue");
-    setCell(ws, "I5", "Full Paid");
-    setCell(ws, "K5", "Balance/Outstanding");
-    setCell(ws, "C6", "Member");
-    setCell(ws, "D6", "Amount");
-    setCell(ws, "G6", "Member");
-    setCell(ws, "H6", "Amount");
-    setCell(ws, "I6", "Member");
-    setCell(ws, "J6", "Amount");
-    setCell(ws, "K6", "Member");
-    setCell(ws, "L6", "Amount");
+    setCell(ws, "C4", "Weekday");
+    setCell(ws, "D4", "Micro Loan");
+    setCell(ws, "D5", "Disburse With Interest");
+    setCell(ws, "F5", "Realisable");
+    setCell(ws, "G5", "Realised");
+    setCell(ws, "H5", "Overdue");
+    setCell(ws, "J5", "Full Paid");
+    setCell(ws, "L5", "Balance/Outstanding");
 
-    fillHeaderRange(ws, "A4:L6");
+    setCell(ws, "D6", "Member");
+    setCell(ws, "E6", "Amount");
+    setCell(ws, "H6", "Member");
+    setCell(ws, "I6", "Amount");
+    setCell(ws, "J6", "Member");
+    setCell(ws, "K6", "Amount");
+    setCell(ws, "L6", "Member");
+    setCell(ws, "M6", "Amount");
+
+    fillHeaderRange(ws, "A4:M6");
     ws.getRow(5).height = 31.5;
 
     ws.addRow([
         "Opening Balance",
+        "",
         "",
         0,
         0,
@@ -287,6 +307,7 @@ function buildDetailedSheet({
 
     let currentWeek = null;
     let weekStartRow = null;
+    const weeklyTotalRows = [];
 
     function flushWeeklyTotal() {
         if (!currentWeek || !weekStartRow) return;
@@ -296,19 +317,22 @@ function buildDetailedSheet({
         ws.addRow([
             "Weekly Regular Total",
             "",
-            makeSumFormula("C", weekStartRow, lastRegularRow),
-            makeSumFormula("D", weekStartRow, lastRegularRow),
-            makeSumFormula("E", weekStartRow, lastRegularRow),
-            makeSumFormula("F", weekStartRow, lastRegularRow),
-            {formula: `G${lastRegularRow}`},
-            {formula: `H${lastRegularRow}`},
-            makeSumFormula("I", weekStartRow, lastRegularRow),
-            makeSumFormula("J", weekStartRow, lastRegularRow),
-            {formula: `K${lastRegularRow}`},
-            {formula: `L${lastRegularRow}`},
+            "",
+            makeSumFormula("D", weekStartRow, lastRegularRow), // disb cnt
+            makeSumFormula("E", weekStartRow, lastRegularRow), // disb amt
+            makeSumFormula("F", weekStartRow, lastRegularRow), // realisable
+            makeSumFormula("G", weekStartRow, lastRegularRow), // realised
+            {formula: `H${lastRegularRow}`},                   // overdue cnt (carry last)
+            {formula: `I${lastRegularRow}`},                   // overdue amt (carry last)
+            makeSumFormula("J", weekStartRow, lastRegularRow), // full paid cnt
+            makeSumFormula("K", weekStartRow, lastRegularRow), // full paid amt
+            {formula: `L${lastRegularRow}`},                   // balance cnt (carry last)
+            {formula: `M${lastRegularRow}`},                   // balance amt (carry last)
         ]);
 
         const totalRow = ws.lastRow.number;
+        weeklyTotalRows.push(totalRow);
+
         ws.getRow(totalRow).font = {name: FONT_NAME, size: 10, bold: true};
         ws.getRow(totalRow).fill = {
             type: "pattern",
@@ -339,6 +363,7 @@ function buildDetailedSheet({
         ws.addRow([
             "Regular Collection",
             dt,
+            weekdayLabel(item.txn_date),
             n(item.disb_cnt),
             n(item.disb_amt),
             n(item.realisable_amt),
@@ -354,22 +379,27 @@ function buildDetailedSheet({
 
     flushWeeklyTotal();
 
-    const firstDataRow = 8;
-    const lastDataRowBeforeClosing = ws.lastRow.number;
+    function weeklyRowsAddFormula(col) {
+        if (!weeklyTotalRows.length) return 0;
+        return {
+            formula: weeklyTotalRows.map((r) => `${col}${r}`).join("+"),
+        };
+    }
 
     ws.addRow([
         "Month Closing",
         "",
-        makeSumFormula("C", firstDataRow, lastDataRowBeforeClosing),
-        makeSumFormula("D", firstDataRow, lastDataRowBeforeClosing),
-        {formula: `${n(openingBranch?.outstanding_amt)}+SUM(E${firstDataRow}:E${lastDataRowBeforeClosing})`},
-        {formula: `SUM(F${firstDataRow}:F${lastDataRowBeforeClosing})`},
-        n(closingBranch?.overdue_cnt),
-        n(closingBranch?.overdue_amt),
-        makeSumFormula("I", firstDataRow, lastDataRowBeforeClosing),
-        makeSumFormula("J", firstDataRow, lastDataRowBeforeClosing),
-        n(closingBranch?.outstanding_cnt),
-        n(closingBranch?.outstanding_amt),
+        "",
+        weeklyRowsAddFormula("D"), // only weekly totals
+        weeklyRowsAddFormula("E"), // only weekly totals
+        weeklyRowsAddFormula("F"), // only weekly totals
+        weeklyRowsAddFormula("G"), // only weekly totals
+        weeklyTotalRows.length ? {formula: `H${weeklyTotalRows[weeklyTotalRows.length - 1]}`} : n(closingBranch?.overdue_cnt),
+        weeklyTotalRows.length ? {formula: `I${weeklyTotalRows[weeklyTotalRows.length - 1]}`} : n(closingBranch?.overdue_amt),
+        weeklyRowsAddFormula("J"), // only weekly totals
+        weeklyRowsAddFormula("K"), // only weekly totals
+        weeklyTotalRows.length ? {formula: `L${weeklyTotalRows[weeklyTotalRows.length - 1]}`} : n(closingBranch?.outstanding_cnt),
+        weeklyTotalRows.length ? {formula: `M${weeklyTotalRows[weeklyTotalRows.length - 1]}`} : n(closingBranch?.outstanding_amt),
     ]);
 
     const closingRow = ws.lastRow.number;
@@ -380,8 +410,8 @@ function buildDetailedSheet({
         fgColor: {argb: "FFE8F4EA"},
     };
 
-    addBorderRect(ws, 4, ws.lastRow.number, 1, 12);
-    setDataNumberFormats(ws, 7, ws.lastRow.number, [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    addBorderRect(ws, 4, ws.lastRow.number, 1, 13);
+    setDataNumberFormats(ws, 7, ws.lastRow.number, [4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
 
     for (let r = 8; r <= ws.lastRow.number; r += 1) {
         const dateCell = ws.getRow(r).getCell(2);
@@ -389,20 +419,27 @@ function buildDetailedSheet({
             dateCell.numFmt = "dd-mmm-yy";
             dateCell.alignment = {horizontal: "left", vertical: "center"};
         }
+
+        ws.getRow(r).getCell(3).alignment = {
+            horizontal: "left",
+            vertical: "center",
+            wrapText: true,
+        };
     }
 
     ws.getColumn(1).width = 21.43;
     ws.getColumn(2).width = 15.29;
-    ws.getColumn(3).width = 8.43;
-    ws.getColumn(4).width = 10.29;
-    ws.getColumn(5).width = 10.57;
-    ws.getColumn(6).width = 10.29;
-    ws.getColumn(7).width = 8.43;
-    ws.getColumn(8).width = 9.29;
-    ws.getColumn(9).width = 8.43;
-    ws.getColumn(10).width = 9.29;
-    ws.getColumn(11).width = 8.43;
-    ws.getColumn(12).width = 13.57;
+    ws.getColumn(3).width = 14.0;
+    ws.getColumn(4).width = 8.43;
+    ws.getColumn(5).width = 10.29;
+    ws.getColumn(6).width = 10.57;
+    ws.getColumn(7).width = 10.29;
+    ws.getColumn(8).width = 8.43;
+    ws.getColumn(9).width = 9.29;
+    ws.getColumn(10).width = 8.43;
+    ws.getColumn(11).width = 9.29;
+    ws.getColumn(12).width = 8.43;
+    ws.getColumn(13).width = 13.57;
 }
 
 export async function exportLoanTopSheetExcel({
