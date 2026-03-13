@@ -26,6 +26,7 @@ import {
     useCreateLoanPayment,
     useLoanPayments,
     useAddLoanAdvance,
+    useDeductLoanAdvance,
 } from "@/hooks/useLoans.js";
 import {getProfileData, getUserRole, getUserBranchId} from "@/hooks/useApi.js";
 
@@ -148,6 +149,7 @@ export default function CollectionEntryPage() {
     const isBranchManager = roleName === "branch_manager";
     const isLoanOfficer = roleName === "loan_officer";
     const canEditPaymentDate = isBranchManager;
+    const canDeductAdvance = isBranchManager;
 
     const hideBranchField = isBranchManager || isLoanOfficer;
     const hideLoField = isLoanOfficer;
@@ -235,6 +237,7 @@ export default function CollectionEntryPage() {
 
     const createPayment = useCreateLoanPayment();
     const addLoanAdvance = useAddLoanAdvance();
+    const deductLoanAdvance = useDeductLoanAdvance();
 
     const {data: paymentRows = [], isLoading: paymentsLoading} = useLoanPayments(
         selectedLoanId,
@@ -307,8 +310,8 @@ export default function CollectionEntryPage() {
                 next[key] = {
                     amount_received: r.due_left ? String(r.due_left) : "",
                     advance_amount: "",
+                    deduct_advance_amount: "",
                     payment_mode: "CASH",
-                    receipt_no: "",
                     payment_date: getLocalDateTimeValue(),
                 };
             });
@@ -366,7 +369,6 @@ export default function CollectionEntryPage() {
                     loan_id: r.loan_id,
                     amount_received: amount,
                     payment_mode: "CASH",
-                    receipt_no: f.receipt_no || null,
                     ...(canEditPaymentDate && f.payment_date
                         ? {payment_date: f.payment_date}
                         : {}),
@@ -401,7 +403,6 @@ export default function CollectionEntryPage() {
                 payload: {
                     amount_received: amount,
                     payment_mode: "CASH",
-                    receipt_no: f.receipt_no || null,
                     ...(canEditPaymentDate && f.payment_date
                         ? {payment_date: f.payment_date}
                         : {}),
@@ -416,6 +417,41 @@ export default function CollectionEntryPage() {
         }
     }
 
+    async function submitDeductAdvanceRow(r) {
+        if (!requireLoadOrWarn() || !canDeductAdvance) return;
+
+        const key = `${r.installment_no}:${r.loan_id}`;
+        const f = rowForm[key] || {};
+
+        const rawAmt = f.deduct_advance_amount;
+        const amount =
+            rawAmt === "" || rawAmt === null || rawAmt === undefined ? null : Number(rawAmt);
+
+        if (amount === null || Number.isNaN(amount) || amount <= 0) return;
+
+        setPosting((p) => ({...p, [`ded_${key}`]: true}));
+
+        try {
+            await deductLoanAdvance.mutateAsync({
+                loan_id: r.loan_id,
+                payload: {
+                    amount_received: amount,
+                    payment_mode: "CASH",
+                    reason: "Advance deducted from collection entry",
+                    ...(canEditPaymentDate && f.payment_date
+                        ? {payment_date: f.payment_date}
+                        : {}),
+                },
+            });
+
+            updateForm(key, {deduct_advance_amount: ""});
+        } catch (e) {
+            console.error("Advance deduct failed:", e);
+        } finally {
+            setPosting((p) => ({...p, [`ded_${key}`]: false}));
+        }
+    }
+
     async function collectAllRows(items) {
         if (!requireLoadOrWarn()) return;
         if (!Array.isArray(items) || items.length === 0) return;
@@ -426,8 +462,9 @@ export default function CollectionEntryPage() {
             const f = rowForm[key] || {};
             const collectionAmount = Number(f.amount_received || 0);
             const advanceAmount = Number(f.advance_amount || 0);
+            const deductAdvanceAmount = Number(f.deduct_advance_amount || 0);
 
-            return !posted[key] && (collectionAmount > 0 || advanceAmount > 0);
+            return !posted[key] && (collectionAmount > 0 || advanceAmount > 0 || deductAdvanceAmount > 0);
         });
 
         setCollectAllProgress({done: 0, total: queue.length});
@@ -442,6 +479,7 @@ export default function CollectionEntryPage() {
 
                 const collectionAmount = Number(f.amount_received || 0);
                 const advanceAmount = Number(f.advance_amount || 0);
+                const deductAdvanceAmount = Number(f.deduct_advance_amount || 0);
 
                 if (collectionAmount > 0) {
                     await submitRow(r);
@@ -449,6 +487,10 @@ export default function CollectionEntryPage() {
 
                 if (advanceAmount > 0) {
                     await submitAdvanceRow(r);
+                }
+
+                if (canDeductAdvance && deductAdvanceAmount > 0) {
+                    await submitDeductAdvanceRow(r);
                 }
 
                 done += 1;
@@ -494,6 +536,7 @@ export default function CollectionEntryPage() {
         let prevOverdueTotal = 0;
         let enteredTotal = 0;
         let advanceEnteredTotal = 0;
+        let deductAdvanceEnteredTotal = 0;
         let submittedTotal = 0;
 
         for (const r of items || []) {
@@ -503,12 +546,14 @@ export default function CollectionEntryPage() {
             const prev = Number(r.overdue_prev ?? 0);
             const entered = Number(f.amount_received ?? 0);
             const advEntered = Number(f.advance_amount ?? 0);
+            const dedAdvEntered = Number(f.deduct_advance_amount ?? 0);
             const isDone = !!posted[k];
 
             dueTotal += Number.isFinite(due) ? due : 0;
             prevOverdueTotal += Number.isFinite(prev) ? prev : 0;
             enteredTotal += Number.isFinite(entered) ? entered : 0;
             advanceEnteredTotal += Number.isFinite(advEntered) ? advEntered : 0;
+            deductAdvanceEnteredTotal += Number.isFinite(dedAdvEntered) ? dedAdvEntered : 0;
             if (isDone) submittedTotal += Number.isFinite(entered) ? entered : 0;
         }
 
@@ -523,9 +568,9 @@ export default function CollectionEntryPage() {
                         <th className="p-2 border">Prev Overdue</th>
                         <th className="p-2 border">Due Left</th>
                         <th className="p-2 border">Collection Amount</th>
-                        <th className="p-2 border">Receipt</th>
                         {canEditPaymentDate ? <th className="p-2 border">DateTime</th> : null}
                         <th className="p-2 border">Advance Amount</th>
+                        {canDeductAdvance ? <th className="p-2 border">Deduct Advance</th> : null}
                         <th className="p-2 border">Action</th>
                     </tr>
                     </thead>
@@ -536,6 +581,7 @@ export default function CollectionEntryPage() {
                         const f = rowForm[key] || {};
                         const isPosting = !!posting[key];
                         const isAdvancePosting = !!posting[`adv_${key}`];
+                        const isDeductAdvancePosting = !!posting[`ded_${key}`];
                         const isDone = !!posted[key];
 
                         return (
@@ -580,7 +626,7 @@ export default function CollectionEntryPage() {
                                     <div className="space-y-1">
                                         <Input
                                             inputMode="decimal"
-                                            value={f.amount_received ?? ""}
+                                            value={r.installment_amount ?? ""}
                                             onChange={(e) => {
                                                 const raw = e.target.value;
 
@@ -606,22 +652,13 @@ export default function CollectionEntryPage() {
                                     </div>
                                 </td>
 
-                                <td className="p-2 border">
-                                    <Input
-                                        value={f.receipt_no ?? ""}
-                                        onChange={(e) => updateForm(key, {receipt_no: e.target.value})}
-                                        placeholder="Receipt No"
-                                        disabled={isPosting || isAdvancePosting || collectAllRunning}
-                                    />
-                                </td>
-
                                 {canEditPaymentDate ? (
                                     <td className="p-2 border">
                                         <Input
                                             type="datetime-local"
                                             value={f.payment_date ?? ""}
                                             onChange={(e) => updateForm(key, {payment_date: e.target.value})}
-                                            disabled={isPosting || isAdvancePosting || collectAllRunning}
+                                            disabled={isPosting || isAdvancePosting || isDeductAdvancePosting || collectAllRunning}
                                         />
                                     </td>
                                 ) : null}
@@ -659,6 +696,41 @@ export default function CollectionEntryPage() {
                                     </div>
                                 </td>
 
+                                {canDeductAdvance ? (
+                                    <td className="p-2 border">
+                                        <div className="flex items-center gap-2">
+                                            <Input
+                                                inputMode="decimal"
+                                                value={f.deduct_advance_amount ?? ""}
+                                                onChange={(e) => {
+                                                    const raw = e.target.value;
+                                                    const cleaned = sanitizeAmountInput(raw);
+                                                    updateForm(key, {deduct_advance_amount: cleaned});
+                                                }}
+                                                placeholder="0.00"
+                                                disabled={isDeductAdvancePosting || isPosting || collectAllRunning}
+                                            />
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => submitDeductAdvanceRow(r)}
+                                                disabled={
+                                                    isDeductAdvancePosting ||
+                                                    isPosting ||
+                                                    collectAllRunning ||
+                                                    !Number(f.deduct_advance_amount || 0)
+                                                }
+                                            >
+                                                {isDeductAdvancePosting ? (
+                                                    <Loader2 className="h-4 w-4 animate-spin"/>
+                                                ) : (
+                                                    "Deduct"
+                                                )}
+                                            </Button>
+                                        </div>
+                                    </td>
+                                ) : null}
+
                                 <td className="p-2 border">
                                     <div className="flex items-center justify-center">
                                         <Button
@@ -693,9 +765,11 @@ export default function CollectionEntryPage() {
                         <td className="p-2 border text-right">{prevOverdueTotal.toFixed(2)}</td>
                         <td className="p-2 border text-right">{dueTotal.toFixed(2)}</td>
                         <td className="p-2 border text-right">{enteredTotal.toFixed(2)}</td>
-                        <td className="p-2 border"/>
                         {canEditPaymentDate ? <td className="p-2 border"/> : null}
                         <td className="p-2 border text-right">{advanceEnteredTotal.toFixed(2)}</td>
+                        {canDeductAdvance ? (
+                            <td className="p-2 border text-right">{deductAdvanceEnteredTotal.toFixed(2)}</td>
+                        ) : null}
                         <td className="p-2 border text-right">{submittedTotal.toFixed(2)}</td>
                     </tr>
                     </tbody>
@@ -824,8 +898,8 @@ export default function CollectionEntryPage() {
                                     <>
                                         <Loader2 className="h-4 w-4 animate-spin"/>
                                         <span className="ml-2">
-                Collecting {collectAllProgress.done}/{collectAllProgress.total}
-            </span>
+                                            Collecting {collectAllProgress.done}/{collectAllProgress.total}
+                                        </span>
                                     </>
                                 ) : (
                                     "Collect All"

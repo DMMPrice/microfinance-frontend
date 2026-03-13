@@ -657,3 +657,29 @@ export function useAddLoanAdvance() {
         },
     });
 }
+
+/* -------------------- DEDUCT LOAN ADVANCE -------------------- */
+export function useDeductLoanAdvance() {
+    const qc = useQueryClient();
+
+    return useMutation({
+        mutationFn: async ({loan_id, payload}) => {
+            const loanId = normalizeId(loan_id);
+            if (!loanId) throw new Error("loan_id is required");
+            if (!payload || typeof payload !== "object") {
+                throw new Error("payload is required");
+            }
+
+            return (
+                await apiClient.post(`/loans/${loanId}/advance/deduct`, payload)
+            ).data;
+        },
+        onSuccess: (_data, vars) => {
+            invalidateLoanCommon(qc);
+            invalidateLoanDetails(qc, {
+                loan_id: vars?.loan_id,
+                loan_account_no: vars?.loan_account_no,
+            });
+        },
+    });
+}

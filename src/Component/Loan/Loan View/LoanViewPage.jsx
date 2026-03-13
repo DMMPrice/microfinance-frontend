@@ -10,6 +10,7 @@ import {Input} from "@/components/ui/input.tsx";
 import {Button} from "@/components/ui/button.tsx";
 
 import {useLoanSummary, useLoanSchedule, useLoanStatement} from "@/hooks/useLoans.js";
+import LoanAdvanceActionModal from "@/Component/Loan/LoanAdvanceActionModal.jsx";
 import {useLoanOfficerById} from "@/hooks/useLoanOfficers.js";
 import AdvancedTable from "@/Utils/AdvancedTable.jsx";
 
@@ -75,9 +76,23 @@ export default function LoanViewPage() {
     const [editOpen, setEditOpen] = useState(false);
     const [editRow, setEditRow] = useState(null);
 
+    // ✅ Advance modal state
+    const [advanceModalOpen, setAdvanceModalOpen] = useState(false);
+    const [advanceModalMode, setAdvanceModalMode] = useState("add");
+
     const openEdit = (row) => {
         setEditRow(row);
         setEditOpen(true);
+    };
+
+    const openAddAdvance = () => {
+        setAdvanceModalMode("add");
+        setAdvanceModalOpen(true);
+    };
+
+    const openDeductAdvance = () => {
+        setAdvanceModalMode("deduct");
+        setAdvanceModalOpen(true);
     };
 
     useEffect(() => {
@@ -320,13 +335,32 @@ export default function LoanViewPage() {
                             </div>
                         </div>
 
-                        {summary?.status ? (
-                            <Badge className="text-sm">{summary.status}</Badge>
-                        ) : (
-                            <Badge variant="secondary" className="text-sm">
-                                -
-                            </Badge>
-                        )}
+                        <div className="flex flex-col items-end gap-2">
+                            <div className="flex flex-wrap justify-end gap-2">
+                                <Button
+                                    variant="outline"
+                                    onClick={openAddAdvance}
+                                    disabled={!summary?.loan_id}
+                                >
+                                    Add Advance
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    onClick={openDeductAdvance}
+                                    disabled={!summary?.loan_id}
+                                >
+                                    Deduct Advance
+                                </Button>
+                            </div>
+
+                            {summary?.status ? (
+                                <Badge className="text-sm">{summary.status}</Badge>
+                            ) : (
+                                <Badge variant="secondary" className="text-sm">
+                                    -
+                                </Badge>
+                            )}
+                        </div>
                     </div>
                 </CardHeader>
 
@@ -378,8 +412,10 @@ export default function LoanViewPage() {
                     ) : !summary ? (
                         <p className="text-sm text-muted-foreground">No summary found.</p>
                     ) : (
-                        <LoanSummaryKpis summary={summary}
-                                         loanOfficerName={loLoading ? "-" : (loError ? `LO-${loId}` : loanOfficerName)}/>
+                        <LoanSummaryKpis
+                            summary={summary}
+                            loanOfficerName={loLoading ? "-" : (loError ? `LO-${loId}` : loanOfficerName)}
+                        />
                     )}
                 </CardContent>
             </Card>
@@ -391,7 +427,6 @@ export default function LoanViewPage() {
                 </CardHeader>
 
                 <CardContent>
-                    {/* ✅ Only 2 tabs now */}
                     <Tabs defaultValue="schedule" className="w-full">
                         <TabsList>
                             <TabsTrigger value="schedule">Schedule</TabsTrigger>
@@ -434,7 +469,17 @@ export default function LoanViewPage() {
                 </CardContent>
             </Card>
 
-            {/* Mount modal once */}
+            {/* Advance Modal */}
+            <LoanAdvanceActionModal
+                open={advanceModalOpen}
+                onOpenChange={setAdvanceModalOpen}
+                mode={advanceModalMode}
+                loanId={summary?.loan_id}
+                loanAccountNo={summary?.loan_account_no || activeLoanRef}
+                advanceBalance={summary?.advance_balance || 0}
+            />
+
+            {/* Edit Modal */}
             <EditCollectionModal
                 open={editOpen}
                 onOpenChange={setEditOpen}
