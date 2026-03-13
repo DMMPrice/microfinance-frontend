@@ -5,7 +5,9 @@ const FONT_NAME = "Arial";
 const GREY_FILL = "FFC0C0C0";
 const THIN = {style: "thin", color: {argb: "FF000000"}};
 const ALL_BORDER = {top: THIN, left: THIN, bottom: THIN, right: THIN};
-const NUM_FMT = '_(* #,##0_);_(* (#,##0);_(* "-"??_);_(@_)';
+
+// changed: zero will now show as 0 instead of "-"
+const NUM_FMT = '#,##0;(#,##0);0';
 
 function n(v) {
     const x = Number(v);
@@ -351,10 +353,10 @@ function buildDetailedSheet({
     ws.addRow([
         "Month Closing",
         "",
-        weeklyRowsAddFormula("C"), // advance add count only from weekly totals
-        weeklyRowsAddFormula("D"), // advance add amount only from weekly totals
-        weeklyRowsAddFormula("E"), // advance deduct count only from weekly totals
-        weeklyRowsAddFormula("F"), // advance deduct amount only from weekly totals
+        weeklyRowsAddFormula("C"),
+        weeklyRowsAddFormula("D"),
+        weeklyRowsAddFormula("E"),
+        weeklyRowsAddFormula("F"),
         lastWeeklyRow ? {formula: `G${lastWeeklyRow}`} : n(closingBranch?.loans_with_advance),
         lastWeeklyRow
             ? {formula: `H${lastWeeklyRow}`}

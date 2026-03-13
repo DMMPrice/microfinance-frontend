@@ -308,7 +308,7 @@ export default function CollectionEntryPage() {
                 if (next[key]) return;
 
                 next[key] = {
-                    amount_received: r.due_left ? String(r.due_left) : "",
+                    amount_received: r.installment_amount != null ? String(r.installment_amount) : "",
                     advance_amount: "",
                     deduct_advance_amount: "",
                     payment_mode: "CASH",
@@ -562,7 +562,7 @@ export default function CollectionEntryPage() {
                 <table className="w-full text-sm border rounded-md">
                     <thead className="bg-muted">
                     <tr>
-                        <th className="p-2 border text-left">Member</th>
+                        <th className="p-2 border text-center">Member Name</th>
                         <th className="p-2 border">Due Date</th>
                         <th className="p-2 border">Inst</th>
                         <th className="p-2 border">Prev Overdue</th>
@@ -626,7 +626,7 @@ export default function CollectionEntryPage() {
                                     <div className="space-y-1">
                                         <Input
                                             inputMode="decimal"
-                                            value={r.installment_amount ?? ""}
+                                            value={f.amount_received ?? ""}
                                             onChange={(e) => {
                                                 const raw = e.target.value;
 
@@ -893,11 +893,12 @@ export default function CollectionEntryPage() {
                                 onClick={() => collectAllRows(selectedGroup?.items || [])}
                                 disabled={!selectedGroup || collectAllRunning}
                                 title="Submit all pending collection and advance rows in this group"
+                                className="mr-5 p-5"
                             >
                                 {collectAllRunning ? (
                                     <>
                                         <Loader2 className="h-4 w-4 animate-spin"/>
-                                        <span className="ml-2">
+                                        <span className="ml-3">
                                             Collecting {collectAllProgress.done}/{collectAllProgress.total}
                                         </span>
                                     </>
